@@ -11,6 +11,10 @@ cv.addEventListener('pointerdown', e => {
   const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
   if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn)) {
     e.preventDefault(); const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y };
+  } else if (e.target.closest('.enote[data-edge]')) {
+    // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
+    const id = e.target.closest('.enote').dataset.edge, ed = findM(curTree(), id).n.edge || {};
+    P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
   } else if (g && e.target.closest('[data-sub]')) {
     return openSub(g.dataset.id);
   } else if (g && e.target.closest('[data-anc]')) {
@@ -28,22 +32,35 @@ cv.addEventListener('pointerdown', e => {
     const t = curTree();
     const movers = topSelected(t).map(n => ({ o: n, ox: n.dx || 0, oy: n.dy || 0, kx: 'dx', ky: 'dy' }))
       .concat((t.notes || []).filter(nt => S.sels.has(nt.id)).map(nt => ({ o: nt, ox: nt.x, oy: nt.y, kx: 'x', ky: 'y' })));
-    P = { ...base, mode: 'drag', id, movers, wasMulti };
+    P = { ...base, mode: 'drag', id, movers, wasMulti, alt: e.altKey };
   } else {
-    P = { ...base, mode: 'box', add: e.shiftKey || e.ctrlKey || e.metaKey, prev: new Set(S.sels) };
+    // sfondo o collegamento: trascinando si disegna il riquadro, con un clic su un collegamento lo si seleziona
+    const edge = e.target.closest('[data-edge]');
+    P = { ...base, mode: 'box', add: e.shiftKey || e.ctrlKey || e.metaKey, prev: new Set(S.sels), edge: edge && edge.dataset.edge };
   }
   cv.setPointerCapture(e.pointerId);
 });
 
+let lastMouse = null; // per incollare dove si trova il mouse
 cv.addEventListener('pointermove', e => {
+  lastMouse = { x: e.clientX, y: e.clientY };
   if (!P) return;
   const dx = e.clientX - P.sx, dy = e.clientY - P.sy;
   if (!P.moved && Math.hypot(dx, dy) < 4) return;
-  if (!P.moved && (P.mode === 'drag' || P.mode === 'resize')) snapshot();
+  if (!P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) {
+    snapshot();
+    if (P.mode === 'drag' && P.alt) P.movers = altCopies(curTree()); // Alt + trascina: si sposta la copia
+  }
   P.moved = true;
   const v = view();
   if (P.mode === 'pan') { cv.classList.add('panning'); v.x = P.vx + dx; v.y = P.vy + dy; v.fresh = false; applyView(); return; }
   if (P.mode === 'box') return dragBox(e);
+  if (P.mode === 'enote') {
+    const n = findM(curTree(), P.id).n; n.edge = n.edge || {};
+    n.edge.nx = Math.round(P.ox + dx / v.k); n.edge.ny = Math.round(P.oy + dy / v.k);
+    if (!n.edge.nx && !n.edge.ny) { delete n.edge.nx; delete n.edge.ny; }
+    selectEdge(P.id); return render();
+  }
   if (P.mode === 'link') {
     const p = toSvg(e.clientX, e.clientY), el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]');
     S.link.x2 = p.x; S.link.y2 = p.y; S.link.over = g && g.dataset.id !== S.link.id ? g.dataset.id : null;
@@ -84,11 +101,14 @@ function endPointer(e) {
     render(); return toast('Rilascia sopra un blocco per collegarlo');
   }
   if (!P.moved) {
-    const had = S.sels.size;
-    if (P.mode === 'box' && !P.add) clearSel();
+    const had = S.sels.size, hadE = S.esel;
+    if (P.mode === 'enote' || (P.mode === 'box' && P.edge)) selectEdge(P.id || P.edge);
+    else if (P.mode === 'box' && !P.add) clearSel();
     if (P.mode === 'drag' && P.wasMulti) selectOnly(P.id);
-    if (P.mode !== 'box' || had !== S.sels.size) render();
-  } else if (P.mode === 'drag' || P.mode === 'resize') save();
+    if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel) render();
+  } else if (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote') {
+    save(); if (P.alt && P.mode === 'drag') toast(S.sels.size > 1 ? `${S.sels.size} copie create` : 'Copia creata');
+  }
   P = null;
 }
 cv.addEventListener('pointerup', endPointer);
@@ -117,12 +137,23 @@ cv.addEventListener('pointerout', e => { if (e.target.closest('[data-sub]')) hid
 /* ---------- tastiera ---------- */
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (editing) endEdit(true); return saveProject(); }
-  if (editing || !$('#menu').hidden || e.target.closest('.bar')) return;
+  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar'))) return;
   if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; cv.classList.add('grab'); } return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return undo(); }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'c') { e.preventDefault(); return copySelected(); }
+    if (k === 'd') { e.preventDefault(); return duplicateSelected(); }
+    if (k === 'v') {
+      e.preventDefault();
+      const m = lastMouse && lastMouse.y > BAR_H ? lastMouse : { x: innerWidth / 2, y: (innerHeight + BAR_H) / 2 };
+      return pasteClip(toSvg(m.x, m.y));
+    }
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (S.esel && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); return deleteEdge(S.esel); }
   if (e.key === 'Escape') {
-    if (S.sels.size) { clearSel(); return render(); }
+    if (S.sels.size || S.esel) { clearSel(); return render(); }
     if (S.path.length) return goToLevel(S.path.length - 1);
     return;
   }

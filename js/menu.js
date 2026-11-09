@@ -32,6 +32,8 @@ function nodeMenuHtml() {
       item('edit', 'Rinomina') + item('child', 'Aggiungi ramo figlio');
     if (findM(t, one.id).p) h += item('detach', 'Stacca dal collegamento');
   }
+  h += item('dup', `Duplica${nodes.length > 1 ? ` ${nodes.length} blocchi` : ''} <span>Ctrl+D · Alt + trascina</span>`) + item('copy', 'Copia <span>Ctrl+C</span>');
+  if (S.clip && one) h += item('paste', 'Incolla dentro questo blocco <span>Ctrl+V</span>');
   if (nodes.some(n => n.w || n.h)) h += item('autosize', 'Dimensione automatica');
   const del = nodes.length;
   h += SEP + item('del', `Elimina${del > 1 ? ` ${del} blocchi` : ''}`, ' dng');
@@ -67,16 +69,22 @@ cv.addEventListener('contextmenu', e => {
   }
   if (edge) {
     const id = edge.dataset.edge, ed = findM(curTree(), id).n.edge || {};
+    selectEdge(id); render();
     return showMenu(e.clientX, e.clientY, `<div class="mhead">Collegamento</div>` +
-      item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota') + (ed.note ? item('enotedel', 'Elimina nota') : '') + SEP +
-      item('solid', 'Linea continua', ed.dash ? '' : ' on') + item('dash', 'Linea tratteggiata', ed.dash ? ' on' : ''), { kind: 'edge', id });
+      item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota') + (ed.note ? item('enotedel', 'Elimina nota') : '') +
+      (ed.nx || ed.ny ? item('enotepos', 'Riporta la nota sulla linea') : '') + SEP +
+      item('solid', 'Linea continua', ed.dash ? '' : ' on') + item('dash', 'Linea tratteggiata', ed.dash ? ' on' : '') + SEP +
+      item('edel', 'Elimina collegamento', ' dng'), { kind: 'edge', id });
   }
   if (cn) {
     selectOnly(cn.dataset.note); render();
-    return showMenu(e.clientX, e.clientY, `<div class="mhead">Nota</div>` + item('nedit', 'Modifica nota') + SEP + item('del', 'Elimina nota', ' dng'), { kind: 'note', id: cn.dataset.note });
+    return showMenu(e.clientX, e.clientY, `<div class="mhead">Nota</div>` + item('nedit', 'Modifica nota') + item('dup', 'Duplica <span>Ctrl+D · Alt + trascina</span>') +
+      item('copy', 'Copia <span>Ctrl+C</span>') + SEP + item('del', 'Elimina nota', ' dng'), { kind: 'note', id: cn.dataset.note });
   }
   const p = toSvg(e.clientX, e.clientY);
-  showMenu(e.clientX, e.clientY, item('addblock', 'Aggiungi blocco') + item('addnote', 'Aggiungi nota'), { kind: 'canvas', x: p.x, y: p.y });
+  clearSel(); render();
+  showMenu(e.clientX, e.clientY, item('addblock', 'Aggiungi blocco') + item('addnote', 'Aggiungi nota') +
+    (S.clip ? SEP + item('paste', 'Incolla qui <span>Ctrl+V</span>') : ''), { kind: 'canvas', x: p.x, y: p.y });
 });
 
 /* ---------- azioni ---------- */
@@ -97,9 +105,14 @@ menuEl.addEventListener('click', e => {
   else if (a === 'child') addChild(id);
   else if (a === 'detach') detach(id);
   else if (a === 'autosize') autoSize();
+  else if (a === 'dup') duplicateSelected();
+  else if (a === 'copy') copySelected();
+  else if (a === 'paste') pasteClip(M.kind === 'canvas' ? { x: M.x, y: M.y } : null);
   else if (a === 'del') removeSelected();
   else if (a === 'enote') startEdgeNote(id);
-  else if (a === 'enotedel') setEdge(id, { note: '' });
+  else if (a === 'enotedel') setEdge(id, { note: '', nx: 0, ny: 0 });
+  else if (a === 'enotepos') setEdge(id, { nx: 0, ny: 0 });
+  else if (a === 'edel') deleteEdge(id);
   else if (a === 'solid') setEdge(id, { dash: false });
   else if (a === 'dash') setEdge(id, { dash: true });
   else if (a === 'nedit') startNoteEdit(id);

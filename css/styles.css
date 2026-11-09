@@ -79,8 +79,11 @@ body.inner{background-color:var(--canvas-inner)} /* dentro una struttura interna
 .eg.lifted .edge{opacity:.25}
 .ehit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
 .eg:hover .edge{stroke:var(--accent)}
-.enote{cursor:text}
+.eg.sel .edge{stroke:var(--accent);stroke-width:3px}
+.enote{cursor:move}
 .enote rect{fill:var(--surface);stroke:var(--edge);stroke-width:1}
+.enote.sel rect{stroke:var(--accent);stroke-width:1.6}
+.enote .lead{fill:none;stroke:var(--edge);stroke-width:1;stroke-dasharray:2 3}
 .enote text{fill:var(--ink);font-size:11.5px;font-weight:500}
 
 /* note sulla tela: appunti, non blocchi */

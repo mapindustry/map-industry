@@ -10,7 +10,7 @@ const FB = '"Instrument Sans", "Segoe UI", system-ui, sans-serif';
 // views: pan/zoom per livello · L: layout calcolato del livello visibile
 // projects/pid: progetti salvati e quello aperto · link: collegamento che si sta trascinando
 // E: punti medi dei collegamenti (per le note) · NL: layout delle note sulla tela
-const S = { projects: [], pid: null, root: null, path: [], sel: null, sels: new Set(), views: {}, undo: [], L: null, E: null, NL: null, link: null };
+const S = { projects: [], pid: null, root: null, path: [], sel: null, sels: new Set(), esel: null, views: {}, undo: [], L: null, E: null, NL: null, link: null, clip: null };
 const BAR_H = 48; // altezza della barra dei menu
 const cv = $('#cv'), vp = $('#vp');
 

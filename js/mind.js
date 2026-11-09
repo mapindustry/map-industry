@@ -80,14 +80,17 @@ function treeMarkup(tree, L, NL, live) {
       const k = L.get(c.id), right = k.x + k.w / 2 >= l.x + l.w / 2; k.inLeft = right;
       const x1 = right ? l.x + l.w : l.x, y1 = l.y + l.h / 2, x2 = right ? k.x : k.x + k.w, y2 = k.y + k.h / 2;
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, ed = c.edge || {};
-      E.set(c.id, { x: mx, y: my });
-      const cls = 'eg' + (ed.dash ? ' dash' : '') + (lk && lk.kind === 'in' && lk.id === c.id ? ' lifted' : '');
+      // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
+      const nx = mx + (ed.nx || 0), ny = my + (ed.ny || 0);
+      E.set(c.id, { x: nx, y: ny });
+      const cls = 'eg' + (ed.dash ? ' dash' : '') + (lk && lk.kind === 'in' && lk.id === c.id ? ' lifted' : '') + (live && S.esel === c.id ? ' sel' : '');
       edges += `<g class="${cls}"${live ? ` data-edge="${c.id}"` : ''}><path class="edge" stroke-width="${l.depth === 0 ? 2.2 : 1.5}" d="${d}"/>` +
         (live ? `<path class="ehit" d="${d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
       if (ed.note && !(editing && editing.kind === 'edge' && editing.id === c.id)) {
         const lines = wrap(ed.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
-        notes += `<g class="enote"${live ? ` data-edge="${c.id}"` : ''}><rect x="${mx - w / 2}" y="${my - h / 2}" width="${w}" height="${h}" rx="7"/>` +
-          lines.map((s, i) => `<text x="${mx}" y="${my - h / 2 + 15 + i * 14}" text-anchor="middle">${esc(s)}</text>`).join('') + `</g>`;
+        const lead = ed.nx || ed.ny ? `<path class="lead" d="M${mx},${my} L${nx},${ny}"/>` : '';
+        notes += `<g class="enote${live && S.esel === c.id ? ' sel' : ''}"${live ? ` data-edge="${c.id}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="7"/>` +
+          lines.map((s, i) => `<text x="${nx}" y="${ny - h / 2 + 15 + i * 14}" text-anchor="middle">${esc(s)}</text>`).join('') + `</g>`;
       }
       rec(c);
     });
@@ -210,16 +213,75 @@ function reparent(childId, parentId) {
   });
   selectOnly(childId); render(); toast('Collegamento spostato');
 }
+// eliminare un collegamento = staccare il blocco in cui entra: il blocco resta dov'è, libero, con i suoi rami
+function deleteEdge(id) { detach(id, undefined, undefined, 'Collegamento eliminato'); }
 // stacca un blocco dal genitore: resta sulla tela come blocco libero, nel punto indicato
-function detach(id, x, y) {
+function detach(id, x, y, msg = 'Blocco staccato') {
   const t = curTree(), f = findM(t, id); if (!f || !f.p) return render();
   const l = S.L.get(id);
   mutate(tt => {
     const g = findM(tt, id); g.list.splice(g.list.indexOf(g.n), 1); delete g.n.dx; delete g.n.dy; delete g.n.edge;
     g.n.fx = Math.round(x ?? l.x); g.n.fy = Math.round(y ?? l.y + l.h / 2); (tt.free = tt.free || []).push(g.n);
   });
-  selectOnly(id); render(); toast('Blocco staccato');
+  selectOnly(id); render(); toast(msg);
 }
+/* ---------- duplica, copia, incolla ---------- */
+// copia profonda con id nuovi (anche rami, struttura interna, suoi blocchi liberi e note)
+function cloneFresh(n) {
+  const c = JSON.parse(JSON.stringify(n));
+  (function re(x) { x.id = uid(); x.children.forEach(re); (x.free || []).forEach(re); (x.notes || []).forEach(nt => { nt.id = uid(); }); if (x.sub) re(x.sub); })(c);
+  return c;
+}
+// copia "staccata": senza contenuti del livello (se era la radice), senza collegamento in entrata né posizione
+function looseCopy(n) { const c = cloneFresh(n); ['free', 'notes', 'edge', 'fx', 'fy', 'dx', 'dy'].forEach(k => delete c[k]); return c; }
+function selectMany(ids) { S.sels = new Set(ids); S.sel = ids[ids.length - 1] || null; S.esel = null; }
+function duplicateSelected() {
+  const t = curTree(), tops = topSelected(t), notes = (t.notes || []).filter(nt => S.sels.has(nt.id)), L = S.L, ids = [];
+  if (!tops.length && !notes.length) return;
+  mutate(tt => {
+    tops.forEach(n0 => {
+      const f = findM(tt, n0.id);
+      if (f.p) { const c = cloneFresh(f.n); f.p.children.splice(f.p.children.indexOf(f.n) + 1, 0, c); ids.push(c.id); return; }
+      const l = L.get(n0.id), c = looseCopy(f.n); c.fx = Math.round(l.x + 30); c.fy = Math.round(l.y + l.h / 2 + 30);
+      (tt.free = tt.free || []).push(c); ids.push(c.id);
+    });
+    notes.forEach(nt => { const c = { ...nt, id: uid(), x: nt.x + 24, y: nt.y + 24 }; tt.notes.push(c); ids.push(c.id); });
+  });
+  selectMany(ids); render(); toast(ids.length > 1 ? `${ids.length} copie create` : 'Copia creata');
+}
+function copySelected() {
+  const t = curTree(), nodes = topSelected(t).map(n => looseCopy(n)), notes = (t.notes || []).filter(nt => S.sels.has(nt.id)).map(nt => ({ ...nt }));
+  if (!nodes.length && !notes.length) return;
+  S.clip = { nodes, notes }; toast(`Copiat${nodes.length + notes.length > 1 ? 'i' : 'o'}: ${nodes.length + notes.length}`);
+}
+// incolla: dentro il blocco selezionato (come rami) oppure liberi nel punto indicato
+function pasteClip(at) {
+  if (!S.clip) return toast('Niente da incollare');
+  const t = curTree(), target = S.sels.size === 1 && findM(t, S.sel) ? S.sel : null, ids = [];
+  mutate(tt => {
+    S.clip.nodes.forEach((n, i) => {
+      const c = cloneFresh(n);
+      if (target) findM(tt, target).n.children.push(c);
+      else { c.fx = Math.round(at.x + i * 24); c.fy = Math.round(at.y + i * 24); (tt.free = tt.free || []).push(c); }
+      ids.push(c.id);
+    });
+    S.clip.notes.forEach((nt, i) => { const c = { ...nt, id: uid(), x: Math.round(at.x + 12 + i * 24), y: Math.round(at.y + 36 + i * 24) }; (tt.notes = tt.notes || []).push(c); ids.push(c.id); });
+  });
+  selectMany(ids); render();
+}
+// Alt + trascina: le copie nascono staccate nel punto degli originali (senza passare da mutate: lo snapshot è già fatto)
+function altCopies(t) {
+  const L = S.L, NL = S.NL, ids = [], movers = [];
+  topSelected(t).forEach(n => {
+    const l = L.get(n.id), c = looseCopy(n); c.fx = Math.round(l.x); c.fy = Math.round(l.y + l.h / 2);
+    (t.free = t.free || []).push(c); ids.push(c.id); movers.push({ o: c, ox: 0, oy: 0, kx: 'dx', ky: 'dy' });
+  });
+  (t.notes || []).filter(nt => S.sels.has(nt.id)).forEach(nt => {
+    const c = { ...nt, id: uid() }; t.notes.push(c); ids.push(c.id); movers.push({ o: c, ox: c.x, oy: c.y, kx: 'x', ky: 'y' });
+  });
+  selectMany(ids); return movers;
+}
+
 // blocchi e note selezionati senza antenati selezionati (per spostarli una volta sola)
 function topSelected(tree) {
   const out = [];

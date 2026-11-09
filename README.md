@@ -29,7 +29,10 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 | Ridimensiona | quadratino sul lato esterno del blocco selezionato |
 | Collega diversamente | pallino **bianco** (ingresso) su un altro blocco = riattacca lì · nel vuoto = stacca |
 | | pallino **grigio** (uscita) su un altro blocco = quel blocco si collega qui |
-| Nota su un collegamento | doppio clic sul collegamento |
+| Nota su un collegamento | doppio clic sul collegamento · trascina la nota per spostarla |
+| Elimina un collegamento | clic sul collegamento + Canc, oppure tasto destro → Elimina collegamento (il blocco resta, libero) |
+| Duplica | tasto destro → Duplica · Ctrl+D · Alt + trascina (sposti la copia) |
+| Copia / incolla | Ctrl+C / Ctrl+V (dentro il blocco selezionato, altrimenti libero dove c'è il mouse) |
 | Opzioni | tasto destro: sul blocco (colore, stile testo/bordo/opacità, struttura interna, stacca, elimina), sul collegamento (nota, linea continua/tratteggiata), sulla tela (aggiungi blocco, aggiungi nota) |
 | Struttura interna | tasto destro → Crea/Apri · passa sull'icona a griglia per l'anteprima, clic per entrare · Esc o il percorso in alto per tornare |
 | Sposta la vista | rotellina, Spazio + trascina, tasto centrale |

@@ -25,7 +25,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Blocco: `{ id, text, children[], dx?, dy?, w?, h?, color?, fs?, bw?, op?, sub?, edge?, fx?, fy? }`
   - `dx/dy` spostamento manuale (somma su tutto il sotto-albero) · `w/h` dimensione a mano
   - `color` indice 0–5 dei token `--c0…--c5` · `fs` testo px · `bw` spessore bordo · `op` opacità del riquadro
-  - `sub` struttura interna (un altro livello) · `edge = { note?, dash? }` del collegamento che **entra** nel blocco
+  - `sub` struttura interna (un altro livello) · `edge = { note?, dash?, nx?, ny? }` del collegamento che **entra**
+    nel blocco (`nx/ny` = spostamento della nota rispetto al centro della linea)
+- Selezione di un collegamento: `S.esel` = id del blocco in cui entra (`selectEdge`). Eliminare un collegamento =
+  `detach` del blocco (resta libero). Appunti: `S.clip` (copie senza id validi: `cloneFresh` assegna id nuovi a ogni incolla).
 - Collegamenti: ogni blocco ha un solo ingresso (struttura ad albero). `reparent` sposta, vieta i cicli;
   l'idea centrale non ha limiti speciali (può andare sotto un blocco libero, o essere eliminata se ne resta un altro).
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.

@@ -68,7 +68,9 @@ function ownerNode() {
 }
 
 /* ---------- selezione (blocchi e note della tela) ---------- */
-function selectOnly(id) { S.sels = new Set(id ? [id] : []); S.sel = id || null; }
+function selectOnly(id) { S.sels = new Set(id ? [id] : []); S.sel = id || null; S.esel = null; }
+// collegamento selezionato: si indica con l'id del blocco in cui entra
+function selectEdge(id) { selectOnly(null); S.esel = id; }
 function clearSel() { selectOnly(null); }
 function toggleSel(id) {
   if (S.sels.has(id)) { S.sels.delete(id); if (S.sel === id) S.sel = [...S.sels].pop() || null; }
@@ -77,6 +79,7 @@ function toggleSel(id) {
 function pruneSel() {
   const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id)));
   if (S.sel && !S.sels.has(S.sel)) S.sel = [...S.sels].pop() || null;
+  if (S.esel) { const f = findM(t, S.esel); if (!f || !f.p) S.esel = null; }
 }
 
 /* ---------- undo ---------- */
