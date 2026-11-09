@@ -31,7 +31,13 @@ function nodeMenuHtml() {
     h += item('sub', one.sub ? `Apri struttura interna${inner > 1 ? ` (${inner - 1} blocchi)` : ''}` : 'Crea struttura interna') +
       (one.sub ? item('subprev', one.subOpen ? 'Nascondi anteprima struttura interna' : 'Mostra anteprima struttura interna') : '') +
       item('edit', 'Rinomina') + item('child', 'Aggiungi ramo figlio');
-    if (one !== t) h += item('flip', one.flip ? 'Ingresso a sinistra, uscita a destra' : 'Ingresso a destra, uscita a sinistra');
+    h += item('primary', one.primary ? 'Togli “idea primaria”' : 'Imposta come idea primaria');
+    const P = pinsOf(one);
+    h += `${SEP}<div class="mhead">Pallini <span class="mnote">trascinali lungo il bordo per spostarli</span></div>` +
+      item('addin', `Aggiungi un ingresso <span>ora ${P.i.length}</span>`) + item('addout', `Aggiungi un’uscita <span>ora ${P.o.length}</span>`) +
+      (P.i.length > 1 ? item('rmin', 'Togli l’ultimo ingresso') : '') + (P.o.length > 1 ? item('rmout', 'Togli l’ultima uscita') : '') +
+      (!one.primary ? item('flip', 'Scambia i lati di ingresso e uscita') : '') +
+      (one.pin ? item('pinreset', 'Pallini nella posizione standard') : '') + SEP;
     if (findM(t, one.id).p) h += item('detach', 'Stacca dal collegamento');
   }
   h += item('dup', `Duplica${nodes.length > 1 ? ` ${nodes.length} blocchi` : ''} <span>Ctrl+D · Alt + trascina</span>`) + item('copy', 'Copia <span>Ctrl+C</span>');
@@ -70,12 +76,13 @@ cv.addEventListener('contextmenu', e => {
     render(); return showMenu(e.clientX, e.clientY, nodeMenuHtml(), { kind: 'node' });
   }
   if (edge) {
-    const id = edge.dataset.edge, ed = findM(curTree(), id).n.edge || {};
+    const id = edge.dataset.edge, ed = edgeData(curTree(), id) || {};
     selectEdge(id); render();
     return showMenu(e.clientX, e.clientY, `<div class="mhead">Collegamento</div>` +
       item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota') + (ed.note ? item('enotedel', 'Elimina nota') : '') +
       (ed.nx || ed.ny ? item('enotepos', 'Riporta la nota sulla linea') : '') + SEP +
       item('solid', 'Linea continua', ed.dash ? '' : ' on') + item('dash', 'Linea tratteggiata', ed.dash ? ' on' : '') + SEP +
+      item('einsert', 'Inserisci un blocco intermedio') + SEP +
       item('edel', 'Elimina collegamento', ' dng'), { kind: 'edge', id });
   }
   if (cn) {
@@ -107,6 +114,13 @@ menuEl.addEventListener('click', e => {
   else if (a === 'child') addChild(id);
   else if (a === 'detach') detach(id);
   else if (a === 'flip') toggleFlip(id);
+  else if (a === 'primary') togglePrimary(id);
+  else if (a === 'addin') addPin(id, 'in');
+  else if (a === 'addout') addPin(id, 'out');
+  else if (a === 'rmin') removePin(id, 'in');
+  else if (a === 'rmout') removePin(id, 'out');
+  else if (a === 'pinreset') resetPins(id);
+  else if (a === 'einsert') insertOnLink(id);
   else if (a === 'subprev') toggleSubPreview(id);
   else if (a === 'autosize') autoSize();
   else if (a === 'dup') duplicateSelected();
@@ -124,6 +138,6 @@ menuEl.addEventListener('click', e => {
   else if (a === 'addnote') addCanvasNote(M.x, M.y);
 });
 menuEl.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeMenu(); } });
-document.addEventListener('pointerdown', e => { if (!e.target.closest('#menu')) closeMenu(); }, true);
+document.addEventListener('pointerdown', e => { if (!(e.target.closest && e.target.closest('#menu'))) closeMenu(); }, true);
 addEventListener('blur', closeMenu);
 addEventListener('resize', closeMenu);

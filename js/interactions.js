@@ -1,7 +1,8 @@
 // Mouse/touch e tastiera
 /* ---------- puntatore ---------- */
 // Sfondo: trascina = riquadro di selezione · Spazio + trascina, tasto centrale o un dito su touch = sposta la vista
-// Pallini: si trascina da un'uscita a un ingresso (o al contrario) per collegare; ingresso nel vuoto = stacca.
+// Pallini: trascina da un'uscita a un ingresso (o al contrario) per collegare; lungo il bordo per spostarli;
+// ingresso nel vuoto = stacca il collegamento principale.
 // Le posizioni sono fisse: collegare o staccare non sposta nessun blocco.
 let P = null, spaceDown = false;
 const boxEl = $('#box');
@@ -14,7 +15,7 @@ cv.addEventListener('pointerdown', e => {
     e.preventDefault(); const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y };
   } else if (e.target.closest('.enote[data-edge]')) {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
-    const id = e.target.closest('.enote').dataset.edge, ed = findM(curTree(), id).n.edge || {};
+    const id = e.target.closest('.enote').dataset.edge, ed = edgeData(curTree(), id) || {};
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
   } else if (e.target.closest('[data-subprev]')) {
     return openSub(e.target.closest('[data-subprev]').dataset.subprev); // clic sullo schema: si entra
@@ -22,7 +23,7 @@ cv.addEventListener('pointerdown', e => {
     return openSub(g.dataset.id);
   } else if (g && e.target.closest('[data-anc]')) {
     const id = g.dataset.id, a = e.target.closest('[data-anc]'), dot = a.querySelector('.adot'), l = S.L.get(id);
-    S.link = { kind: a.dataset.anc, side: a.dataset.side, id, x1: l.x + +dot.getAttribute('cx'), y1: l.y + +dot.getAttribute('cy'), x2: null, y2: null, over: null, overAnc: null };
+    S.link = { kind: a.dataset.anc, idx: +a.dataset.idx, id, x1: l.x + +dot.getAttribute('cx'), y1: l.y + +dot.getAttribute('cy'), x2: null, y2: null, over: null, overAnc: null, pinMove: null };
     P = { ...base, mode: 'link', id }; cv.classList.add('linking');
   } else if (g && e.target.closest('[data-rsz]')) {
     const id = g.dataset.id, l = S.L.get(id);
@@ -56,16 +57,23 @@ cv.addEventListener('pointermove', e => {
   if (P.mode === 'pan') { cv.classList.add('panning'); v.x = P.vx + dx; v.y = P.vy + dy; v.fresh = false; applyView(); return; }
   if (P.mode === 'box') return dragBox(e);
   if (P.mode === 'enote') {
-    const n = findM(curTree(), P.id).n; n.edge = n.edge || {};
-    n.edge.nx = Math.round(P.ox + dx / v.k); n.edge.ny = Math.round(P.oy + dy / v.k);
-    if (!n.edge.nx && !n.edge.ny) { delete n.edge.nx; delete n.edge.ny; }
+    const ed = edgeData(curTree(), P.id, true);
+    ed.nx = Math.round(P.ox + dx / v.k); ed.ny = Math.round(P.oy + dy / v.k);
+    if (!ed.nx && !ed.ny) { delete ed.nx; delete ed.ny; }
     selectEdge(P.id); return render();
   }
   if (P.mode === 'link') {
-    const p = toSvg(e.clientX, e.clientY), el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]');
-    const ok = g && g.dataset.id !== S.link.id, a = ok && el.closest('[data-anc]');
-    S.link.x2 = p.x; S.link.y2 = p.y; S.link.over = ok ? g.dataset.id : null;
-    S.link.overAnc = a ? { kind: a.dataset.anc, side: a.dataset.side } : null;
+    const p = toSvg(e.clientX, e.clientY), lk = S.link;
+    // vicino al bordo del proprio blocco il pallino scorre lungo il bordo; lontano si disegna un collegamento
+    const nb = nearestBorder(S.L.get(lk.id), p);
+    lk.pinMove = nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
+    lk.x2 = p.x; lk.y2 = p.y; lk.over = null; lk.overAnc = null;
+    if (!lk.pinMove) {
+      lk.pinMove = null; render(); // il disegno va aggiornato prima di cercare cosa c'è sotto il puntatore
+      const el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]');
+      const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
+      lk.over = ok ? g.dataset.id : null; lk.overAnc = a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null;
+    }
     return render();
   }
   if (P.mode === 'drag') {
@@ -94,16 +102,20 @@ function endPointer(e) {
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
     if (!moved) { selectOnly(lk.id); return render(); }
+    if (lk.pinMove) return setPin(lk.id, lk.kind, lk.idx, lk.pinMove); // pallino spostato lungo il bordo
     if (lk.over) {
-      const oa = lk.overAnc;
-      // un'uscita va su un ingresso e viceversa; sul corpo del blocco vale il pallino giusto
+      const oa = lk.overAnc, t = curTree();
+      // un'uscita va su un ingresso e viceversa; sul corpo del blocco vale il pallino più vicino del tipo giusto
       if (oa && oa.kind === lk.kind) { render(); return toast(lk.kind === 'out' ? 'Un’uscita va collegata a un ingresso' : 'Un ingresso va collegato a un’uscita'); }
-      if (lk.kind === 'out') return connect(lk.id, lk.over, lk.side);
-      const t = curTree(), pl = S.L.get(lk.over), cl = S.L.get(lk.id);
-      const side = oa ? oa.side : lk.over === t.id ? (cl.x + cl.w / 2 < pl.x + pl.w / 2 ? 'l' : 'r') : null;
-      return connect(lk.over, lk.id, side);
+      const target = findM(t, lk.over).n, tl = S.L.get(lk.over), want = lk.kind === 'out' ? 'i' : 'o';
+      const near = () => { const P = pinsOf(target)[want]; let best = 0, bd = Infinity; P.forEach((q, i) => { const [qx, qy] = pinXY(tl, q), d = Math.hypot(tl.x + qx - lk.x2, tl.y + qy - lk.y2); if (d < bd) { bd = d; best = i; } }); return best; };
+      const tIdx = oa ? oa.idx : near();
+      return lk.kind === 'out' ? link(lk.id, lk.idx, lk.over, tIdx) : link(lk.over, tIdx, lk.id, lk.idx);
     }
-    if (lk.kind === 'in') return detach(lk.id); // resta esattamente dov'è
+    if (lk.kind === 'in') { // ingresso nel vuoto: si stacca il collegamento principale, il blocco resta dov'è
+      const f = findM(curTree(), lk.id); if (f && f.p) return detach(lk.id);
+      render(); return toast('Questo blocco non ha un collegamento da staccare');
+    }
     render(); return toast('Rilascia sull’ingresso di un blocco per collegarlo');
   }
   if (!P.moved) {

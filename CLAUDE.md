@@ -19,24 +19,26 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   (pan/zoom per livello), `undo`, `L`/`NL`/`E` (layout di blocchi, note, punti medi dei collegamenti), `link`.
 - Salvataggio: `localStorage['officina-mappe-v3'] = { projects: [{id,name,updated,root}], cur }`.
   Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`.
-- **Livello** = un albero: la radice (idea centrale) fa anche da contenitore per `free` (blocchi liberi, alberi
+- **Livello** = un albero: la radice dei dati fa anche da contenitore per `free`, `links` (blocchi liberi, alberi
   senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text}`). `curTree()` restituisce il livello
   visibile; `setLevelRoot()` lo sostituisce quando la radice cambia (vedi `promoteRoot`).
-- Blocco: `{ id, text, children[], x, y, w?, h?, flip?, color?, fs?, bw?, op?, sub?, edge? }`
-  - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco.
-    Trascinare sposta solo i blocchi selezionati: i figli restano dove sono (scelta dell'utente). Le posizioni mancanti le assegna `ensurePositions`:
-    blocchi nuovi con `placeNew` (vicino al genitore), mappe vecchie (dx/dy/fx/fy) una volta con `autoLayout`.
-  - pallini: ingresso a sinistra e uscita a destra (`flip` li scambia); l'idea centrale ha ingresso in alto e
-    uscite sui due lati. La linea va sempre dall'uscita del genitore all'ingresso del figlio (`edgeGeom`), senza
-    cambiare lato da sola.
-  - `w/h` dimensione a mano · `color` indice 0–5 dei token `--c0…--c5` · `fs` testo px · `bw` bordo · `op` opacità
-  - `sub` struttura interna (disegnata come pila) · `subOpen` = schema della struttura mostrato sotto il blocco
-    (`subPreviewMarkup`, anche in esportazione) · `edge = { note?, dash?, nx?, ny?, ps? }` del collegamento che **entra** nel blocco
-    (`ps` = uscita dell'idea centrale usata, 'l'/'r'; `nx/ny` = spostamento della nota)
-- Selezione di un collegamento: `S.esel` = id del blocco in cui entra (`selectEdge`). Eliminare un collegamento =
-  `detach` del blocco (resta libero, stessa posizione). Appunti: `S.clip` (`cloneFresh` assegna id nuovi a ogni incolla).
-- Collegamenti: ogni blocco ha un solo ingresso (struttura ad albero). `connect(parent, child, ps)` sostituisce il
-  collegamento, vieta i cicli; l'idea centrale può andare sotto un blocco libero (`promoteRoot`) o essere eliminata.
+- Blocco: il modello completo è descritto in testa a `js/mind.js`. In breve:
+  - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco; trascinare
+    sposta solo i selezionati (i figli restano). Posizioni mancanti: `ensurePositions` (`placeNew` per i nuovi,
+    `autoLayout` una volta per le mappe vecchie con dx/dy/fx/fy).
+  - `primary` = **idea primaria**, attributo scelto dall'utente (anche più blocchi). La radice dei dati del livello
+    nasce primaria ma è solo un dettaglio di struttura: l'utente non vede "radici", vede blocchi.
+  - `pin = { i: [[lato, pos]], o: [[lato, pos]] }` pallini sul bordo (lati l/r/t/b, pos 0–1); senza `pin` valgono
+    `defaultPins` (primaria: ingresso in alto, uscite l/r; altri: ingresso l e uscita r, scambiati con `flip`).
+    Un pallino si trascina lungo il bordo (`nearestBorder`, entro 16 px) o verso un altro blocco per collegare.
+  - collegamenti: quello principale è il legame padre→figlio dell'albero (`edge` sul figlio: `po`, `pi`, `note`,
+    `dash`, `nx`, `ny`); i **collegamenti aggiuntivi** (più ingressi per blocco) stanno in `tree.links`
+    `{ id, from, to, po, pi, ... }`. `allLinks(tree)` li elenca tutti con una chiave: id del figlio o `'x:' + id`;
+    `edgeData(tree, chiave)` restituisce i dati modificabili. `link()` crea il legame d'albero se il blocco d'arrivo
+    è senza genitore, altrimenti un collegamento aggiuntivo; vieta sé stesso, doppioni e doppio senso.
+  - `w/h`, `color`, `fs`, `bw`, `op`, `sub`, `subOpen` come prima.
+- Selezione di un collegamento: `S.esel` = chiave. Eliminare il principale = `detach` (il blocco resta libero, stessa
+  posizione); un aggiuntivo si toglie da `tree.links`. Appunti: `S.clip` (`cloneFresh` rinomina id e collegamenti).
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.
 - Ogni modifica passa da `mutate(fn)` (snapshot per undo → modifica del livello visibile → salva → `render()`).
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;

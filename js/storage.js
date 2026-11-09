@@ -33,7 +33,7 @@ function load() {
     const minds = (o && Array.isArray(o.docs) ? o.docs : []).filter(d => d.type === 'mind' && d.data && d.data.root);
     const d = minds.find(x => x.id === o.cur) || minds[0]; if (d) root = d.data.root;
   } catch (e) {}
-  if (!root) root = mk('Idea centrale', [mk('Ramo 1'), mk('Ramo 2'), mk('Ramo 3')]);
+  if (!root) root = mk('Idea primaria', [mk('Ramo 1'), mk('Ramo 2'), mk('Ramo 3')]);
   const p = { id: uid(), name: root.text || 'Mappa', updated: Date.now(), root };
   S.projects = [p]; S.pid = p.id; S.root = root; saveNow();
 }
@@ -57,7 +57,7 @@ function curTree() {
   }
   return t;
 }
-// cambia la radice del livello visibile (quando l'idea centrale viene collegata sotto un altro blocco o eliminata)
+// cambia la radice dei dati del livello visibile (quando viene collegata sotto un altro blocco o eliminata)
 function setLevelRoot(nr) { const owner = ownerNode(); if (owner) owner.sub = nr; else S.root = nr; }
 // blocco "proprietario" del livello visibile (null nella mappa principale)
 function ownerNode() {
@@ -79,7 +79,7 @@ function toggleSel(id) {
 function pruneSel() {
   const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id)));
   if (S.sel && !S.sels.has(S.sel)) S.sel = [...S.sels].pop() || null;
-  if (S.esel) { const f = findM(t, S.esel); if (!f || !f.p) S.esel = null; }
+  if (S.esel && !edgeData(t, S.esel)) S.esel = null;
 }
 
 /* ---------- undo ---------- */

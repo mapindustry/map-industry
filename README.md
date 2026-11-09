@@ -27,10 +27,14 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 | Ramo figlio / fratello | Tab / Invio |
 | Sposta blocchi e note | trascinali: si sposta solo ciò che è selezionato, i figli restano dove sono |
 | Ridimensiona | quadratino sul lato esterno del blocco selezionato |
-| Collega | trascina da un'**uscita** (pallino grigio scuro) a un **ingresso** (pallino bianco), o al contrario; rilasciare sul blocco vale come il suo pallino |
+| Collega | trascina da un'**uscita** (pallino grigio scuro) a un **ingresso** (pallino bianco), o al contrario; rilasciare sul blocco vale come il suo pallino più vicino |
+| Più ingressi | collega pure un blocco che ha già un genitore: si aggiunge un collegamento, non si sostituisce |
+| Sposta un pallino | trascinalo lungo il bordo del suo blocco (scorre sui quattro lati) |
+| Aggiungi/togli pallini | tasto destro sul blocco → Pallini: aggiungi un ingresso/un'uscita, togli, scambia i lati, posizione standard |
+| Idea primaria | tasto destro → Imposta come idea primaria (anche su più blocchi): blocco marcato, ingresso in alto e due uscite |
 | Stacca | trascina l'ingresso nel vuoto, oppure tasto destro → Stacca |
-| Lato di ingresso/uscita | tasto destro → Ingresso a destra/sinistra (l'idea centrale ha l'ingresso in alto e due uscite) |
 | Nota su un collegamento | doppio clic sul collegamento · trascina la nota per spostarla |
+| Blocco intermedio | tasto destro sul collegamento → Inserisci un blocco intermedio |
 | Elimina un collegamento | clic sul collegamento + Canc, oppure tasto destro → Elimina collegamento (il blocco resta, libero) |
 | Duplica | tasto destro → Duplica · Ctrl+D · Alt + trascina (sposti la copia) |
 | Copia / incolla | Ctrl+C / Ctrl+V (dentro il blocco selezionato, altrimenti libero dove c'è il mouse) |
@@ -44,8 +48,8 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 I blocchi restano dove li metti: collegare, staccare o ricollegare cambia solo la linea, che resta agganciata
 ai pallini scelti anche se giri un blocco attorno a un altro. La disposizione automatica vale solo per i blocchi
 nuovi (Tab, Invio, incolla) e per convertire una volta le mappe vecchie.
-Ogni blocco ha un solo ingresso: ricollegarlo sostituisce il collegamento. Non si può collegare un blocco sotto uno dei suoi rami.
-Anche l'idea centrale si può collegare sotto un altro blocco o eliminare, se sulla tela resta un altro blocco.
+Non si collegano un blocco a sé stesso, due volte gli stessi blocchi o in doppio senso (A→B e B→A).
+
 
 ## Struttura
 

@@ -40,8 +40,8 @@ function startEdit(id, selectAll) {
   selectOnly(id); beginEdit('node', id, f.n.text, selectAll);
 }
 function startEdgeNote(id) {
-  const f = findM(curTree(), id); if (!f || !f.p) return;
-  clearSel(); beginEdit('edge', id, (f.n.edge && f.n.edge.note) || '', true);
+  const e = edgeData(curTree(), id); if (!e) return;
+  clearSel(); beginEdit('edge', id, e.note || '', true);
 }
 function startNoteEdit(id) {
   const nt = findNote(curTree(), id); if (!nt) return;
@@ -52,7 +52,7 @@ function endEdit(commit) {
   const { kind, id, orig } = editing; editing = null; ed.hidden = true;
   const v = ed.value.replace(/\s+/g, ' ').trim(), t = curTree();
   if (commit && v !== orig) {
-    if (kind === 'edge') { if (findM(t, id)) return setEdge(id, { note: v }); }
+    if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
     else if (kind === 'note') {
       const nt = findNote(t, id);
       if (nt) { snapshot(); if (v) nt.text = v; else { t.notes.splice(t.notes.indexOf(nt), 1); clearSel(); } save(); }

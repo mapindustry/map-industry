@@ -17,7 +17,7 @@ function toggleDrop(id, build) {
   m.innerHTML = build(); m.hidden = false; $('[aria-controls="' + id + '"]').setAttribute('aria-expanded', 'true');
 }
 function closeDrops() { document.querySelectorAll('.ddm').forEach(m => { m.hidden = true; }); document.querySelectorAll('[aria-controls]').forEach(b => b.setAttribute('aria-expanded', 'false')); }
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.dd')) closeDrops(); }, true);
+document.addEventListener('pointerdown', e => { if (!(e.target.closest && e.target.closest('.dd'))) closeDrops(); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.ddm:not([hidden])')) { closeDrops(); e.stopImmediatePropagation(); } }, true);
 
 $('#bProj').onclick = () => toggleDrop('mProj', () => {
@@ -58,7 +58,7 @@ function switchTo(id) {
 }
 function openProject(id) { if (id !== S.pid) { switchTo(id); toast('Aperto: ' + curProject().name); } }
 function newProject() {
-  const p = { id: uid(), name: 'Nuovo progetto', updated: Date.now(), root: mk('Idea centrale') };
+  const p = { id: uid(), name: 'Nuovo progetto', updated: Date.now(), root: mk('Idea primaria') };
   S.projects.push(p); switchTo(p.id); pName.focus(); pName.select();
 }
 function deleteProject() {

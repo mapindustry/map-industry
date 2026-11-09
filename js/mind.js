@@ -1,13 +1,18 @@
-// Mappa mentale: posizioni, disegno e operazioni sui blocchi
-// Blocco: { id, text, children[], x, y, w?, h?, flip?, color?, fs?, bw?, op?, sub?, edge? }
+// Mappa mentale: posizioni, pallini, collegamenti, disegno e operazioni sui blocchi
+// Blocco: { id, text, children[], x, y, w?, h?, primary?, flip?, pin?, color?, fs?, bw?, op?, sub?, subOpen?, edge? }
 //   x/y = angolo in alto a sinistra, FISSO: collegare, staccare o ricollegare non sposta nessun blocco
-//   w/h = dimensione scelta a mano · flip = ingresso a destra e uscita a sinistra (di norma il contrario)
-//   color = indice 0–5 dei token --c0…--c5 · fs = dimensione testo (px) · bw = spessore bordo · op = opacità riquadro
-//   sub = struttura interna (un altro livello)
-//   edge = { note?, dash?, nx?, ny?, ps? } del collegamento che ENTRA nel blocco
-//          ps = uscita dell'idea centrale da cui parte ('l' o 'r'); nx/ny = spostamento della nota
+//   primary = "idea primaria" (attributo scelto dall'utente, anche su più blocchi): stile marcato,
+//             di serie ingresso in alto e due uscite laterali
+//   pin = { i: [[lato, pos]...], o: [[lato, pos]...] } pallini d'ingresso e d'uscita sul bordo
+//         (lato 'l'|'r'|'t'|'b', pos 0–1 lungo il lato); se manca valgono quelli di serie (vedi defaultPins)
+//   flip = di serie ingresso a destra e uscita a sinistra · w/h = dimensione a mano
+//   color = indice 0–5 dei token --c0…--c5 · fs = testo (px) · bw = bordo · op = opacità del riquadro
+//   sub = struttura interna (un altro livello) · subOpen = schema mostrato sotto il blocco
+//   edge = { po?, pi?, note?, dash?, nx?, ny? } del collegamento "principale" che entra nel blocco dal genitore
+//          po/pi = indice del pallino d'uscita del genitore / d'ingresso del blocco; nx/ny = spostamento della nota
+// Collegamenti aggiuntivi (più ingressi per blocco), in tree.links: { id, from, to, po?, pi?, note?, dash?, nx?, ny? }
+//   Nelle selezioni e nei menu un collegamento si indica con una chiave: id del blocco figlio, oppure 'x:' + id.
 // Nota sulla tela (in tree.notes): { id, x, y, text }
-// Dati vecchi (dx/dy/fx/fy, senza x/y) vengono convertiti una volta con il vecchio layout automatico.
 const DEF_FS = [16, 14, 13];
 const fsOf = (n, depth) => n.fs || DEF_FS[Math.min(depth, 2)];
 const nodeFont = (n, depth) => `${depth <= 1 ? 600 : 400} ${fsOf(n, depth)}px ${FB}`;
@@ -18,16 +23,18 @@ const RMIN = [40, 26], RMAX = [800, 600];
 const NOTE_FONT = `500 11.5px ${FB}`, CNOTE_FONT = `400 13px ${FB}`;
 
 /* ---------- dimensioni e posizioni ---------- */
+// livello di stile: 0 = idea primaria, poi 1 e 2 secondo la profondità nell'albero
 function sizeMap(tree) {
   const M = new Map();
   function size(n, depth) {
-    const fs = fsOf(n, depth), font = nodeFont(n, depth), lh = Math.round(fs * 1.28);
-    const padX = depth === 0 ? 36 : 24, padY = depth === 0 ? 22 : 14;
-    const maxW = n.w ? Math.max(16, n.w - padX) : depth === 0 ? 220 : 200;
+    const lv = n.primary ? 0 : Math.max(1, depth);
+    const fs = fsOf(n, lv), font = nodeFont(n, lv), lh = Math.round(fs * 1.28);
+    const padX = lv === 0 ? 36 : 24, padY = lv === 0 ? 22 : 14;
+    const maxW = n.w ? Math.max(16, n.w - padX) : lv === 0 ? 220 : 200;
     const maxL = n.h ? Math.max(1, Math.floor((n.h - padY + 4) / lh)) : 4;
     const lines = wrap(n.text || 'Senza titolo', maxW, font, maxL);
-    const w = n.w || Math.max(Math.max(...lines.map(l => tw(l, font))) + padX, depth === 0 ? 120 : 48);
-    M.set(n.id, { lines, lh, w, h: n.h || lines.length * lh + padY, depth });
+    const w = n.w || Math.max(Math.max(...lines.map(l => tw(l, font))) + padX, lv === 0 ? 120 : 48);
+    M.set(n.id, { lines, lh, w, h: n.h || lines.length * lh + padY, depth: lv });
     n.children.forEach(c => size(c, depth + 1));
   }
   size(tree, 0); (tree.free || []).forEach(r => size(r, 1));
@@ -57,36 +64,41 @@ function autoLayout(root, SZ) {
   (root.free || []).forEach(fr => { sh(fr); place(fr, fr.fx || 0, fr.fy || 0, 1); off(fr, 0, 0); });
   return A;
 }
-// fondo del sotto-albero (per mettere un blocco nuovo sotto i fratelli)
-function subtreeBottom(n, SZ) { let b = -Infinity; walk(n, d => { if (hasPos(d)) b = Math.max(b, d.y + SZ.get(d.id).h); }); return b; }
-// un blocco nuovo va vicino al genitore, dal lato della sua uscita, sotto i fratelli già posizionati
+function subtreeEdge(n, SZ, which) {
+  let v = -Infinity; walk(n, d => { if (hasPos(d)) v = Math.max(v, which === 'b' ? d.y + SZ.get(d.id).h : d.x + SZ.get(d.id).w); }); return v;
+}
+// un blocco nuovo va vicino al genitore, davanti all'uscita usata, dopo i fratelli già posizionati
 function placeNew(tree, p, n, SZ) {
-  const pl = SZ.get(p.id), nl = SZ.get(n.id);
-  let side;
-  if (p === tree) {
-    side = n.edge && n.edge.ps;
-    if (!side) { // idea centrale: si bilanciano i due lati
-      const sides = p.children.filter(c => c !== n && hasPos(c)).map(c => (c.edge && c.edge.ps) || 'r');
-      side = sides.filter(s => s === 'l').length < sides.filter(s => s === 'r').length ? 'l' : 'r';
-      n.edge = Object.assign({}, n.edge, { ps: side });
-    }
-  } else side = p.flip ? 'l' : 'r';
-  n.flip = side === 'l'; // l'ingresso guarda verso il genitore
-  const sibs = p.children.filter(c => c !== n && hasPos(c) && (p !== tree || ((c.edge && c.edge.ps) || 'r') === side));
-  n.x = Math.round(side === 'r' ? p.x + pl.w + 50 : p.x - 50 - nl.w);
-  n.y = Math.round(sibs.length ? Math.max(...sibs.map(c => subtreeBottom(c, SZ))) + 12 : p.y + pl.h / 2 - nl.h / 2);
-  if (!n.flip) delete n.flip;
+  const pl = SZ.get(p.id), nl = SZ.get(n.id), outs = pinsOf(p).o;
+  let idx = n.edge && n.edge.po != null ? Math.min(n.edge.po, outs.length - 1) : null;
+  if (idx === null) {
+    // più uscite (per esempio l'idea primaria): si sceglie la meno usata
+    const used = outs.map((_, i) => p.children.filter(c => c !== n && hasPos(c) && outIdx(p, c.edge) === i).length);
+    idx = outs.length > 1 ? used.indexOf(Math.min(...used)) : 0;
+    if (outs.length > 1) n.edge = Object.assign({}, n.edge, { po: idx });
+  }
+  const side = outs[idx][0], [ax, ay] = pinXY(pl, outs[idx]), px = p.x + ax, py = p.y + ay;
+  if (side === 'l') n.flip = true; // l'ingresso guarda verso il genitore
+  const sibs = p.children.filter(c => c !== n && hasPos(c) && outIdx(p, c.edge) === idx);
+  if (side === 'l' || side === 'r') {
+    n.x = Math.round(side === 'r' ? px + 50 : px - 50 - nl.w);
+    n.y = Math.round(sibs.length ? Math.max(...sibs.map(c => subtreeEdge(c, SZ, 'b'))) + 12 : py - nl.h / 2);
+  } else {
+    n.y = Math.round(side === 'b' ? py + 40 : py - 40 - nl.h);
+    n.x = Math.round(sibs.length ? Math.max(...sibs.map(c => subtreeEdge(c, SZ, 'r'))) + 12 : px - nl.w / 2);
+  }
 }
 // assegna le posizioni mancanti; true se ha cambiato qualcosa (da salvare)
 function ensurePositions(tree, SZ) {
-  let any = false; const missing = [];
+  let any = false, changed = false; const missing = [];
+  if (tree.primary === undefined) { tree.primary = true; changed = true; } // la radice nasce idea primaria
   walkAll(tree, n => { if (hasPos(n)) any = true; else missing.push(n); });
-  if (!missing.length) return false;
+  if (!missing.length) return changed;
   if (!any) {
     const A = autoLayout(tree, SZ);
     walkAll(tree, (n, p) => {
       const a = A.get(n.id); n.x = Math.round(a.x); n.y = Math.round(a.y);
-      if (p && a.dir < 0) { n.flip = true; if (p === tree) n.edge = Object.assign({}, n.edge, { ps: 'l' }); }
+      if (p && a.dir < 0) { n.flip = true; if (p === tree) n.edge = Object.assign({}, n.edge, { po: 0 }); }
       ['dx', 'dy', 'fx', 'fy'].forEach(k => delete n[k]);
     });
     return true;
@@ -99,9 +111,10 @@ function ensurePositions(tree, SZ) {
   return true;
 }
 function mindLayout(tree) {
-  const SZ = sizeMap(tree);
-  if (ensurePositions(tree, SZ)) save();
-  const L = new Map(); walkAll(tree, n => L.set(n.id, { ...SZ.get(n.id), x: n.x, y: n.y }));
+  const SZ = sizeMap(tree), changed = ensurePositions(tree, SZ);
+  const SZ2 = changed && tree.primary ? sizeMap(tree) : SZ; // la radice può essere appena diventata primaria
+  if (changed) save();
+  const L = new Map(); walkAll(tree, n => L.set(n.id, { ...SZ2.get(n.id), x: n.x, y: n.y }));
   return L;
 }
 function notesLayout(tree) {
@@ -114,26 +127,73 @@ function notesLayout(tree) {
 }
 const shiftTree = (n, dx, dy) => walk(n, d => { if (hasPos(d)) { d.x = Math.round(d.x + dx); d.y = Math.round(d.y + dy); } });
 
-/* ---------- pallini e collegamenti ---------- */
-// ogni blocco: ingresso a sinistra e uscita a destra (al contrario con flip)
-// idea centrale: ingresso in alto, uscite su entrambi i lati
-function anchorsOf(n, l, isRoot) {
-  if (isRoot) return [{ kind: 'in', side: 't', x: l.w / 2, y: 0 }, { kind: 'out', side: 'l', x: 0, y: l.h / 2 }, { kind: 'out', side: 'r', x: l.w, y: l.h / 2 }];
-  const f = !!n.flip;
-  return [{ kind: 'in', side: f ? 'r' : 'l', x: f ? l.w : 0, y: l.h / 2 }, { kind: 'out', side: f ? 'l' : 'r', x: f ? 0 : l.w, y: l.h / 2 }];
+/* ---------- pallini ---------- */
+function defaultPins(n) {
+  if (n.primary) return { i: [['t', 0.5]], o: [['l', 0.5], ['r', 0.5]] };
+  return n.flip ? { i: [['r', 0.5]], o: [['l', 0.5]] } : { i: [['l', 0.5]], o: [['r', 0.5]] };
 }
-const TAN = { l: -1, r: 1 };
-// la linea parte dall'uscita del genitore e arriva all'ingresso del figlio: sempre quei pallini, anche se i blocchi si girano attorno
-function edgeGeom(p, pl, c, cl, rootParent) {
-  const ps = rootParent ? ((c.edge && c.edge.ps) || 'r') : (p.flip ? 'l' : 'r'), cs = c.flip ? 'r' : 'l';
-  const ax = pl.x + (ps === 'r' ? pl.w : 0), ay = pl.y + pl.h / 2, bx = cl.x + (cs === 'r' ? cl.w : 0), by = cl.y + cl.h / 2;
-  const k = clamp(Math.hypot(bx - ax, by - ay) / 2, 30, 160);
-  const c1x = ax + TAN[ps] * k, c2x = bx + TAN[cs] * k;
-  return { d: `M${ax},${ay} C${c1x},${ay} ${c2x},${by} ${bx},${by}`, mx: (ax + 3 * c1x + 3 * c2x + bx) / 8, my: (ay + by) / 2 };
+// pallini del blocco; mentre se ne trascina uno lungo il bordo vale la posizione provvisoria
+function pinsOf(n) {
+  let P = n.pin || defaultPins(n);
+  const lk = S.link;
+  if (lk && lk.pinMove && lk.id === n.id) { P = JSON.parse(JSON.stringify(P)); P[lk.kind === 'in' ? 'i' : 'o'][lk.idx] = lk.pinMove; }
+  return P;
+}
+const pinXY = (l, [side, t]) => side === 'l' ? [0, t * l.h] : side === 'r' ? [l.w, t * l.h] : side === 't' ? [t * l.w, 0] : [t * l.w, l.h];
+const SIDES = { l: [-1, 0], r: [1, 0], t: [0, -1], b: [0, 1] };
+// quale uscita del genitore usa un collegamento (dati vecchi: ps = lato 'l'/'r')
+function outIdx(p, e) {
+  const o = pinsOf(p).o; e = e || {};
+  if (e.po != null) return Math.min(e.po, o.length - 1);
+  if (e.ps) { const i = o.findIndex(q => q[0] === e.ps); if (i >= 0) return i; }
+  const r = o.findIndex(q => q[0] === 'r'); return r >= 0 ? r : 0;
+}
+const inIdx = (c, e) => Math.min((e && e.pi) || 0, pinsOf(c).i.length - 1);
+// punto del bordo più vicino a p (coordinate della tela): lato, posizione 0–1 e distanza dal bordo
+function nearestBorder(l, p) {
+  const qx = p.x - l.x, qy = p.y - l.y, inside = qx >= 0 && qx <= l.w && qy >= 0 && qy <= l.h;
+  let side, dist;
+  if (inside) {
+    const d = { l: qx, r: l.w - qx, t: qy, b: l.h - qy }; side = Object.keys(d).reduce((a, b) => d[a] <= d[b] ? a : b); dist = 0;
+  } else {
+    const cx = clamp(qx, 0, l.w), cy = clamp(qy, 0, l.h); dist = Math.hypot(qx - cx, qy - cy);
+    side = cx === 0 ? 'l' : cx === l.w ? 'r' : cy === 0 ? 't' : 'b';
+  }
+  let t = side === 'l' || side === 'r' ? qy / l.h : qx / l.w;
+  t = clamp(Math.round(t * 20) / 20, 0.1, 0.9); if (Math.abs(t - 0.5) < 0.08) t = 0.5;
+  return { side, t, dist };
+}
+
+/* ---------- collegamenti ---------- */
+// la linea parte da un pallino d'uscita e arriva a un pallino d'ingresso: sempre quelli, ovunque si spostino i blocchi
+function linkGeom(pn, pl, po, cn, cl, pi) {
+  const a = pinsOf(pn).o[po], b = pinsOf(cn).i[pi];
+  const [ax0, ay0] = pinXY(pl, a), [bx0, by0] = pinXY(cl, b);
+  const ax = pl.x + ax0, ay = pl.y + ay0, bx = cl.x + bx0, by = cl.y + by0;
+  const k = clamp(Math.hypot(bx - ax, by - ay) / 2, 30, 160), ta = SIDES[a[0]], tb = SIDES[b[0]];
+  const c1x = ax + ta[0] * k, c1y = ay + ta[1] * k, c2x = bx + tb[0] * k, c2y = by + tb[1] * k;
+  return { d: `M${ax},${ay} C${c1x},${c1y} ${c2x},${c2y} ${bx},${by}`, mx: (ax + 3 * c1x + 3 * c2x + bx) / 8, my: (ay + 3 * c1y + 3 * c2y + by) / 8 };
+}
+// tutti i collegamenti di un livello: { key, from, to, e (dati: stile, nota, pallini), extra }
+function allLinks(tree) {
+  const out = [];
+  walkAll(tree, (n, p) => { if (p) out.push({ key: n.id, from: p, to: n, e: n.edge || {}, extra: false }); });
+  (tree.links || []).forEach(x => {
+    const a = findM(tree, x.from), b = findM(tree, x.to);
+    if (a && b) out.push({ key: 'x:' + x.id, from: a.n, to: b.n, e: x, extra: true });
+  });
+  return out;
+}
+// dati modificabili di un collegamento dalla sua chiave (create = crea edge sul blocco se manca)
+function edgeData(tree, key, create) {
+  if (key.startsWith('x:')) return (tree.links || []).find(x => x.id === key.slice(2)) || null;
+  const f = findM(tree, key); if (!f || !f.p) return null;
+  if (!f.n.edge && create) f.n.edge = {};
+  return f.n.edge || {};
 }
 const TIP = {
-  in: 'Ingresso: trascina sull’uscita di un blocco per collegarlo, nel vuoto per staccarlo',
-  out: 'Uscita: trascina sull’ingresso di un blocco per collegarlo'
+  in: 'Ingresso: trascina sull’uscita di un blocco per collegarlo, lungo il bordo per spostarlo, nel vuoto per staccarlo',
+  out: 'Uscita: trascina sull’ingresso di un blocco per collegarlo, lungo il bordo per spostarlo'
 };
 
 // schema della struttura interna disegnato sulla tela, sotto il blocco (tasto destro → Mostra anteprima)
@@ -155,36 +215,42 @@ function subPreviewMarkup(n, l, live) {
 function treeMarkup(tree, L, NL, live, previews = live) {
   const single = live && S.sels.size === 1 && !editing, lk = live ? S.link : null;
   const E = new Map(); let edges = '', notes = '', nodes = '', prevs = '';
-  function rec(n) {
+  allLinks(tree).forEach(({ key, from, to, e }) => {
+    const pl = L.get(from.id), cl = L.get(to.id); if (!pl || !cl) return;
+    const g = linkGeom(from, pl, outIdx(from, e), to, cl, inIdx(to, e));
+    // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
+    const nx = g.mx + (e.nx || 0), ny = g.my + (e.ny || 0);
+    E.set(key, { x: nx, y: ny });
+    const cls = 'eg' + (e.dash ? ' dash' : '') + (live && S.esel === key ? ' sel' : '');
+    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" stroke-width="${pl.depth === 0 ? 2.2 : 1.5}" d="${g.d}"/>` +
+      (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
+    if (e.note && !(editing && editing.kind === 'edge' && editing.id === key)) {
+      const lines = wrap(e.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
+      const lead = e.nx || e.ny ? `<path class="lead" d="M${g.mx},${g.my} L${nx},${ny}"/>` : '';
+      // etichetta a pillola chiara: deve distinguersi a colpo d'occhio dai blocchi (scuri) e dalle note della tela (gialle)
+      notes += `<g class="enote${live && S.esel === key ? ' sel' : ''}"${live ? ` data-edge="${key}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="${lines.length > 1 ? 10 : h / 2}"/>` +
+        lines.map((s, i) => `<text x="${nx}" y="${ny - h / 2 + 15 + i * 14}" text-anchor="middle">${esc(s)}</text>`).join('') + `</g>`;
+    }
+  });
+  walkAll(tree, n => {
     const l = L.get(n.id);
-    n.children.forEach(c => {
-      const k = L.get(c.id), g = edgeGeom(n, l, c, k, n === tree), ed = c.edge || {};
-      // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
-      const nx = g.mx + (ed.nx || 0), ny = g.my + (ed.ny || 0);
-      E.set(c.id, { x: nx, y: ny });
-      const cls = 'eg' + (ed.dash ? ' dash' : '') + (lk && lk.kind === 'in' && lk.id === c.id ? ' lifted' : '') + (live && S.esel === c.id ? ' sel' : '');
-      edges += `<g class="${cls}"${live ? ` data-edge="${c.id}"` : ''}><path class="edge" stroke-width="${l.depth === 0 ? 2.2 : 1.5}" d="${g.d}"/>` +
-        (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
-      if (ed.note && !(editing && editing.kind === 'edge' && editing.id === c.id)) {
-        const lines = wrap(ed.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
-        const lead = ed.nx || ed.ny ? `<path class="lead" d="M${g.mx},${g.my} L${nx},${ny}"/>` : '';
-        // etichetta a pillola chiara: deve distinguersi a colpo d'occhio dai blocchi (scuri) e dalle note della tela (gialle)
-        notes += `<g class="enote${live && S.esel === c.id ? ' sel' : ''}"${live ? ` data-edge="${c.id}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="${lines.length > 1 ? 10 : h / 2}"/>` +
-          lines.map((s, i) => `<text x="${nx}" y="${ny - h / 2 + 15 + i * 14}" text-anchor="middle">${esc(s)}</text>`).join('') + `</g>`;
-      }
-      rec(c);
-    });
     const sel = live && S.sels.has(n.id), dd = Math.min(l.depth, 2), pad = (l.h - l.lines.length * l.lh) / 2;
     const fsSt = n.fs ? ` style="font-size:${n.fs}px"` : '';
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
     const txt = l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
     const sub = n.sub ? `<g class="subicon"${live ? ' data-sub="1"' : ''}><rect class="shit" x="${l.w - 20}" y="1" width="19" height="17"/>` +
       [[0, 0], [4, 0], [0, 4], [4, 4]].map(([a, b]) => `<rect x="${l.w - 13 + a}" y="${5 + b}" width="3" height="3" rx=".6"/>`).join('') + `</g>` : '';
-    const anchors = live ? anchorsOf(n, l, n === tree).map(a => {
-      const hot = lk && lk.over === n.id && lk.overAnc && lk.overAnc.kind === a.kind && lk.overAnc.side === a.side;
-      return `<g class="anc ${a.kind}${hot ? ' hot' : ''}" data-anc="${a.kind}" data-side="${a.side}"><title>${TIP[a.kind]}</title>` +
-        `<circle class="ahit" cx="${a.x}" cy="${a.y}" r="10"/><circle class="adot" cx="${a.x}" cy="${a.y}" r="4"/></g>`;
-    }).join('') : '';
+    let anchors = '';
+    if (live) {
+      const P = pinsOf(n);
+      [['in', P.i], ['out', P.o]].forEach(([kind, list]) => list.forEach((pin, idx) => {
+        const [x, y] = pinXY(l, pin);
+        const hot = lk && lk.over === n.id && lk.overAnc && lk.overAnc.kind === kind && lk.overAnc.idx === idx;
+        const moving = lk && lk.pinMove && lk.id === n.id && lk.kind === kind && lk.idx === idx;
+        anchors += `<g class="anc ${kind}${hot ? ' hot' : ''}${moving ? ' moving' : ''}" data-anc="${kind}" data-idx="${idx}"><title>${TIP[kind]}</title>` +
+          `<circle class="ahit" cx="${x}" cy="${y}" r="10"/><circle class="adot" cx="${x}" cy="${y}" r="4"/></g>`;
+      }));
+    }
     if (previews && n.sub && n.subOpen) prevs += subPreviewMarkup(n, l, live);
     const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${lk && lk.over === n.id && !lk.overAnc ? ' drop' : ''}${n.sub ? ' hassub' : ''}`;
     nodes += `<g class="${cls}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` +
@@ -194,8 +260,7 @@ function treeMarkup(tree, L, NL, live, previews = live) {
       `<rect class="box" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"${boxSt ? ` style="${boxSt}"` : ''}/>${txt}${sub}` +
       (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
       anchors + `</g>`;
-  }
-  rec(tree); (tree.free || []).forEach(rec);
+  });
   // note sulla tela: appunti, non blocchi
   let cnotes = '';
   (tree.notes || []).forEach(nt => {
@@ -206,7 +271,7 @@ function treeMarkup(tree, L, NL, live, previews = live) {
       l.lines.map((s, i) => `<text x="12" y="${20 + i * 18}">${esc(s)}</text>`).join('') + `</g>`;
   });
   if (live) S.E = E;
-  const rubber = lk && lk.x2 != null ? `<path class="rubber" d="M${lk.x1},${lk.y1} L${lk.x2},${lk.y2}"/>` : '';
+  const rubber = lk && lk.x2 != null && !lk.pinMove ? `<path class="rubber" d="M${lk.x1},${lk.y1} L${lk.x2},${lk.y2}"/>` : '';
   return `<g>${prevs}</g><g>${edges}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
 }
 
@@ -240,7 +305,7 @@ function addChild(id) {
 function addSibling(id) {
   const f = findM(curTree(), id); if (!f) return; if (!f.p) return addChild(id);
   const c = mk('Nuova idea');
-  if (f.n.edge && f.n.edge.ps) c.edge = { ps: f.n.edge.ps }; // stesso lato dell'idea centrale
+  if (f.n.edge && f.n.edge.po != null) c.edge = { po: f.n.edge.po }; // stessa uscita del genitore
   mutate(t => { const g = findM(t, id); g.p.children.splice(g.p.children.indexOf(g.n) + 1, 0, c); });
   selectOnly(c.id); render(); startEdit(c.id, true);
 }
@@ -254,10 +319,12 @@ function addCanvasNote(x, y) {
   mutate(t => (t.notes = t.notes || []).push(nt));
   selectOnly(nt.id); render(); startNoteEdit(nt.id);
 }
+// toglie i collegamenti aggiuntivi che puntano a blocchi non più presenti
+function cleanLinks(t) { if (t.links) { t.links = t.links.filter(x => findM(t, x.from) && findM(t, x.to)); if (!t.links.length) delete t.links; } }
 function removeSelected() {
   const t = curTree(), ids = [...S.sels], delRoot = ids.includes(t.id);
   if (!ids.length) return;
-  // anche l'idea centrale si può eliminare, se sulla tela resta un altro blocco libero che ne prende il posto
+  // anche la radice del livello si può eliminare, se sulla tela resta un altro blocco libero che ne prende il posto
   if (delRoot && !(t.free || []).some(r => !ids.includes(r.id))) return toast('Sulla tela deve restare almeno un blocco');
   const f0 = findM(t, ids.includes(S.sel) ? S.sel : ids[0]), pid = f0 && f0.p ? f0.p.id : null;
   mutate(tt => {
@@ -267,63 +334,121 @@ function removeSelected() {
       const nt = findNote(tt, id); if (nt) tt.notes.splice(tt.notes.indexOf(nt), 1);
     });
     if (delRoot) promoteRoot(tt, tt.free[0]);
+    cleanLinks(curTree());
   });
   selectOnly(pid && findM(curTree(), pid) ? pid : null); render();
 }
-// il blocco libero `nr` diventa la radice del livello: prende con sé gli altri blocchi liberi e le note.
-// Nessun blocco si sposta: i rami della nuova radice partono dall'uscita del lato dove già si trovano.
+// il blocco libero `nr` diventa la radice dei dati del livello: prende con sé blocchi liberi, collegamenti aggiuntivi e note.
+// Nessun blocco si sposta e nessuno cambia aspetto (l'attributo "primaria" resta quello che era).
 function promoteRoot(t, nr) {
-  nr.free = (t.free || []).filter(r => r !== nr); nr.notes = t.notes || [];
-  if (!nr.free.length) delete nr.free; if (!nr.notes.length) delete nr.notes;
-  delete t.free; delete t.notes; delete nr.flip; delete nr.edge;
-  nr.children.forEach(c => { c.edge = Object.assign({}, c.edge, { ps: c.x < nr.x ? 'l' : 'r' }); });
+  nr.free = (t.free || []).filter(r => r !== nr); nr.notes = t.notes || []; nr.links = t.links || [];
+  ['free', 'notes', 'links'].forEach(k => { if (!nr[k].length) delete nr[k]; });
+  delete t.free; delete t.notes; delete t.links; delete nr.edge;
+  if (nr.primary === undefined) nr.primary = false;
   setLevelRoot(nr);
 }
-// collega `childId` sotto `parentId`. Nessun blocco si sposta: cambia solo la linea.
-// Ogni blocco ha un solo ingresso: se era già collegato, il vecchio collegamento viene sostituito.
-// ps = uscita dell'idea centrale scelta ('l' o 'r'), conta solo se il genitore è l'idea centrale
-function connect(parentId, childId, ps) {
-  const t = curTree(); if (childId === parentId) return render();
-  const c = findM(t, childId), p = findM(t, parentId); if (!c || !p) return render();
-  if (c.p && c.p.id === parentId) {
-    if (p.n === t && ps && ps !== ((c.n.edge && c.n.edge.ps) || 'r')) { setEdge(childId, { ps }); return toast('Collegamento spostato'); }
+// collega l'uscita `po` di `fromId` all'ingresso `pi` di `toId`. Nessun blocco si sposta: cambia solo la linea.
+// Se il blocco d'arrivo non ha ancora un genitore diventa suo figlio, altrimenti si aggiunge un collegamento:
+// così un blocco può avere più ingressi.
+function link(fromId, po, toId, pi) {
+  const t = curTree(); if (fromId === toId) return render();
+  const a = findM(t, fromId), b = findM(t, toId); if (!a || !b) return render();
+  const links = allLinks(t);
+  const same = links.find(L => L.from.id === fromId && L.to.id === toId);
+  if (same) {
+    // stesso collegamento con pallini diversi: si riaggancia
+    if (outIdx(a.n, same.e) !== po || inIdx(b.n, same.e) !== pi) { setEdge(same.key, { po, pi }); return toast('Collegamento spostato'); }
     render(); return toast('Sono già collegati');
   }
-  let inside = false; walk(c.n, n => { if (n.id === parentId) inside = true; });
-  if (inside) { render(); return toast('Non puoi collegare un blocco sotto uno dei suoi stessi rami'); }
+  if (links.some(L => L.from.id === toId && L.to.id === fromId)) { render(); return toast('Esiste già il collegamento opposto'); }
+  let inside = false; walk(b.n, n => { if (n.id === fromId) inside = true; });
+  const asChild = !b.p && !inside;
   mutate(tt => {
-    const f = findM(tt, childId), pp = findM(tt, parentId).n;
-    if (f.n === tt) {
-      // l'idea centrale va sotto un blocco libero: la radice di quel blocco libero diventa la nuova idea centrale
-      const nr = tt.free.find(r => { let has = false; walk(r, n => { if (n.id === parentId) has = true; }); return has; });
-      promoteRoot(tt, nr);
-    } else f.list.splice(f.list.indexOf(f.n), 1);
-    pp.children.push(f.n);
-    const ed = Object.assign({}, f.n.edge); delete ed.ps; delete ed.nx; delete ed.ny; delete ed.note;
-    if (pp === curTree() && ps) ed.ps = ps;
-    if (Object.keys(ed).length) f.n.edge = ed; else delete f.n.edge;
+    if (asChild) {
+      const f = findM(tt, toId), pp = findM(tt, fromId).n;
+      if (f.n === tt) {
+        // la radice dei dati va sotto un blocco libero: la radice di quel blocco libero prende il suo posto
+        const nr = tt.free.find(r => { let has = false; walk(r, n => { if (n.id === fromId) has = true; }); return has; });
+        promoteRoot(tt, nr);
+      } else f.list.splice(f.list.indexOf(f.n), 1);
+      pp.children.push(f.n);
+      const ed = Object.assign({}, f.n.edge, { po, pi }); delete ed.ps;
+      Object.keys(ed).forEach(k => { if (!ed[k] && ed[k] !== 0) delete ed[k]; }); if (!ed.pi) delete ed.pi;
+      f.n.edge = ed;
+    } else {
+      const lx = { id: uid(), from: fromId, to: toId, po, pi }; if (!pi) delete lx.pi;
+      (tt.links = tt.links || []).push(lx);
+    }
   });
-  selectOnly(childId); render(); toast('Collegati');
+  selectOnly(toId); render(); toast('Collegati');
 }
-// eliminare un collegamento = staccare il blocco in cui entra: il blocco resta dov'è, libero, con i suoi rami
-function deleteEdge(id) { detach(id, 'Collegamento eliminato'); }
+// eliminare un collegamento: quello aggiuntivo sparisce; quello principale stacca il blocco, che resta dov'è
+function deleteEdge(key) {
+  if (key.startsWith('x:')) { mutate(t => { t.links = (t.links || []).filter(x => x.id !== key.slice(2)); if (!t.links.length) delete t.links; }); clearSel(); render(); return toast('Collegamento eliminato'); }
+  detach(key, 'Collegamento eliminato');
+}
 function detach(id, msg = 'Blocco staccato') {
   const f = findM(curTree(), id); if (!f || !f.p) return render();
   mutate(tt => { const g = findM(tt, id); g.list.splice(g.list.indexOf(g.n), 1); delete g.n.edge; (tt.free = tt.free || []).push(g.n); });
   selectOnly(id); render(); toast(msg);
 }
-function toggleSubPreview(id) { mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.subOpen) delete f.n.subOpen; else f.n.subOpen = true; }); }
-function toggleFlip(id) { mutate(t => { const f = findM(t, id); if (!f || f.n === t) return; if (f.n.flip) delete f.n.flip; else f.n.flip = true; }); }
+// blocco intermedio su un collegamento (tasto destro sul collegamento): A → nuovo → B, nessun blocco si sposta
+function insertOnLink(key) {
+  const t = curTree(), Lk = allLinks(t).find(L => L.key === key); if (!Lk) return;
+  const g = linkGeom(Lk.from, S.L.get(Lk.from.id), outIdx(Lk.from, Lk.e), Lk.to, S.L.get(Lk.to.id), inIdx(Lk.to, Lk.e));
+  const n = mk('Nuova idea'), pi = inIdx(Lk.to, Lk.e), po = outIdx(Lk.from, Lk.e);
+  const SZ = sizeMap({ id: 'tmp', text: '', children: [n] }), s = SZ.get(n.id);
+  n.x = Math.round(g.mx - s.w / 2); n.y = Math.round(g.my - s.h / 2);
+  const keep = { note: Lk.e.note, dash: Lk.e.dash };
+  mutate(tt => {
+    if (Lk.extra) {
+      // il nuovo blocco diventa figlio del primo blocco, poi un collegamento aggiuntivo verso il secondo
+      tt.links = tt.links.filter(x => x.id !== key.slice(2)); if (!tt.links.length) delete tt.links;
+      n.edge = { po, ...keep }; findM(tt, Lk.from.id).n.children.push(n);
+      (tt.links = tt.links || []).push({ id: uid(), from: n.id, to: Lk.to.id, po: 0, pi });
+    } else {
+      const f = findM(tt, Lk.to.id), i = f.p.children.indexOf(f.n);
+      n.edge = { po, ...keep }; f.p.children.splice(i, 1, n); n.children.push(f.n);
+      f.n.edge = { pi }; if (!pi) delete f.n.edge;
+    }
+    Object.keys(n.edge).forEach(k => { if (n.edge[k] === undefined) delete n.edge[k]; });
+  });
+  selectOnly(n.id); render(); startEdit(n.id, true);
+}
+function toggleFlip(id) { mutate(t => { const f = findM(t, id); if (!f) return; delete f.n.pin; if (f.n.flip) delete f.n.flip; else f.n.flip = true; }); }
+function togglePrimary(id) { mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.primary) { if (f.n === t) f.n.primary = false; else delete f.n.primary; } else f.n.primary = true; }); }
+// pallini: aggiungi / togli / sposta / di serie
+function spreadSide(list, side) { const on = list.filter(p => p[0] === side); on.forEach((p, i) => { p[1] = Math.round((i + 1) / (on.length + 1) * 100) / 100; }); }
+function addPin(id, kind) {
+  mutate(t => {
+    const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[kind === 'in' ? 'i' : 'o'];
+    const side = list[list.length - 1][0]; list.push([side, 0.5]); spreadSide(list, side); n.pin = P;
+  });
+}
+function removePin(id, kind) {
+  mutate(t => {
+    const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[kind === 'in' ? 'i' : 'o'];
+    if (list.length > 1) list.pop(); n.pin = P;
+  });
+}
+function setPin(id, kind, idx, pos) {
+  mutate(t => { const n = findM(t, id).n, P = JSON.parse(JSON.stringify(n.pin || defaultPins(n))); P[kind === 'in' ? 'i' : 'o'][idx] = pos; n.pin = P; });
+}
+function resetPins(id) { mutate(t => { delete findM(t, id).n.pin; }); }
 
 /* ---------- duplica, copia, incolla ---------- */
-// copia profonda con id nuovi (anche rami, struttura interna, suoi blocchi liberi e note)
+// copia profonda con id nuovi (anche rami, struttura interna con i suoi blocchi liberi, collegamenti e note)
 function cloneFresh(n) {
-  const c = JSON.parse(JSON.stringify(n));
-  (function re(x) { x.id = uid(); x.children.forEach(re); (x.free || []).forEach(re); (x.notes || []).forEach(nt => { nt.id = uid(); }); if (x.sub) re(x.sub); })(c);
+  const c = JSON.parse(JSON.stringify(n)), map = {}, conts = [];
+  (function re(x) {
+    map[x.id] = uid(); x.id = map[x.id]; if (x.links) conts.push(x);
+    x.children.forEach(re); (x.free || []).forEach(re); (x.notes || []).forEach(nt => { nt.id = uid(); }); if (x.sub) re(x.sub);
+  })(c);
+  conts.forEach(x => x.links.forEach(L => { L.id = uid(); L.from = map[L.from] || L.from; L.to = map[L.to] || L.to; }));
   return c;
 }
 // copia "staccata": senza i contenuti del livello (se era la radice) e senza collegamento in entrata
-function looseCopy(n) { const c = cloneFresh(n); ['free', 'notes', 'edge'].forEach(k => delete c[k]); return c; }
+function looseCopy(n) { const c = cloneFresh(n); ['free', 'notes', 'links', 'edge'].forEach(k => delete c[k]); return c; }
 function selectMany(ids) { S.sels = new Set(ids); S.sel = ids[ids.length - 1] || null; S.esel = null; }
 // altezza del sotto-albero sullo schermo (per mettere la copia subito sotto)
 function treeSpan(n, L) { let y1 = Infinity, y2 = -Infinity; walk(n, d => { const l = L.get(d.id); if (l) { y1 = Math.min(y1, l.y); y2 = Math.max(y2, l.y + l.h); } }); return y2 - y1; }
@@ -394,21 +519,23 @@ function eachSelected(fn) { const ids = [...S.sels], L = S.L; mutate(t => ids.fo
 function setColor(c) { eachSelected(n => { if (c === '') delete n.color; else n.color = +c; }); }
 function autoSize() { eachSelected(n => { delete n.w; delete n.h; }); }
 
-/* ---------- collegamenti (stile e nota stanno sul blocco figlio) ---------- */
-function setEdge(id, patch) {
+/* ---------- stile e nota dei collegamenti ---------- */
+function setEdge(key, patch) {
   mutate(t => {
-    const f = findM(t, id); if (!f) return;
-    const e = Object.assign({}, f.n.edge, patch);
-    Object.keys(e).forEach(k => { if (!e[k]) delete e[k]; });
-    if (Object.keys(e).length) f.n.edge = e; else delete f.n.edge;
+    const e = edgeData(t, key, true); if (!e) return;
+    Object.assign(e, patch);
+    // si tolgono i valori vuoti; po (indice dell'uscita) vale anche 0
+    Object.keys(e).forEach(k => { if (['id', 'from', 'to'].includes(k) || (k === 'po' && typeof e[k] === 'number')) return; if (!e[k]) delete e[k]; });
+    if (!key.startsWith('x:')) { const f = findM(t, key); if (f && !Object.keys(f.n.edge).length) delete f.n.edge; }
   });
 }
+const toggleSubPreview = id => mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.subOpen) delete f.n.subOpen; else f.n.subOpen = true; });
 
 /* ---------- struttura interna ---------- */
 function openSub(id) {
   hidePreview();
   const f = findM(curTree(), id); if (!f) return;
-  if (!f.n.sub) mutate(() => { f.n.sub = { id: uid(), text: f.n.text, children: [] }; });
+  if (!f.n.sub) mutate(() => { f.n.sub = { id: uid(), text: f.n.text, children: [], primary: true }; });
   else f.n.sub.text = f.n.text;
   S.path.push(id); clearSel(); render();
   if (view().fresh) fit();
@@ -424,7 +551,7 @@ function levelBounds(L, NL) {
   [L, NL].forEach(M => M.forEach(l => { x1 = Math.min(x1, l.x); y1 = Math.min(y1, l.y); x2 = Math.max(x2, l.x + l.w); y2 = Math.max(y2, l.y + l.h); }));
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
-// anteprima della struttura interna, senza entrarci
+// anteprima della struttura interna (passando sull'icona), senza entrarci
 const prevEl = $('#preview');
 function showPreview(id, rect) {
   const f = findM(curTree(), id); if (!f || !f.n.sub) return;
