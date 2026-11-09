@@ -9,6 +9,8 @@
   --edge:#9aa5b0; --anc-in:#ffffff; --anc-in-ring:#1d2731; --anc-out:#5f6b77; --anc-out-ring:#d5dce3;
   /* note sulla tela */
   --note-bg:#fff7da; --note-bar:#d9a800; --note-ink:#4a3c00;
+  /* note dei collegamenti: etichette chiare a pillola */
+  --enote-bg:#e4e9ee; --enote-border:#9aa5b0; --enote-ink:#26323d;
   /* colori a scelta per i blocchi */
   --c0:#1f77a8; --c1:#c2571a; --c2:#2e8b57; --c3:#8a4fbf; --c4:#b8336a; --c5:#a07800;
   --f-body:"Instrument Sans", "Segoe UI", system-ui, sans-serif;
@@ -20,6 +22,7 @@
   --node-bg:#19222b; --node-border:#3f4d5a; --node-border-strong:#64737f; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
+  --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; } }
 :root[data-theme="dark"]{
@@ -29,6 +32,7 @@
   --node-bg:#19222b; --node-border:#3f4d5a; --node-border-strong:#64737f; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
+  --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; }
 
@@ -59,7 +63,10 @@ body.inner{background-color:var(--canvas-inner)} /* dentro una struttura interna
 .mn.editing text{visibility:hidden}
 .ring{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-dasharray:4 3}
 .rsz{fill:var(--accent);stroke:var(--canvas);stroke-width:1.5;cursor:nwse-resize}
-.subicon rect{fill:var(--on-node);opacity:.55}
+/* blocco con struttura interna: riquadro sfalsato dietro (pila) e icona a griglia */
+.mn .stack{fill:var(--node-bg);stroke:var(--node-border-strong);stroke-width:1.2}
+.mn.cc .stack{fill:color-mix(in srgb,var(--cc) 14%,var(--node-bg));stroke:var(--cc)}
+.subicon rect{fill:var(--on-node);opacity:.85}
 .subicon .shit{fill:transparent;opacity:1;cursor:zoom-in}
 .subicon:hover rect:not(.shit){opacity:1}
 
@@ -79,10 +86,17 @@ body.inner{background-color:var(--canvas-inner)} /* dentro una struttura interna
 .eg:hover .edge{stroke:var(--accent)}
 .eg.sel .edge{stroke:var(--accent);stroke-width:3px}
 .enote{cursor:move}
-.enote rect{fill:var(--surface);stroke:var(--edge);stroke-width:1}
-.enote.sel rect{stroke:var(--accent);stroke-width:1.6}
+.enote rect{fill:var(--enote-bg);stroke:var(--enote-border);stroke-width:1}
+.enote text{fill:var(--enote-ink);font-style:italic;font-size:11.5px;font-weight:500}
+.enote.sel rect{stroke:var(--accent);stroke-width:2}
 .enote .lead{fill:none;stroke:var(--edge);stroke-width:1;stroke-dasharray:2 3}
-.enote text{fill:var(--ink);font-size:11.5px;font-weight:500}
+
+/* schema della struttura interna mostrato sotto il blocco */
+.subprev{cursor:zoom-in}
+.subprev .spbox{fill:var(--canvas-inner);stroke:var(--node-border-strong);stroke-width:1;stroke-dasharray:5 4}
+.subprev .splead{fill:none;stroke:var(--node-border-strong);stroke-width:1;stroke-dasharray:3 3}
+.subprev .sptitle{fill:var(--muted);font-size:10.5px;font-weight:600}
+.subprev:hover .spbox{stroke:var(--accent)}
 
 /* note sulla tela: appunti, non blocchi */
 .cnote{cursor:move}
@@ -97,7 +111,7 @@ body.inner{background-color:var(--canvas-inner)} /* dentro una struttura interna
 /* editor di testo sovrapposto */
 #ed{position:fixed;z-index:10;margin:0;padding:0;border:0;outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;
   background:transparent;color:var(--on-node);font-family:var(--f-body);text-align:center;resize:none;overflow:hidden;line-height:1.3}
-#ed.edge{background:var(--surface);color:var(--ink)}
+#ed.edge{background:var(--enote-bg);color:var(--enote-ink);font-style:italic;border-radius:12px}
 #ed.note{background:var(--note-bg);color:var(--note-ink);font-style:italic;text-align:left;padding-left:12px}
 
 /* barra dei menu */

@@ -136,10 +136,25 @@ const TIP = {
   out: 'Uscita: trascina sull’ingresso di un blocco per collegarlo'
 };
 
+// schema della struttura interna disegnato sulla tela, sotto il blocco (tasto destro → Mostra anteprima)
+function subPreviewMarkup(n, l, live) {
+  const sub = n.sub, L = mindLayout(sub), NL = notesLayout(sub), b = levelBounds(L, NL);
+  const pad = 14, head = 20, k = Math.min(0.55, 300 / (b.w + pad * 2), 190 / (b.h + pad * 2));
+  const w = Math.max(170, (b.w + pad * 2) * k), h = (b.h + pad * 2) * k + head, x = l.x, y = l.y + l.h + 16;
+  let count = 0; walkAll(sub, () => count++);
+  const title = `Struttura interna · ${count > 1 ? `${count - 1} blocchi` : 'vuota'}`;
+  return `<g class="subprev"${live ? ` data-subprev="${n.id}"` : ''}>${live ? '<title>Clic per entrare nella struttura interna</title>' : ''}` +
+    `<path class="splead" d="M${x + 18},${l.y + l.h} L${x + 18},${y}"/>` +
+    `<rect class="spbox" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/>` +
+    `<text class="sptitle" x="${x + 10}" y="${y + 14}">${esc(ell(title, w - 18, `600 10.5px ${FB}`))}</text>` +
+    `<g transform="translate(${x + (w - b.w * k) / 2 - b.x * k},${y + head + pad * k - b.y * k}) scale(${k})">${treeMarkup(sub, L, NL, false, false)}</g></g>`;
+}
+
 // markup SVG di un livello; live = tela interattiva (selezione, pallini, maniglie), altrimenti anteprima/esportazione
-function treeMarkup(tree, L, NL, live) {
+// previews = disegna anche gli schemi delle strutture interne aperti sulla tela
+function treeMarkup(tree, L, NL, live, previews = live) {
   const single = live && S.sels.size === 1 && !editing, lk = live ? S.link : null;
-  const E = new Map(); let edges = '', notes = '', nodes = '';
+  const E = new Map(); let edges = '', notes = '', nodes = '', prevs = '';
   function rec(n) {
     const l = L.get(n.id);
     n.children.forEach(c => {
@@ -153,7 +168,8 @@ function treeMarkup(tree, L, NL, live) {
       if (ed.note && !(editing && editing.kind === 'edge' && editing.id === c.id)) {
         const lines = wrap(ed.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
         const lead = ed.nx || ed.ny ? `<path class="lead" d="M${g.mx},${g.my} L${nx},${ny}"/>` : '';
-        notes += `<g class="enote${live && S.esel === c.id ? ' sel' : ''}"${live ? ` data-edge="${c.id}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="7"/>` +
+        // etichetta a pillola chiara: deve distinguersi a colpo d'occhio dai blocchi (scuri) e dalle note della tela (gialle)
+        notes += `<g class="enote${live && S.esel === c.id ? ' sel' : ''}"${live ? ` data-edge="${c.id}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="${lines.length > 1 ? 10 : h / 2}"/>` +
           lines.map((s, i) => `<text x="${nx}" y="${ny - h / 2 + 15 + i * 14}" text-anchor="middle">${esc(s)}</text>`).join('') + `</g>`;
       }
       rec(c);
@@ -169,9 +185,12 @@ function treeMarkup(tree, L, NL, live) {
       return `<g class="anc ${a.kind}${hot ? ' hot' : ''}" data-anc="${a.kind}" data-side="${a.side}"><title>${TIP[a.kind]}</title>` +
         `<circle class="ahit" cx="${a.x}" cy="${a.y}" r="10"/><circle class="adot" cx="${a.x}" cy="${a.y}" r="4"/></g>`;
     }).join('') : '';
-    const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${lk && lk.over === n.id && !lk.overAnc ? ' drop' : ''}`;
+    if (previews && n.sub && n.subOpen) prevs += subPreviewMarkup(n, l, live);
+    const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${lk && lk.over === n.id && !lk.overAnc ? ' drop' : ''}${n.sub ? ' hassub' : ''}`;
     nodes += `<g class="${cls}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` +
       (sel ? `<rect class="ring" x="-5" y="-5" width="${l.w + 10}" height="${l.h + 10}" rx="${dd === 0 ? 14 : 11}"/>` : '') +
+      // blocco con struttura interna: un secondo riquadro sfalsato dietro, come una pila
+      (n.sub ? `<rect class="stack" x="5" y="5" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"/>` : '') +
       `<rect class="box" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"${boxSt ? ` style="${boxSt}"` : ''}/>${txt}${sub}` +
       (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
       anchors + `</g>`;
@@ -188,7 +207,7 @@ function treeMarkup(tree, L, NL, live) {
   });
   if (live) S.E = E;
   const rubber = lk && lk.x2 != null ? `<path class="rubber" d="M${lk.x1},${lk.y1} L${lk.x2},${lk.y2}"/>` : '';
-  return `<g>${edges}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
+  return `<g>${prevs}</g><g>${edges}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
 }
 
 function render() {
@@ -293,6 +312,7 @@ function detach(id, msg = 'Blocco staccato') {
   mutate(tt => { const g = findM(tt, id); g.list.splice(g.list.indexOf(g.n), 1); delete g.n.edge; (tt.free = tt.free || []).push(g.n); });
   selectOnly(id); render(); toast(msg);
 }
+function toggleSubPreview(id) { mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.subOpen) delete f.n.subOpen; else f.n.subOpen = true; }); }
 function toggleFlip(id) { mutate(t => { const f = findM(t, id); if (!f || f.n === t) return; if (f.n.flip) delete f.n.flip; else f.n.flip = true; }); }
 
 /* ---------- duplica, copia, incolla ---------- */
@@ -363,10 +383,10 @@ function topSelected(tree) {
   rec(tree, false); (tree.free || []).forEach(r => rec(r, false));
   return out;
 }
-// cosa si sposta trascinando: i blocchi selezionati con i loro rami, e le note selezionate
+// cosa si sposta trascinando: solo i blocchi e le note selezionati (i figli restano dove sono)
 function dragMovers(t) {
   const out = [];
-  topSelected(t).forEach(n => walk(n, d => out.push({ o: d, ox: d.x, oy: d.y })));
+  walkAll(t, d => { if (S.sels.has(d.id)) out.push({ o: d, ox: d.x, oy: d.y }); });
   (t.notes || []).filter(nt => S.sels.has(nt.id)).forEach(nt => out.push({ o: nt, ox: nt.x, oy: nt.y }));
   return out;
 }

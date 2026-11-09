@@ -16,6 +16,8 @@ cv.addEventListener('pointerdown', e => {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
     const id = e.target.closest('.enote').dataset.edge, ed = findM(curTree(), id).n.edge || {};
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
+  } else if (e.target.closest('[data-subprev]')) {
+    return openSub(e.target.closest('[data-subprev]').dataset.subprev); // clic sullo schema: si entra
   } else if (g && e.target.closest('[data-sub]')) {
     return openSub(g.dataset.id);
   } else if (g && e.target.closest('[data-anc]')) {

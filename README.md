@@ -25,7 +25,7 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 | Seleziona | clic sul blocco · Shift/Ctrl + clic aggiunge o toglie · trascina sullo sfondo per il riquadro |
 | Scrivi | doppio clic sul blocco, oppure F2 · Invio conferma, Esc annulla |
 | Ramo figlio / fratello | Tab / Invio |
-| Sposta blocchi e note | trascinali |
+| Sposta blocchi e note | trascinali: si sposta solo ciò che è selezionato, i figli restano dove sono |
 | Ridimensiona | quadratino sul lato esterno del blocco selezionato |
 | Collega | trascina da un'**uscita** (pallino grigio scuro) a un **ingresso** (pallino bianco), o al contrario; rilasciare sul blocco vale come il suo pallino |
 | Stacca | trascina l'ingresso nel vuoto, oppure tasto destro → Stacca |
@@ -35,7 +35,8 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 | Duplica | tasto destro → Duplica · Ctrl+D · Alt + trascina (sposti la copia) |
 | Copia / incolla | Ctrl+C / Ctrl+V (dentro il blocco selezionato, altrimenti libero dove c'è il mouse) |
 | Opzioni | tasto destro: sul blocco (colore, stile testo/bordo/opacità, struttura interna, stacca, elimina), sul collegamento (nota, linea continua/tratteggiata), sulla tela (aggiungi blocco, aggiungi nota) |
-| Struttura interna | tasto destro → Crea/Apri · passa sull'icona a griglia per l'anteprima, clic per entrare · Esc o il percorso in alto per tornare |
+| Struttura interna | tasto destro → Crea/Apri · i blocchi che ne hanno una sembrano una pila, con l'icona a griglia · passa sull'icona per l'anteprima, clic per entrare · Esc o il percorso in alto per tornare |
+| Schema sulla tela | tasto destro → Mostra anteprima struttura interna: lo schema resta sotto il blocco (anche nelle esportazioni); clic per entrare |
 | Sposta la vista | rotellina, Spazio + trascina, tasto centrale |
 | Zoom | Ctrl/⌘ + rotellina |
 | Annulla | Ctrl/⌘ + Z |
