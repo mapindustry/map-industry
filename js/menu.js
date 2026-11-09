@@ -30,6 +30,7 @@ function nodeMenuHtml() {
     let inner = 0; if (one.sub) walkAll(one.sub, () => inner++);
     h += item('sub', one.sub ? `Apri struttura interna${inner > 1 ? ` (${inner - 1} blocchi)` : ''}` : 'Crea struttura interna') +
       item('edit', 'Rinomina') + item('child', 'Aggiungi ramo figlio');
+    if (one !== t) h += item('flip', one.flip ? 'Ingresso a sinistra, uscita a destra' : 'Ingresso a destra, uscita a sinistra');
     if (findM(t, one.id).p) h += item('detach', 'Stacca dal collegamento');
   }
   h += item('dup', `Duplica${nodes.length > 1 ? ` ${nodes.length} blocchi` : ''} <span>Ctrl+D · Alt + trascina</span>`) + item('copy', 'Copia <span>Ctrl+C</span>');
@@ -104,6 +105,7 @@ menuEl.addEventListener('click', e => {
   else if (a === 'edit') startEdit(id, true);
   else if (a === 'child') addChild(id);
   else if (a === 'detach') detach(id);
+  else if (a === 'flip') toggleFlip(id);
   else if (a === 'autosize') autoSize();
   else if (a === 'dup') duplicateSelected();
   else if (a === 'copy') copySelected();

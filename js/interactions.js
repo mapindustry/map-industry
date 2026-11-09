@@ -1,7 +1,8 @@
 // Mouse/touch e tastiera
 /* ---------- puntatore ---------- */
 // Sfondo: trascina = riquadro di selezione · Spazio + trascina, tasto centrale o un dito su touch = sposta la vista
-// Pallino d'ingresso: trascina su un blocco = riattacca lì, nel vuoto = stacca · pallino d'uscita: trascina su un blocco = collegalo qui
+// Pallini: si trascina da un'uscita a un ingresso (o al contrario) per collegare; ingresso nel vuoto = stacca.
+// Le posizioni sono fisse: collegare o staccare non sposta nessun blocco.
 let P = null, spaceDown = false;
 const boxEl = $('#box');
 
@@ -19,20 +20,17 @@ cv.addEventListener('pointerdown', e => {
     return openSub(g.dataset.id);
   } else if (g && e.target.closest('[data-anc]')) {
     const id = g.dataset.id, a = e.target.closest('[data-anc]'), dot = a.querySelector('.adot'), l = S.L.get(id);
-    S.link = { kind: a.dataset.anc, id, x1: l.x + +dot.getAttribute('cx'), y1: l.y + +dot.getAttribute('cy'), x2: null, y2: null, over: null };
+    S.link = { kind: a.dataset.anc, side: a.dataset.side, id, x1: l.x + +dot.getAttribute('cx'), y1: l.y + +dot.getAttribute('cy'), x2: null, y2: null, over: null, overAnc: null };
     P = { ...base, mode: 'link', id }; cv.classList.add('linking');
   } else if (g && e.target.closest('[data-rsz]')) {
     const id = g.dataset.id, l = S.L.get(id);
-    P = { ...base, mode: 'resize', id, w0: l.w, h0: l.h, dir: l.dir };
+    P = { ...base, mode: 'resize', id, w0: l.w, h0: l.h };
   } else if (g || cn) {
     const id = g ? g.dataset.id : cn.dataset.note;
     if (e.shiftKey || e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
     const wasMulti = S.sels.has(id) && S.sels.size > 1;
     if (!S.sels.has(id)) selectOnly(id); else S.sel = id;
-    const t = curTree();
-    const movers = topSelected(t).map(n => ({ o: n, ox: n.dx || 0, oy: n.dy || 0, kx: 'dx', ky: 'dy' }))
-      .concat((t.notes || []).filter(nt => S.sels.has(nt.id)).map(nt => ({ o: nt, ox: nt.x, oy: nt.y, kx: 'x', ky: 'y' })));
-    P = { ...base, mode: 'drag', id, movers, wasMulti, alt: e.altKey };
+    P = { ...base, mode: 'drag', id, movers: dragMovers(curTree()), wasMulti, alt: e.altKey };
   } else {
     // sfondo o collegamento: trascinando si disegna il riquadro, con un clic su un collegamento lo si seleziona
     const edge = e.target.closest('[data-edge]');
@@ -63,20 +61,18 @@ cv.addEventListener('pointermove', e => {
   }
   if (P.mode === 'link') {
     const p = toSvg(e.clientX, e.clientY), el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]');
-    S.link.x2 = p.x; S.link.y2 = p.y; S.link.over = g && g.dataset.id !== S.link.id ? g.dataset.id : null;
+    const ok = g && g.dataset.id !== S.link.id, a = ok && el.closest('[data-anc]');
+    S.link.x2 = p.x; S.link.y2 = p.y; S.link.over = ok ? g.dataset.id : null;
+    S.link.overAnc = a ? { kind: a.dataset.anc, side: a.dataset.side } : null;
     return render();
   }
   if (P.mode === 'drag') {
-    P.movers.forEach(m => {
-      m.o[m.kx] = Math.round(m.ox + dx / v.k); m.o[m.ky] = Math.round(m.oy + dy / v.k);
-      if (m.kx === 'dx' && !m.o.dx && !m.o.dy) { delete m.o.dx; delete m.o.dy; }
-    });
+    P.movers.forEach(m => { m.o.x = Math.round(m.ox + dx / v.k); m.o.y = Math.round(m.oy + dy / v.k); });
     return render();
   }
-  // ridimensiona: il layout tiene fermo il lato verso il genitore e il centro verticale,
-  // quindi la crescita va raddoppiata dove il blocco si allarga su due lati (così la maniglia segue il puntatore)
-  const n = findM(curTree(), P.id).n, gx = P.dir === 0 ? 2 : P.dir < 0 ? -1 : 1;
-  n.w = clamp(Math.round(P.w0 + gx * dx / v.k), RMIN[0], RMAX[0]); n.h = clamp(Math.round(P.h0 + 2 * dy / v.k), RMIN[1], RMAX[1]);
+  // ridimensiona dall'angolo in basso a destra: l'angolo in alto a sinistra resta fermo
+  const n = findM(curTree(), P.id).n;
+  n.w = clamp(Math.round(P.w0 + dx / v.k), RMIN[0], RMAX[0]); n.h = clamp(Math.round(P.h0 + dy / v.k), RMIN[1], RMAX[1]);
   render();
 });
 
@@ -96,9 +92,17 @@ function endPointer(e) {
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
     if (!moved) { selectOnly(lk.id); return render(); }
-    if (lk.over) return lk.kind === 'in' ? reparent(lk.id, lk.over) : reparent(lk.over, lk.id);
-    if (lk.kind === 'in') return detach(lk.id, lk.x2, lk.y2);
-    render(); return toast('Rilascia sopra un blocco per collegarlo');
+    if (lk.over) {
+      const oa = lk.overAnc;
+      // un'uscita va su un ingresso e viceversa; sul corpo del blocco vale il pallino giusto
+      if (oa && oa.kind === lk.kind) { render(); return toast(lk.kind === 'out' ? 'Un’uscita va collegata a un ingresso' : 'Un ingresso va collegato a un’uscita'); }
+      if (lk.kind === 'out') return connect(lk.id, lk.over, lk.side);
+      const t = curTree(), pl = S.L.get(lk.over), cl = S.L.get(lk.id);
+      const side = oa ? oa.side : lk.over === t.id ? (cl.x + cl.w / 2 < pl.x + pl.w / 2 ? 'l' : 'r') : null;
+      return connect(lk.over, lk.id, side);
+    }
+    if (lk.kind === 'in') return detach(lk.id); // resta esattamente dov'è
+    render(); return toast('Rilascia sull’ingresso di un blocco per collegarlo');
   }
   if (!P.moved) {
     const had = S.sels.size, hadE = S.esel;

@@ -6,7 +6,7 @@
   /* blocchi: sfondo scuro, bordo un po' più chiaro */
   --node-bg:#1d2731; --node-border:#4d5b69; --node-border-strong:#7a8896; --on-node:#eef2f5;
   /* collegamenti neutri e pallini di ancoraggio */
-  --edge:#9aa5b0; --anc-in:#ffffff; --anc-out:#c3cbd3; --anc-ring:#1d2731;
+  --edge:#9aa5b0; --anc-in:#ffffff; --anc-in-ring:#1d2731; --anc-out:#5f6b77; --anc-out-ring:#d5dce3;
   /* note sulla tela */
   --note-bg:#fff7da; --note-bar:#d9a800; --note-ink:#4a3c00;
   /* colori a scelta per i blocchi */
@@ -18,7 +18,7 @@
   --ink:#e2e8ee; --muted:#93a1ae; --line:#26323c; --band:#1f2b34;
   --accent:#58b8d8; --on-accent:#08161c; --crit:#f07a62;
   --node-bg:#19222b; --node-border:#3f4d5a; --node-border-strong:#64737f; --on-node:#e6ecf1;
-  --edge:#7f8b96; --anc-in:#f4f7f9; --anc-out:#a9b3bc; --anc-ring:#0d1318;
+  --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; } }
@@ -27,7 +27,7 @@
   --ink:#e2e8ee; --muted:#93a1ae; --line:#26323c; --band:#1f2b34;
   --accent:#58b8d8; --on-accent:#08161c; --crit:#f07a62;
   --node-bg:#19222b; --node-border:#3f4d5a; --node-border-strong:#64737f; --on-node:#e6ecf1;
-  --edge:#7f8b96; --anc-in:#f4f7f9; --anc-out:#a9b3bc; --anc-ring:#0d1318;
+  --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; }
@@ -59,18 +59,16 @@ body.inner{background-color:var(--canvas-inner)} /* dentro una struttura interna
 .mn.editing text{visibility:hidden}
 .ring{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-dasharray:4 3}
 .rsz{fill:var(--accent);stroke:var(--canvas);stroke-width:1.5;cursor:nwse-resize}
-.rsz.left{cursor:nesw-resize}
 .subicon rect{fill:var(--on-node);opacity:.55}
 .subicon .shit{fill:transparent;opacity:1;cursor:zoom-in}
 .subicon:hover rect:not(.shit){opacity:1}
 
-/* pallini di ancoraggio: ingresso quasi bianco, uscita grigio chiaro */
+/* pallini di ancoraggio, sempre visibili: ingresso bianco, uscita grigio scuro con bordo chiaro */
 .anc .ahit{fill:transparent;cursor:crosshair}
-.anc .adot{stroke:var(--anc-ring);stroke-width:1;opacity:0;transition:opacity .12s}
-.anc.in .adot{fill:var(--anc-in)}
-.anc.out .adot{fill:var(--anc-out)}
-.mn:hover .adot,.mn.sel .adot,#cv.linking .adot{opacity:1}
-.anc:hover .adot{stroke:var(--accent);stroke-width:1.5}
+.anc .adot{stroke-width:1.5}
+.anc.in .adot{fill:var(--anc-in);stroke:var(--anc-in-ring)}
+.anc.out .adot{fill:var(--anc-out);stroke:var(--anc-out-ring)}
+.anc:hover .adot,.anc.hot .adot{stroke:var(--accent);stroke-width:2.5}
 .rubber{fill:none;stroke:var(--accent);stroke-width:1.8;stroke-dasharray:6 4;pointer-events:none}
 
 /* collegamenti: neutri, mai del colore del blocco */

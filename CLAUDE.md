@@ -22,15 +22,20 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - **Livello** = un albero: la radice (idea centrale) fa anche da contenitore per `free` (blocchi liberi, alberi
   senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text}`). `curTree()` restituisce il livello
   visibile; `setLevelRoot()` lo sostituisce quando la radice cambia (vedi `promoteRoot`).
-- Blocco: `{ id, text, children[], dx?, dy?, w?, h?, color?, fs?, bw?, op?, sub?, edge?, fx?, fy? }`
-  - `dx/dy` spostamento manuale (somma su tutto il sotto-albero) · `w/h` dimensione a mano
-  - `color` indice 0–5 dei token `--c0…--c5` · `fs` testo px · `bw` spessore bordo · `op` opacità del riquadro
-  - `sub` struttura interna (un altro livello) · `edge = { note?, dash?, nx?, ny? }` del collegamento che **entra**
-    nel blocco (`nx/ny` = spostamento della nota rispetto al centro della linea)
+- Blocco: `{ id, text, children[], x, y, w?, h?, flip?, color?, fs?, bw?, op?, sub?, edge? }`
+  - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco.
+    Trascinare un blocco sposta anche i suoi rami. Le posizioni mancanti le assegna `ensurePositions`:
+    blocchi nuovi con `placeNew` (vicino al genitore), mappe vecchie (dx/dy/fx/fy) una volta con `autoLayout`.
+  - pallini: ingresso a sinistra e uscita a destra (`flip` li scambia); l'idea centrale ha ingresso in alto e
+    uscite sui due lati. La linea va sempre dall'uscita del genitore all'ingresso del figlio (`edgeGeom`), senza
+    cambiare lato da sola.
+  - `w/h` dimensione a mano · `color` indice 0–5 dei token `--c0…--c5` · `fs` testo px · `bw` bordo · `op` opacità
+  - `sub` struttura interna · `edge = { note?, dash?, nx?, ny?, ps? }` del collegamento che **entra** nel blocco
+    (`ps` = uscita dell'idea centrale usata, 'l'/'r'; `nx/ny` = spostamento della nota)
 - Selezione di un collegamento: `S.esel` = id del blocco in cui entra (`selectEdge`). Eliminare un collegamento =
-  `detach` del blocco (resta libero). Appunti: `S.clip` (copie senza id validi: `cloneFresh` assegna id nuovi a ogni incolla).
-- Collegamenti: ogni blocco ha un solo ingresso (struttura ad albero). `reparent` sposta, vieta i cicli;
-  l'idea centrale non ha limiti speciali (può andare sotto un blocco libero, o essere eliminata se ne resta un altro).
+  `detach` del blocco (resta libero, stessa posizione). Appunti: `S.clip` (`cloneFresh` assegna id nuovi a ogni incolla).
+- Collegamenti: ogni blocco ha un solo ingresso (struttura ad albero). `connect(parent, child, ps)` sostituisce il
+  collegamento, vieta i cicli; l'idea centrale può andare sotto un blocco libero (`promoteRoot`) o essere eliminata.
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.
 - Ogni modifica passa da `mutate(fn)` (snapshot per undo → modifica del livello visibile → salva → `render()`).
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;
@@ -41,8 +46,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Colori solo tramite token CSS in `:root` di `css/styles.css`, con varianti per tema scuro
   (`prefers-color-scheme` e `[data-theme]`). Niente colori letterali nei componenti (eccezione: i file d'icona).
 - Blocchi: sfondo scuro con bordo un po' più chiaro in entrambi i temi; il colore scelto tinge sfondo e bordo.
-- Collegamenti sempre neutri (`--edge`), mai del colore del blocco. Pallini: ingresso `--anc-in` (quasi bianco),
-  uscita `--anc-out` (grigio chiaro), piccoli, con area di presa più grande.
+- Collegamenti sempre neutri (`--edge`), mai del colore del blocco. Pallini sempre visibili: ingresso `--anc-in`
+  (bianco), uscita `--anc-out` (grigio scuro con bordo chiaro), area di presa più grande del pallino.
 - Dentro una struttura interna lo sfondo usa `--canvas-inner`. Font: Instrument Sans. Logo: cerchi collegati.
 
 ## Verifica

@@ -27,8 +27,9 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 | Ramo figlio / fratello | Tab / Invio |
 | Sposta blocchi e note | trascinali |
 | Ridimensiona | quadratino sul lato esterno del blocco selezionato |
-| Collega diversamente | pallino **bianco** (ingresso) su un altro blocco = riattacca lì · nel vuoto = stacca |
-| | pallino **grigio** (uscita) su un altro blocco = quel blocco si collega qui |
+| Collega | trascina da un'**uscita** (pallino grigio scuro) a un **ingresso** (pallino bianco), o al contrario; rilasciare sul blocco vale come il suo pallino |
+| Stacca | trascina l'ingresso nel vuoto, oppure tasto destro → Stacca |
+| Lato di ingresso/uscita | tasto destro → Ingresso a destra/sinistra (l'idea centrale ha l'ingresso in alto e due uscite) |
 | Nota su un collegamento | doppio clic sul collegamento · trascina la nota per spostarla |
 | Elimina un collegamento | clic sul collegamento + Canc, oppure tasto destro → Elimina collegamento (il blocco resta, libero) |
 | Duplica | tasto destro → Duplica · Ctrl+D · Alt + trascina (sposti la copia) |
@@ -39,7 +40,10 @@ Per spostare un progetto: **Progetti → Salva come file .json**, poi **Progetti
 | Zoom | Ctrl/⌘ + rotellina |
 | Annulla | Ctrl/⌘ + Z |
 
-Ogni blocco ha un solo ingresso: ricollegarlo lo sposta. Non si può collegare un blocco sotto uno dei suoi rami.
+I blocchi restano dove li metti: collegare, staccare o ricollegare cambia solo la linea, che resta agganciata
+ai pallini scelti anche se giri un blocco attorno a un altro. La disposizione automatica vale solo per i blocchi
+nuovi (Tab, Invio, incolla) e per convertire una volta le mappe vecchie.
+Ogni blocco ha un solo ingresso: ricollegarlo sostituisce il collegamento. Non si può collegare un blocco sotto uno dei suoi rami.
 Anche l'idea centrale si può collegare sotto un altro blocco o eliminare, se sulla tela resta un altro blocco.
 
 ## Struttura
