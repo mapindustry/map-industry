@@ -26,7 +26,9 @@ cv.addEventListener('pointerdown', e => {
     const k = e.target.closest('[data-fold]').dataset.fold; // etichetta "+N": riapre i rami compressi (tutti o di un pallino)
     hidePreview(); return toggleFold(g.dataset.id, k === 'all' ? null : k);
   } else if (g && e.target.closest('[data-anc]')) {
-    const id = g.dataset.id, a = e.target.closest('[data-anc]'), l = S.L.get(id), kind = a.dataset.anc, idx = +a.dataset.idx;
+    const id = g.dataset.id, a = e.target.closest('[data-anc]'), l = S.L.get(id);
+    const hit = pinAt(findM(curTree(), id).n, l, toSvg(e.clientX, e.clientY)) || { kind: a.dataset.anc, idx: +a.dataset.idx };
+    const { kind, idx } = hit;
     const [px, py] = pinXY(l, pinsOf(findM(curTree(), id).n)[PK[kind]][idx]);
     S.link = { kind, idx, id, x1: l.x + px, y1: l.y + py, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
     P = { ...base, mode: 'link', id }; cv.classList.add('linking');
@@ -80,7 +82,10 @@ cv.addEventListener('pointermove', e => {
       lk.pinMove = null; render(); // il disegno va aggiornato prima di cercare cosa c'è sotto il puntatore
       const el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]');
       const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
-      lk.over = ok ? g.dataset.id : null; lk.overAnc = a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null;
+      lk.over = ok ? g.dataset.id : null;
+      // sul pallino più vicino al puntatore (preferendo quello compatibile), non su quello disegnato sopra
+      lk.overAnc = ok ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out' }[lk.kind])
+        || (a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null) : null;
     }
     return render();
   }

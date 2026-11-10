@@ -222,6 +222,18 @@ const lineOf = e => (e && e.line) || (e && e.dash ? 'dash' : isStr(e) ? 'dot' : 
 // spessore: scelto sul collegamento (lw) o di serie (puntini 2.4, dall'idea primaria 2.2, altrimenti 1.5)
 const lwOf = (e, depth) => (e && e.lw) || (lineOf(e) === 'dot' ? 2.4 : depth === 0 ? 2.2 : 1.5);
 function linkWidth(key) { const t = curTree(), L = allLinks(t).find(x => x.key === key); return L ? lwOf(L.e, (S.L.get(L.from.id) || {}).depth) : 1.5; }
+// pallino sotto il punto p (coordinate della tela): le aree di presa dei pallini vicini si sovrappongono, quindi
+// vale il più vicino, non quello disegnato sopra; `want` = tipo preferito quando ce ne sono più nel raggio
+function pinAt(n, l, p, want) {
+  const P = pinsOf(n), r = n.hub ? 6 : 10; let best = null;
+  [['in', P.i], ['out', P.o], ['str', P.s]].forEach(([kind, list]) => list.forEach((q, idx) => {
+    const [x, y] = pinXY(l, q), d = Math.hypot(l.x + x - p.x, l.y + y - p.y);
+    if (d > r) return;
+    const score = d - (want && kind === want ? r : 0);
+    if (!best || score < best.score) best = { kind, idx, score };
+  }));
+  return best && { kind: best.kind, idx: best.idx };
+}
 // lato del blocco rivolto verso il punto (x, y), a metà
 function facePin(l, x, y) {
   const dx = (x - (l.x + l.w / 2)) / l.w, dy = (y - (l.y + l.h / 2)) / l.h;
