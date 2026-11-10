@@ -10,7 +10,7 @@ const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLow
 function findHits(tree) {
   if (!FIND || !FIND.q) return [];
   const out = [], q = FIND.q;
-  walkAll(tree, n => { if (!n.hub && (norm(n.text).includes(q) || norm(n.tag).includes(q))) out.push({ id: n.id, x: n.x || 0, y: n.y || 0 }); });
+  walkAll(tree, n => { if (!n.hub && (norm(n.text).includes(q) || norm(n.tag).includes(q) || (n.type === 'table' && norm(tableRows(n).flat().join(' ')).includes(q)))) out.push({ id: n.id, x: n.x || 0, y: n.y || 0 }); });
   (tree.notes || []).forEach(nt => { if (norm(nt.text).includes(q)) out.push({ id: nt.id, x: nt.x, y: nt.y, note: true }); });
   return out.sort((a, b) => a.y - b.y || a.x - b.x);
 }

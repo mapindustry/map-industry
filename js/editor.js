@@ -1,6 +1,6 @@
 // Modifica del testo sul posto (textarea sovrapposta): blocchi, etichette, note dei collegamenti, note della tela
 const ed = $('#ed');
-let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle', id, orig }
+let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle' | 'cell', id, orig }
 
 function editorBox() {
   const v = view(), k = v.k, sx = x => v.x + x * k, sy = y => v.y + y * k, id = editing.id;
@@ -18,6 +18,7 @@ function editorBox() {
     return { x: sx(m.x) - 90 * k, y: sy(m.y) - 12 * k, w: 180 * k, h: 24 * k, font: NOTE_FONT, fs: 11.5, lh: 14, minW: 180 };
   }
   if (editing.kind === 'legrow' || editing.kind === 'legtitle') return legendEditorBox();
+  if (editing.kind === 'cell') return cellEditorBox(sx, sy, k);
   if (editing.kind === 'group') {
     const g = findGroup(curTree(), id); if (!g) return null;
     const fs = gfsOf(g), hd = gHead(g);
@@ -49,7 +50,10 @@ function beginEdit(kind, id, text, selectAll) {
     const g = vp.querySelector(`.mn[data-id="${id}"]`);
     if (g) { g.classList.add('editing'); const box = g.querySelector('.box'); if (box) ed.style.background = getComputedStyle(box).fill; }
   }
-  ed.className = kind; ed.value = text; ed.hidden = false; placeEditor();
+  // elenchi: testo allineato a sinistra e Invio = nuova voce (Ctrl+Invio o un clic fuori per finire)
+  const lst = kind === 'node' && isList((findM(curTree(), id) || {}).n);
+  if (editing) editing.list = lst;
+  ed.className = kind + (lst ? ' list' : ''); ed.value = text; ed.hidden = false; placeEditor();
   ed.focus(); if (selectAll) ed.select(); else ed.setSelectionRange(ed.value.length, ed.value.length);
 }
 function startEdit(id, selectAll) {
@@ -88,6 +92,7 @@ function endEdit(commit) {
   if (commit && v !== orig) {
     if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
     else if (kind === 'legrow' || kind === 'legtitle') commitLegendEdit(kind, id, v);
+    else if (kind === 'cell') commitCell(id, v);
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
     else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v; if (v) g.w = Math.max(g.w, Math.ceil(tw(v, gFont(g))) + 28); save(); } } // titolo vuoto = gruppo senza nome; il riquadro si allarga per il titolo
     else if (kind === 'note') {
@@ -102,7 +107,8 @@ function endEdit(commit) {
         f.n.text = v;
         if (w0 !== null) f.n.x = Math.round(f.n.x - (sizeMap(t).get(id).w - w0));
         save();
-      } else if (f) toast('Testo vuoto: il blocco resta com’era');
+      } else if (f && f.n.type === 'table') { snapshot(); f.n.text = ''; save(); } // tabella senza titolo
+      else if (f) toast('Testo vuoto: il blocco resta com’era');
     }
   }
   render();
@@ -111,11 +117,13 @@ ed.addEventListener('input', placeEditor);
 ed.addEventListener('keydown', e => {
   e.stopPropagation();
   const multi = editing && (editing.kind === 'node' || editing.kind === 'note'); // solo lì Maiusc+Invio va a capo
+  if (e.key === 'Enter' && editing && editing.list && !(e.ctrlKey || e.metaKey)) return; // nuova voce dell'elenco
   if (e.key === 'Enter' && !(e.shiftKey && multi)) { e.preventDefault(); endEdit(true); }
   else if (e.key === 'Escape') { e.preventDefault(); endEdit(false); }
   else if (e.key === 'Tab') {
     e.preventDefault(); const { kind, id } = editing; endEdit(true);
     if (kind === 'node') addChild(id);
+    else if (kind === 'cell') nextCell(id); // cella successiva
   }
 });
 ed.addEventListener('blur', () => endEdit(true));

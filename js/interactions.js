@@ -20,6 +20,8 @@ cv.addEventListener('pointerdown', e => {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
     const id = e.target.closest('.enote').dataset.edge, ed = edgeData(curTree(), id) || {};
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
+  } else if (g && e.target.closest('[data-chk]')) {
+    return toggleCheck(g.dataset.id, +e.target.closest('[data-chk]').dataset.chk); // lista di controllo: spunta
   } else if (gr && e.target.closest('[data-gfold]')) {
     hidePreview(); return toggleGroupFold(gr.dataset.grp); // "+N" del gruppo compresso: si espande
   } else if (g && e.target.closest('[data-fold]')) {
@@ -200,6 +202,7 @@ cv.addEventListener('dblclick', e => {
   const cn = el.closest('[data-note]'); if (cn) return startNoteEdit(cn.dataset.note);
   const g = el.closest('.mn[data-id]');
   if (g && el.closest('[data-tag]')) return startTagEdit(g.dataset.id);
+  const cell = g && el.closest('[data-cell]'); if (cell) { const [r, c] = cell.dataset.cell.split(':').map(Number); return startCellEdit(g.dataset.id, r, c); }
   if (g && !el.closest('[data-anc]')) return startEdit(g.dataset.id, true);
   const gr = el.closest('[data-grp]'); if (gr && !el.closest('[data-rsz]')) startGroupEdit(gr.dataset.grp);
 });

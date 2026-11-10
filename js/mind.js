@@ -1,5 +1,5 @@
 // Mappa mentale: posizioni, pallini, collegamenti, disegno e operazioni sui blocchi
-// Blocco: { id, text, children[], x, y, w?, h?, primary?, flip?, pin?, color?, fs?, bw?, op?, fold?, tag?, edge? }
+// Blocco: { id, text, type? (vedi js/blocks.js), children[], x, y, w?, h?, primary?, flip?, pin?, color?, fs?, bw?, op?, fold?, tag?, edge? }
 //   x/y = angolo in alto a sinistra, FISSO: collegare, staccare o ricollegare non sposta nessun blocco
 //   primary = "idea primaria" (attributo scelto dall'utente, anche su più blocchi): stile marcato,
 //             di serie ingresso in alto e due uscite laterali
@@ -57,6 +57,9 @@ function sizeMap(tree) {
     const padX = lv === 0 ? 36 : 24, padY = lv === 0 ? 22 : 14;
     const maxW = n.w ? Math.max(16, n.w - padX) : lv === 0 ? 220 : 200;
     const maxL = n.h ? Math.max(1, Math.floor((n.h - padY + 4) / lh)) : 4;
+    // elenchi e tabelle hanno misure proprie (js/blocks.js)
+    if (n.type === 'table') { M.set(n.id, { ...tableSize(n, lv, fs, font, lh), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
+    if (isList(n)) { M.set(n.id, { ...listSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
     const lines = wrap(n.text || 'Senza titolo', maxW, font, maxL);
     const w = n.w || Math.max(Math.max(...lines.map(l => tw(l, font))) + padX, lv === 0 ? 120 : 48);
     M.set(n.id, { lines, lh, w, h: n.h || lines.length * lh + padY, depth: lv });
@@ -352,7 +355,8 @@ function treeMarkup(tree, L, NL, live) {
     const sel = live && S.sels.has(n.id), dd = Math.min(l.depth, 2), pad = (l.h - l.lines.length * l.lh) / 2;
     const fsSt = n.fs || n.fw || n.it ? ` style="${n.fs ? `font-size:${n.fs}px;` : ''}${n.fw ? `font-weight:${n.fw};` : ''}${n.it ? 'font-style:italic' : ''}"` : '';
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
-    const txt = l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
+    const txt = n.type === 'table' && l.tb ? tableMarkup(n, l, live, fsSt) : isList(n) && l.rows ? listMarkup(n, l, live, fsSt)
+      : l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
     // ramo compresso: etichetta "+N" sull'angolo in alto a sinistra; con un clic si riapre, passandoci sopra l'anteprima
     const folded = n.fold && n.children.length;
     const badge = (key, bx, by, k, title) => `<g class="fold"${live ? ` data-fold="${key}"` : ''}>${live ? `<title>${title}</title>` : ''}` +
@@ -405,7 +409,7 @@ function treeMarkup(tree, L, NL, live) {
       // blocco con rami compressi: un secondo riquadro sfalsato dietro, come una pila
       (folded ? `<rect class="stack" x="5" y="5" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"/>` : '') +
       `<rect class="box" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"${boxSt ? ` style="${boxSt}"` : ''}/>${txt}` +
-      (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
+      (sel && single && n.type !== 'table' ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
       anchors + fold + `</g>`;
   });
   // note sulla tela: appunti, non blocchi
@@ -781,9 +785,9 @@ function dragMovers(t) {
   const addB = d => { add(d); d.children.forEach(c => { if (isFoldedChild(d, c)) walk(c, add); }); };
   walkAll(t, d => { if (S.sels.has(d.id)) addB(d); });
   (t.notes || []).filter(nt => S.sels.has(nt.id)).forEach(add);
-  (t.groups || []).filter(g => S.sels.has(g.id)).forEach(g => {
-    add(g); groupItems(t, g).forEach(i => i.kind === 'node' ? addB(i.o) : add(i.o));
-  });
+  // un gruppo porta con sé il contenuto; un gruppo compresso al suo interno porta anche ciò che ha nascosto
+  const addG = g => { if (seen.has(g)) return; add(g); groupItems(t, g).forEach(i => i.kind === 'node' ? addB(i.o) : i.kind === 'group' ? addG(i.o) : add(i.o)); };
+  (t.groups || []).filter(g => S.sels.has(g.id)).forEach(addG);
   return out;
 }
 
@@ -881,7 +885,8 @@ function groupItems(t, g) {
   const inG = (id, l) => !!l && (hid ? hid.has(id) || within(l, box) : within(l, g)), out = [];
   walkAll(t, d => { const l = LF.get(d.id); if (inG(d.id, l)) out.push({ o: d, id: d.id, kind: 'node', l }); });
   (t.notes || []).forEach(nt => { const l = NF.get(nt.id); if (inG(nt.id, l)) out.push({ o: nt, id: nt.id, kind: 'note', l }); });
-  (t.groups || []).forEach(h => { if (h !== g && inG(h.id, h)) out.push({ o: h, id: h.id, kind: 'group', l: h }); });
+  // un gruppo interno conta per quello che si vede: compresso, basta che ci stia la sua barra
+  (t.groups || []).forEach(h => { const r = gRect(h); if (h !== g && inG(h.id, r)) out.push({ o: h, id: h.id, kind: 'group', l: r }); });
   return out;
 }
 // oggetti che non si possono spostare: i gruppi bloccati e il loro contenuto

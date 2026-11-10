@@ -58,7 +58,9 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   membri: contiene ciò che vi sta tutto dentro (`within`), e `dragMovers` lo porta con sé. Si prendono dal titolo o
   dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro. Il titolo può essere vuoto
   (gruppo senza nome; `gTitle`: senza il campo `text` vale "Gruppo").
-  - contenuto: `groupItems(t, g)` (usa `S.L.full`/`S.NL.full`, cioè anche gli elementi nascosti dai gruppi compressi);
+  - contenuto: `groupItems(t, g)` (usa `S.L.full`/`S.NL.full`, cioè anche gli elementi nascosti dai gruppi compressi; un
+    gruppo interno conta per il riquadro visibile, `gRect`: compresso basta la barra). `dragMovers` porta con un gruppo
+    anche ciò che nascondono i gruppi compressi al suo interno;
   - stile (`groupMenuHtml`, `setGroupStyle`, valori di serie in `GDEF` tolti dai dati): `color`, `line` (`GLINE`), `bw`,
     `fo` (opacità dello sfondo), `tfs`/`tfw`/`ti` (titolo, `ti` = corsivo; la barra `gHead` cresce con lui), `ta: 'c'`; copia/incolla stile;
   - Adatta al contenuto (`fitGroup`), Seleziona il contenuto, Blocca (`lock`: `lockedSet` ferma trascinamenti e Disponi,
@@ -100,6 +102,13 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     è senza genitore, altrimenti un collegamento aggiuntivo; vieta sé stesso, doppioni e doppio senso.
   - `hub` = **svincolo**: blocco-punto senza testo (`HUB` px), tappa di un collegamento (menu del collegamento →
     Inserisci uno svincolo, `insertOnLink(key, true)`); pallini visibili solo al passaggio o con la selezione.
+  - `type` (`js/blocks.js`, Tipo nel menu del blocco): di serie testo; `ul`/`ol` elenchi, `todo` lista di controllo
+    (`done` = testi delle voci spuntate, clic sulla casella `data-chk`), `table` (`table.rows`, prima riga = intestazione,
+    `text` = titolo, anche vuoto). Misure in `listSize`/`tableSize` (chiamate da `sizeMap`), disegno in
+    `listMarkup`/`tableMarkup`. Elenchi: ogni riga del testo è una voce, mentre si scrive Invio = nuova voce (Ctrl+Invio
+    o clic fuori per finire). Tabella: doppio clic su una cella (editor `cell`, id `blocco|riga|colonna`), Tab = cella
+    successiva (dall'ultima aggiunge una riga); Righe/Colonne nel menu, tasto destro su una cella = elimina riga/colonna;
+    niente maniglia di ridimensionamento. Cerca trova anche il testo delle celle.
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.

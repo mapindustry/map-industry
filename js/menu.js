@@ -28,6 +28,14 @@ const icoLine = da => `<svg viewBox="0 0 28 14" width="28" height="14" aria-hidd
 // in cima alla sezione Stile: copia lo stile, e incollalo se quello copiato è dello stesso tipo (blocco o collegamento)
 const styleItems = (kind, n) => item('stcopy', 'Copia stile') +
   (S.style && S.style.kind === kind ? item('stpaste', n > 1 ? `Incolla stile su ${n} blocchi` : 'Incolla stile') : '');
+// tipi di blocco: [chiave, nome, disegno, titolo del menu]
+const BTYPES = [
+  ['text', 'Testo', ico('M5 4H23M5 7.5H23M5 11H16'), 'Blocco'],
+  ['ul', 'Elenco puntato', ico('M5.5 4h0.1M5.5 10h0.1M10 4H23M10 10H23'), 'Elenco puntato'],
+  ['ol', 'Elenco numerato', '<span class="sgt">1.</span>', 'Elenco numerato'],
+  ['todo', 'Lista di controllo', ico('M4 3.5h6v6H4zM5.6 6.6l1.3 1.3 2-2.6M13 6.5H24'), 'Lista di controllo'],
+  ['table', 'Tabella', ico('M4 2.5H24V11.5H4ZM4 5.5H24M11 2.5V11.5M17.5 2.5V11.5'), 'Tabella']];
+let MENU_CELL = null; // cella della tabella su cui si è aperto il menu: [riga, colonna]
 const plural = (n, one, many) => n === 1 ? one : `${n} ${many}`;
 // corsivo del testo (blocchi) o del titolo (gruppi): Normale | Corsivo, il menu resta aperto
 const italicSeg = (p, on) => seg('Stile', [[p + '-off', 'Normale', !on, '<span class="sgt">Aa</span>'], [p + '-on', 'Corsivo', on, '<span class="sgt it">Aa</span>']]);
@@ -68,7 +76,15 @@ function nodeMenuHtml() {
   const one = nodes.length === 1 ? nodes[0] : null, prim = findM(t, S.sel) ? findM(t, S.sel).n : nodes[0], pl = S.L.get(prim.id);
   if (one && one.hub) return hubMenuHtml(one, t);
   const cur = one ? (hasColor(one) ? String(one.color) : '') : null;
-  let h = title(one ? 'Blocco' : `${nodes.length} blocchi`) + swatches(cur) + SEP;
+  const ty = one ? (one.type || 'text') : null;
+  let h = title(one ? (BTYPES.find(b => b[0] === ty) || BTYPES[0])[3] : `${nodes.length} blocchi`) + swatches(cur) +
+    seg('Tipo', BTYPES.map(([k, l, ic]) => ['bt-' + k, l, ty === k, ic])) + SEP;
+  if (one && one.type === 'table') {
+    const rows = tableRows(one), nc = Math.max(...rows.map(r => r.length)), cl = MENU_CELL;
+    h += (cl ? (rows.length > 1 ? item('trdel', 'Elimina questa riga') : '') + (nc > 1 ? item('tcdel', 'Elimina questa colonna') : '') : '') +
+      stepper('Righe', 'trow', rows.length, 'vtrow', 'Togli l’ultima riga', 'Aggiungi una riga') +
+      stepper('Colonne', 'tcol', nc, 'vtcol', 'Togli l’ultima colonna', 'Aggiungi una colonna') + SEP;
+  }
   if (one) {
     const nd = countDesc(one);
     h += item('edit', 'Rinomina', '', 'F2') +
@@ -187,6 +203,7 @@ cv.addEventListener('contextmenu', e => {
   }
   if (an) { selectOnly(g.dataset.id); render(); return showPinMenu(e.clientX, e.clientY, g.dataset.id, an.dataset.anc, +an.dataset.idx); }
   if (g) {
+    const cl = el.closest('[data-cell]'); MENU_CELL = cl ? cl.dataset.cell.split(':').map(Number) : null;
     if (!S.sels.has(g.dataset.id)) selectOnly(g.dataset.id); else S.sel = g.dataset.id;
     render(); return showMenu(e.clientX, e.clientY, nodeMenuHtml(), { kind: 'node' });
   }
@@ -238,6 +255,10 @@ menuEl.addEventListener('click', e => {
   const st = e.target.closest('[data-st]');
   if (st) { // il menu resta aperto mentre si regola lo stile
     const d = +st.dataset.d;
+    if (st.dataset.st === 'trow' || st.dataset.st === 'tcol') { // righe e colonne della tabella
+      const r = st.dataset.st === 'trow'; resizeTable(S.sel, r ? d : 0, r ? 0 : d);
+      const rows = tableRows(findM(curTree(), S.sel).n); $('#vtrow').textContent = rows.length; $('#vtcol').textContent = Math.max(...rows.map(x => x.length)); return;
+    }
     if (st.dataset.st === 'gbw' || st.dataset.st === 'gfs') { // gruppo: spessore del bordo (½ px) e dimensione del titolo
       const g = findGroup(curTree(), MENU.id), bw = st.dataset.st === 'gbw';
       const v = bw ? clamp(Math.round((gbwOf(g) + d * 0.5) * 10) / 10, 0.5, 6) : clamp(gfsOf(g) + d, 9, 36);
@@ -276,6 +297,10 @@ menuEl.addEventListener('click', e => {
     eachSelected(n => { if (a === 'it-on') n.it = true; else delete n.it; });
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     return;
+  }
+  if (a.startsWith('bt-')) { // tipo di blocco: il menu si ricostruisce (cambiano le voci della tabella)
+    setBlockType(a.slice(3)); const x = menuEl.style.left, y = menuEl.style.top;
+    menuEl.innerHTML = nodeMenuHtml(); menuEl.style.left = x; menuEl.style.top = y; return;
   }
   if (a.startsWith('lc-')) { // angolo della legenda: il menu resta aperto
     setLegendCorner(a.slice(3));
@@ -320,6 +345,7 @@ menuEl.addEventListener('click', e => {
   else if (a === 'group') groupSelected();
   else if (a === 'gedit') startGroupEdit(id);
   else if (a === 'ungroup') ungroup(id);
+  else if (a === 'trdel' || a === 'tcdel') deleteTableLine(S.sel, MENU_CELL[0], MENU_CELL[1], a === 'trdel' ? 'row' : 'col');
   else if (a === 'legadd') addToLegend();
   else if (a === 'lredit') startLegendEdit(M.row);
   else if (a === 'lrup' || a === 'lrdown') moveLegendRow(M.row, a === 'lrup' ? -1 : 1);

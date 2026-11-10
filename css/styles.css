@@ -149,6 +149,24 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .grp .glock{fill:none;stroke:var(--grp-title);stroke-width:1.4;stroke-linecap:round;pointer-events:all}
 .grp.editing .gtitle{visibility:hidden}
 
+/* tipi di blocco: elenchi (segno a sinistra, voci allineate) e tabelle (intestazione, griglia, celle) */
+.mn .litem{text-anchor:start}
+.mn .lmark{fill:var(--on-node);opacity:.7}
+.mn .lnum{opacity:.7}
+.mn .chk{cursor:pointer}
+.mn .chk rect{fill:transparent;stroke:var(--on-node);stroke-width:1.3;opacity:.75}
+.mn .chk.on rect{fill:var(--accent);stroke:var(--accent);opacity:1}
+.mn .chk path{fill:none;stroke:var(--on-accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mn text.done{opacity:.5;text-decoration:line-through}
+.mn .thead{fill:var(--on-node);opacity:.08}
+.mn .tgrid{fill:none;stroke:var(--node-border);stroke-width:1}
+.mn.cc .tgrid{stroke:color-mix(in srgb,var(--cc) 60%,var(--node-bg))}
+.mn .tcell{fill:transparent}
+.mn text.tct{font-weight:400}
+.mn text.tct.th{font-weight:600}
+#ed.list{text-align:left}
+#ed.cell{background:var(--node-bg);color:var(--on-node);text-align:left;padding-left:6px;border-radius:3px}
+
 /* legenda: riquadro chiaro sulla tela, una riga per stile (campione + descrizione) */
 .leg{cursor:move}
 .leg .lbox{fill:var(--surface);stroke:var(--line);stroke-width:1}
