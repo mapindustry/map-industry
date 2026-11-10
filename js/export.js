@@ -18,7 +18,8 @@ function inlineStyles(src, dst) {
   const a = src.querySelectorAll('*'), b = dst.querySelectorAll('*');
   for (let i = 0; i < a.length; i++) {
     const s = a[i], d = b[i], tag = s.tagName.toLowerCase();
-    if (tag === 'title' || s.classList.contains('shit')) { d.remove(); continue; }
+    // il bagliore delle idee primarie vive di una sfocatura CSS: fuori dall'app sarebbe una cornice piena
+    if (tag === 'title' || s.classList.contains('shit') || s.classList.contains('glow')) { d.remove(); continue; }
     if (XSHAPES.has(tag)) {
       const cs = getComputedStyle(s), set = (p, v) => d.style.setProperty(p, v);
       set('fill', toRgb(cs.fill)); set('stroke', toRgb(cs.stroke));

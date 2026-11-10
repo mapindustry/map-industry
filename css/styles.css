@@ -6,7 +6,7 @@
   /* blocchi: sfondo scuro, bordo un po' più chiaro */
   --node-bg:#1d2731; --node-border:#4d5b69; --node-border-strong:#7a8896; --on-node:#eef2f5;
   /* collegamenti neutri e pallini di ancoraggio */
-  --edge:#9aa5b0; --anc-in:#ffffff; --anc-in-ring:#1d2731; --anc-out:#5f6b77; --anc-out-ring:#d5dce3;
+  --edge:#7d8994; --anc-in:#ffffff; --anc-in-ring:#1d2731; --anc-out:#5f6b77; --anc-out-ring:#d5dce3;
   /* pallino di struttura (rombo) */
   --anc-str:#2b9a8f; --anc-str-ring:#ffffff;
   /* bagliore dietro le idee primarie */
@@ -25,7 +25,7 @@
   --canvas:#11181e; --canvas-inner:#16202a; --grid:#202b34; --surface:#151d24;
   --ink:#e2e8ee; --muted:#93a1ae; --line:#26323c; --band:#1f2b34;
   --accent:#58b8d8; --on-accent:#08161c; --crit:#f07a62;
-  --node-bg:#19222b; --node-border:#3f4d5a; --node-border-strong:#64737f; --on-node:#e6ecf1;
+  --node-bg:#19222b; --node-border:#5c6a78; --node-border-strong:#7f8e9b; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --anc-str:#5cc8bb; --anc-str-ring:#0d1318;
   --glow:#58b8d8;
@@ -38,7 +38,7 @@
   --canvas:#11181e; --canvas-inner:#16202a; --grid:#202b34; --surface:#151d24;
   --ink:#e2e8ee; --muted:#93a1ae; --line:#26323c; --band:#1f2b34;
   --accent:#58b8d8; --on-accent:#08161c; --crit:#f07a62;
-  --node-bg:#19222b; --node-border:#3f4d5a; --node-border-strong:#64737f; --on-node:#e6ecf1;
+  --node-bg:#19222b; --node-border:#5c6a78; --node-border-strong:#7f8e9b; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --anc-str:#5cc8bb; --anc-str-ring:#0d1318;
   --glow:#58b8d8;
@@ -78,17 +78,26 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 /* idea primaria: alone sfocato dietro il blocco (del colore scelto, se c'è) */
 .mn .glow{fill:var(--glow);opacity:.55;filter:blur(9px);pointer-events:none}
 .mn.cc .glow{fill:var(--cc)}
+/* svincolo: punto neutro sulla linea, come i collegamenti */
+.mn.hub .hubhit{fill:transparent;cursor:move}
+.mn.hub .hubline{stroke-width:1.5px}
+.mn.hub .hubdot{fill:var(--edge);stroke:var(--canvas);stroke-width:2;pointer-events:none}
+.mn.hub:hover .hubdot,.mn.hub.drop .hubdot{fill:var(--accent)}
+/* sullo svincolo i pallini compaiono solo al passaggio o con la selezione: a riposo è un punto solo */
+.mn.hub .anc .adot{opacity:0}
+.mn.hub:hover .anc .adot,.mn.hub.sel .anc .adot,#cv.linking .mn.hub .anc .adot{opacity:1}
 .mn .stack{fill:var(--node-bg);stroke:var(--node-border-strong);stroke-width:1.2}
 .mn.cc .stack{fill:color-mix(in srgb,var(--cc) 14%,var(--node-bg));stroke:var(--cc)}
 /* ramo compresso: etichetta "+N" sull'angolo del blocco */
 /* etichetta del blocco: linguetta attaccata sopra il bordo, del colore del bordo (o tinta del colore scelto) */
 .tag rect{fill:var(--node-border)}
 .mn.cc .tag rect{fill:color-mix(in srgb,var(--cc) 60%,var(--node-bg))}
-.tag text{fill:var(--on-node);font:600 10.5px var(--f-body);letter-spacing:.02em}
-.mn.editing .tag text{visibility:visible}
+/* g.tag / g.fold: più specifici di .mn.d0 text, che altrimenti ingrandirebbe il testo oltre il riquadro */
+.mn g.tag text{fill:var(--on-node);font:600 10.5px var(--f-body)}
+.mn.editing g.tag text{visibility:visible}
 .fold{cursor:pointer}
 .fold rect{fill:var(--accent);stroke:var(--canvas);stroke-width:1.5}
-.fold text{fill:var(--on-accent);font:600 11px var(--f-body)}
+.mn g.fold text{fill:var(--on-accent);font:600 11px var(--f-body)}
 .fold:hover rect{stroke:var(--on-node)}
 
 /* pallini di ancoraggio, sempre visibili: ingresso bianco, uscita grigio scuro con bordo chiaro */
@@ -103,13 +112,12 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 
 /* collegamenti: neutri, mai del colore del blocco */
 .edge{fill:none;stroke:var(--edge);stroke-linecap:round;stroke-linejoin:round}
-.eg.dash .edge{stroke-dasharray:7 5}
-/* collegamento di struttura: puntini, il blocco d'arrivo è una parte, non un passo */
-.eg.str .edge{stroke-dasharray:1 5;stroke-width:2.4px}
+.eg.l-dash .edge{stroke-dasharray:7 5}
+.eg.l-dot .edge{stroke-dasharray:1 5}
 .eg.lifted .edge{opacity:.25}
 .ehit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
 .eg:hover .edge{stroke:var(--accent)}
-.eg.sel .edge{stroke:var(--accent);stroke-width:3px}
+.eg.sel .edge{stroke:var(--accent)} /* spessore: +1 px, in linea (treeMarkup) */
 .enote{cursor:move}
 .enote rect{fill:var(--enote-bg);stroke:var(--enote-border);stroke-width:1}
 .enote text{fill:var(--enote-ink);font-style:italic;font-size:11.5px;font-weight:500}
@@ -175,7 +183,7 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .menu button.it.on::after{content:"✓";position:absolute;right:16px;color:var(--accent)}
 .menu button.it{position:relative}
 .menu button.dng{color:var(--crit)}
-.menu button.armed{background:var(--crit);color:var(--surface)}
+.menu button.it.armed,.menu button.it.armed:hover,.menu button.it.armed:focus-visible{background:var(--crit);color:var(--surface)}
 .mnote{text-transform:none;letter-spacing:0;font-weight:400}
 .mhead{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:6px 10px 4px}
 .msep{height:1px;background:var(--line);margin:4px 2px}
@@ -185,7 +193,13 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .sw.on{outline:2px solid var(--ink)}
 .sw:focus-visible{outline:2px solid var(--accent)}
 .mrow{display:grid;grid-template-columns:62px auto 1fr auto;align-items:center;gap:6px;padding:3px 10px;font-size:13px}
-.mrow:has(input){grid-template-columns:62px 1fr auto}
+.mrow:has(input[type=range]){grid-template-columns:62px 1fr auto}
+.mrow.wide{grid-template-columns:62px 1fr}
+.mrow .numw{display:flex;align-items:center;justify-content:center;gap:3px;color:var(--muted)}
+.mrow .num,.mrow select{font:500 13px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;height:24px}
+.mrow .num{width:44px;text-align:center;padding:0 2px;font-variant-numeric:tabular-nums}
+.mrow select{padding:0 4px;width:100%}
+.mrow .num:focus,.mrow select:focus{outline:2px solid var(--accent);outline-offset:1px}
 .mrow .st{width:26px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font:600 14px var(--f-body);padding:0}
 .mrow .st:hover{background:var(--band)}
 .mrow .val{text-align:center;color:var(--muted);font-variant-numeric:tabular-nums;min-width:44px}
@@ -197,6 +211,6 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .preview svg{display:block}
 
 
-.hint{position:fixed;left:16px;right:16px;bottom:calc(14px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);pointer-events:none;opacity:.8}
+.hint{position:fixed;left:16px;right:16px;bottom:calc(14px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);pointer-events:none}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:8px;font-weight:500;z-index:40;max-width:calc(100% - 32px)}
 @media (max-width:640px){ .hint,.brand{display:none} #pName{width:auto;flex:1} }

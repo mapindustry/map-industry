@@ -10,7 +10,7 @@ function fit() {
   let b; try { b = vp.getBBox(); } catch (e) { return; }
   if (!b.width) return;
   const W = innerWidth, H = innerHeight - BAR_H, v = view(); // sotto la barra dei menu
-  v.k = clamp(Math.min((W - 80) / b.width, (H - 120) / b.height, 1.2), 0.25, 1.2);
+  v.k = clamp(Math.min((W - 80) / b.width, (H - 120) / b.height, 1.2), 0.2, 1.2);
   v.x = (W - b.width * v.k) / 2 - b.x * v.k; v.y = BAR_H + (H - b.height * v.k) / 2 - b.y * v.k; v.fresh = false;
   applyView();
 }

@@ -40,12 +40,17 @@ function beginEdit(kind, id, text, selectAll) {
   closeMenu(); hidePreview();
   editing = { kind, id, orig: text };
   render();
-  if (kind === 'node') { const g = vp.querySelector(`.mn[data-id="${id}"]`); if (g) g.classList.add('editing'); }
+  // l'editor di un blocco prende lo sfondo del blocco: il testo in più non si confonde con i blocchi vicini
+  ed.style.background = '';
+  if (kind === 'node') {
+    const g = vp.querySelector(`.mn[data-id="${id}"]`);
+    if (g) { g.classList.add('editing'); const box = g.querySelector('.box'); if (box) ed.style.background = getComputedStyle(box).fill; }
+  }
   ed.className = kind; ed.value = text; ed.hidden = false; placeEditor();
   ed.focus(); if (selectAll) ed.select(); else ed.setSelectionRange(ed.value.length, ed.value.length);
 }
 function startEdit(id, selectAll) {
-  const f = findM(curTree(), id); if (!f) return;
+  const f = findM(curTree(), id); if (!f || f.n.hub) return; // lo svincolo non ha testo
   selectOnly(id); beginEdit('node', id, f.n.text, selectAll);
 }
 function startEdgeNote(id) {
@@ -57,30 +62,43 @@ function startNoteEdit(id) {
   selectOnly(id); beginEdit('note', id, nt.text, true);
 }
 function startTagEdit(id) {
-  const f = findM(curTree(), id); if (!f) return;
+  const f = findM(curTree(), id); if (!f || f.n.hub) return;
   selectOnly(id); beginEdit('tag', id, f.n.tag || '', true);
 }
 function startGroupEdit(id) {
   const g = findGroup(curTree(), id); if (!g) return;
   selectOnly(id); beginEdit('group', id, g.text || '', true);
 }
+// elemento appena creato: con Esc sparisce (si annulla la creazione) e la selezione torna a `back`
+function markFresh(back) { if (editing) { editing.fresh = true; editing.back = back || null; } }
 function endEdit(commit) {
   if (!editing) return;
-  const { kind, id, orig } = editing; editing = null; ed.hidden = true;
-  const v = ed.value.replace(/\s+/g, ' ').trim(), t = curTree();
+  const { kind, id, orig, fresh, back } = editing; editing = null; ed.hidden = true;
+  // blocchi e note della tela tengono gli a capo (Maiusc+Invio); gli altri testi stanno su una riga
+  const multi = kind === 'node' || kind === 'note', one = s => s.replace(/\s+/g, ' ').trim();
+  const v = multi ? ed.value.split('\n').map(one).filter(Boolean).join('\n') : one(ed.value), t = curTree();
+  if (!commit && fresh) {
+    undo(); S.redo.pop();
+    if (back && findM(curTree(), back)) selectOnly(back);
+    return render();
+  }
   if (commit && v !== orig) {
     if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
-    else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v || 'Gruppo'; save(); } }
+    else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v || 'Gruppo'; g.w = Math.max(g.w, Math.ceil(tw(g.text, GFONT)) + 28); save(); } } // il riquadro si allarga per il titolo
     else if (kind === 'note') {
       const nt = findNote(t, id);
       if (nt) { snapshot(); if (v) nt.text = v; else { t.notes.splice(t.notes.indexOf(nt), 1); clearSel(); } save(); }
     } else {
       const f = findM(t, id);
       if (f && v) {
-        snapshot(); f.n.text = v;
+        snapshot();
+        // blocco con l'ingresso a destra (sta a sinistra del genitore): resta fermo il bordo destro, cresce verso l'esterno
+        const w0 = f.n.flip && !f.n.w && hasPos(f.n) ? sizeMap(t).get(id).w : null;
+        f.n.text = v;
+        if (w0 !== null) f.n.x = Math.round(f.n.x - (sizeMap(t).get(id).w - w0));
         save();
-      }
+      } else if (f) toast('Testo vuoto: il blocco resta com’era');
     }
   }
   render();
@@ -88,7 +106,8 @@ function endEdit(commit) {
 ed.addEventListener('input', placeEditor);
 ed.addEventListener('keydown', e => {
   e.stopPropagation();
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); endEdit(true); }
+  const multi = editing && (editing.kind === 'node' || editing.kind === 'note'); // solo lì Maiusc+Invio va a capo
+  if (e.key === 'Enter' && !(e.shiftKey && multi)) { e.preventDefault(); endEdit(true); }
   else if (e.key === 'Escape') { e.preventDefault(); endEdit(false); }
   else if (e.key === 'Tab') {
     e.preventDefault(); const { kind, id } = editing; endEdit(true);

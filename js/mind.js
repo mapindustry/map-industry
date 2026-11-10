@@ -8,7 +8,7 @@
 //         Ogni elenco può essere vuoto. Clic su un pallino: tipo, duplica, elimina (editPin)
 //   fold = rami compressi nel blocco: i discendenti non si disegnano (etichetta "+N"), restano dove sono
 //   flip = di serie ingresso a destra e uscita a sinistra · w/h = dimensione a mano
-//   color = indice 0–5 dei token --c0…--c5 · fs = testo (px) · bw = bordo · op = opacità del riquadro
+//   color = indice 0–5 dei token --c0…--c5 · fs = testo (px) · fw = peso del carattere (300–700) · bw = bordo · op = opacità del riquadro
 //   foldPrev = con i rami compressi, schema in piccolo mostrato sotto il blocco
 //   tag = etichetta: sigla o nota breve su una linguetta attaccata al bordo in alto
 //   edge = { po?, pi?, str?, sp?, note?, dash?, nx?, ny? } del collegamento "principale" che entra nel blocco dal genitore
@@ -22,12 +22,15 @@
 //   trascinato dal titolo o dal bordo si sposta con il contenuto; un blocco portato dentro o fuori entra o esce.
 const DEF_FS = [16, 14, 13];
 const fsOf = (n, depth) => n.fs || DEF_FS[Math.min(depth, 2)];
-const nodeFont = (n, depth) => `${depth <= 1 ? 600 : 400} ${fsOf(n, depth)}px ${FB}`;
+// peso del carattere: scelto sul blocco (fw) o di serie (600 per primarie e primo livello, 400 dopo)
+const fwOf = (n, depth) => n.fw || (depth <= 1 ? 600 : 400);
+const nodeFont = (n, depth) => `${fwOf(n, depth)} ${fsOf(n, depth)}px ${FB}`;
 const bwOf = (n, depth) => n.bw ?? (depth === 0 ? 2 : 1.4);
 const hasColor = n => n.color !== undefined && n.color !== null && n.color !== '';
 const hasPos = n => n.x !== undefined && n.y !== undefined;
 const RMIN = [40, 26], RMAX = [800, 600];
 const TAG_FONT = `600 10.5px ${FB}`;
+const HUB = 22; // lato dello svincolo: punto al centro, pallini sul bordo, il mezzo libero per trascinarlo
 // x dell'etichetta: in alto a sinistra (dopo il "+N" se c'è); non copre i pallini del bordo in alto
 function tagLeft(n, l, w) {
   let x = n.fold && n.children.length ? 24 : 10;
@@ -44,6 +47,8 @@ const GHEAD = 28, GPAD = 22, GMIN = [120, 70];
 function sizeMap(tree) {
   const M = new Map();
   function size(n, depth) {
+    // svincolo: un punto senza testo, tappa di un collegamento
+    if (n.hub) { M.set(n.id, { lines: [], lh: 0, w: HUB, h: HUB, depth: 2 }); n.children.forEach(c => size(c, depth + 1)); return; }
     const lv = n.primary ? 0 : Math.max(1, depth);
     const fs = fsOf(n, lv), font = nodeFont(n, lv), lh = Math.round(fs * 1.28);
     const padX = lv === 0 ? 36 : 24, padY = lv === 0 ? 22 : 14;
@@ -91,7 +96,9 @@ function placeNew(tree, p, n, SZ) {
   if (idx === null) {
     // più uscite (per esempio l'idea primaria): si sceglie la meno usata
     const used = outs.map((_, i) => p.children.filter(c => c !== n && hasPos(c) && outIdx(p, c.edge) === i).length);
-    idx = outs.length > 1 ? used.indexOf(Math.min(...used)) : 0;
+    // a parità, prima l'uscita di destra: il primo ramo nasce a destra
+    const least = used.map((u, i) => u === Math.min(...used) ? i : -1).filter(i => i >= 0), right = least.find(i => outs[i][0] === 'r');
+    idx = outs.length > 1 ? (right !== undefined ? right : least[0]) : 0;
     if (outs.length > 1) n.edge = Object.assign({}, n.edge, { po: idx });
   }
   // la parte di una struttura va davanti al pallino di struttura; un blocco senza uscite usa il lato destro
@@ -185,7 +192,7 @@ const shiftTree = (n, dx, dy) => walk(n, d => { if (hasPos(d)) { d.x = Math.roun
 // Ogni tipo può avere zero pallini: un blocco può avere solo ingressi, solo uscite o nessuno dei due.
 const PK = { in: 'i', out: 'o', str: 's' };
 function defaultPins(n) {
-  if (n.primary) return { i: [['t', 0.5]], o: [['l', 0.5], ['r', 0.5]], s: [] };
+  if (n.primary && !n.hub) return { i: [['t', 0.5]], o: [['l', 0.5], ['r', 0.5]], s: [] };
   return n.flip ? { i: [['r', 0.5]], o: [['l', 0.5]], s: [] } : { i: [['l', 0.5]], o: [['r', 0.5]], s: [] };
 }
 // pallini del blocco; mentre se ne trascina uno lungo il bordo vale la posizione provvisoria
@@ -209,6 +216,12 @@ function outIdx(p, e) {
 const inIdx = (c, e) => Math.min((e && e.pi) || 0, pinsOf(c).i.length - 1);
 const strIdx = (p, e) => Math.min((e && e.sp) || 0, pinsOf(p).s.length - 1);
 const isStr = e => !!(e && e.str);
+// tratto della linea: continuo, tratteggiato, a puntini (di serie: puntini per la struttura, continuo per il resto;
+// `dash: true` è il formato vecchio del tratteggiato)
+const lineOf = e => (e && e.line) || (e && e.dash ? 'dash' : isStr(e) ? 'dot' : 'solid');
+// spessore: scelto sul collegamento (lw) o di serie (puntini 2.4, dall'idea primaria 2.2, altrimenti 1.5)
+const lwOf = (e, depth) => (e && e.lw) || (lineOf(e) === 'dot' ? 2.4 : depth === 0 ? 2.2 : 1.5);
+function linkWidth(key) { const t = curTree(), L = allLinks(t).find(x => x.key === key); return L ? lwOf(L.e, (S.L.get(L.from.id) || {}).depth) : 1.5; }
 // lato del blocco rivolto verso il punto (x, y), a metà
 function facePin(l, x, y) {
   const dx = (x - (l.x + l.w / 2)) / l.w, dy = (y - (l.y + l.h / 2)) / l.h;
@@ -240,6 +253,7 @@ function linkGeom(pn, pl, cn, cl, e) {
   const [ax0, ay0] = pinXY(pl, a), [bx0, by0] = pinXY(cl, b);
   const ax = pl.x + ax0, ay = pl.y + ay0, bx = cl.x + bx0, by = cl.y + by0;
   const ta = SIDES[a[0]], tb = SIDES[b[0]];
+  if (e && e.shape === 'st') return { d: `M${ax},${ay} L${bx},${by}`, mx: (ax + bx) / 2, my: (ay + by) / 2 }; // dritta
   if (e && e.shape === 'sq') {
     // squadrato: esce dritto dal pallino, gira ad angolo retto a metà strada, entra dritto nell'altro pallino
     const s = 18, a1x = ax + ta[0] * s, a1y = ay + ta[1] * s, b1x = bx + tb[0] * s, b1y = by + tb[1] * s;
@@ -305,8 +319,8 @@ function treeMarkup(tree, L, NL, live, previews = live) {
     // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
     const nx = g.mx + (e.nx || 0), ny = g.my + (e.ny || 0);
     E.set(key, { x: nx, y: ny });
-    const cls = 'eg' + (isStr(e) ? ' str' : e.dash ? ' dash' : '') + (live && S.esel === key ? ' sel' : '');
-    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" stroke-width="${pl.depth === 0 ? 2.2 : 1.5}" d="${g.d}"/>` +
+    const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (live && S.esel === key ? ' sel' : '');
+    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="stroke-width:${lwOf(e, pl.depth) + (live && S.esel === key ? 1 : 0)}px" d="${g.d}"/>` +
       (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
     if (e.note && !(editing && editing.kind === 'edge' && editing.id === key)) {
       const lines = wrap(e.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
@@ -319,13 +333,13 @@ function treeMarkup(tree, L, NL, live, previews = live) {
   walkAll(tree, n => {
     const l = L.get(n.id); if (!l) return; // dentro un ramo compresso
     const sel = live && S.sels.has(n.id), dd = Math.min(l.depth, 2), pad = (l.h - l.lines.length * l.lh) / 2;
-    const fsSt = n.fs ? ` style="font-size:${n.fs}px"` : '';
+    const fsSt = n.fs || n.fw ? ` style="${n.fs ? `font-size:${n.fs}px;` : ''}${n.fw ? `font-weight:${n.fw}` : ''}"` : '';
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
     const txt = l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
     // ramo compresso: etichetta "+N" sull'angolo in alto a sinistra; con un clic si riapre, passandoci sopra l'anteprima
     const folded = n.fold && n.children.length;
     const badge = (key, bx, by, k, title) => `<g class="fold"${live ? ` data-fold="${key}"` : ''}>${live ? `<title>${title}</title>` : ''}` +
-      `<rect x="${bx}" y="${by}" width="${tw('+' + k, `600 11px ${FB}`) + 12}" height="18" rx="9"/><text x="${bx + 6}" y="${by + 13}">+${k}</text></g>`;
+      `<rect x="${bx}" y="${by}" width="${tw('+' + k, `600 11px ${FB}`) + 12}" height="18" rx="9"/><text x="${bx + (tw('+' + k, `600 11px ${FB}`) + 12) / 2}" y="${by + 13}" text-anchor="middle">+${k}</text></g>`;
     let fold = folded ? badge('all', -14, -11, countDesc(n), 'Clic: apri i rami a ventaglio') : '';
     // pallino compresso: "+N" appena fuori dal pallino, dalla parte dove partono i rami
     if (!n.fold) (n.foldOut || []).forEach(key => {
@@ -338,7 +352,7 @@ function treeMarkup(tree, L, NL, live, previews = live) {
     const tagW = n.tag ? Math.min(tw(n.tag, TAG_FONT), 170) + 12 : 0, tagX = n.tag ? tagLeft(n, l, tagW) : 0;
     const tag = n.tag && !(editing && editing.kind === 'tag' && editing.id === n.id)
       ? `<g class="tag"${live ? ' data-tag="1"' : ''}>${live ? '<title>Doppio clic: modifica l’etichetta</title>' : ''}<rect x="${tagX}" y="-17" width="${tagW}" height="17" rx="5"/>` +
-        `<text x="${tagX + 6}" y="-5">${esc(ell(n.tag, 170, TAG_FONT))}</text></g>` : '';
+        `<text x="${tagX + tagW / 2}" y="-5" text-anchor="middle">${esc(ell(n.tag, 170, TAG_FONT))}</text></g>` : '';
     let anchors = '';
     if (live) {
       const P = pinsOf(n);
@@ -350,12 +364,25 @@ function treeMarkup(tree, L, NL, live, previews = live) {
         const dot = kind === 'str' ? `<rect class="adot" x="${x - 4}" y="${y - 4}" width="8" height="8" transform="rotate(45 ${x} ${y})"/>`
           : `<circle class="adot" cx="${x}" cy="${y}" r="4"/>`;
         anchors += `<g class="anc ${kind}${hot ? ' hot' : ''}${moving ? ' moving' : ''}" data-anc="${kind}" data-idx="${idx}"><title>${TIP[kind] + PIN_TIP}</title>` +
-          `<circle class="ahit" cx="${x}" cy="${y}" r="10"/>${dot}</g>`;
+          `<circle class="ahit" cx="${x}" cy="${y}" r="${n.hub ? 6 : 10}"/>${dot}</g>`;
       }));
+    }
+    if (n.hub) {
+      // svincolo: un punto sulla linea; il centro si trascina, i pallini sul bordo collegano o diramano
+      const c = HUB / 2, P = pinsOf(n);
+      // tratti dal centro ai pallini: la linea sembra passare dentro lo svincolo
+      const spokes = [...P.i, ...P.o, ...P.s].map(q => { const [x, y] = pinXY(l, q); return `M${c},${c} L${x},${y}`; }).join(' ');
+      nodes += `<g class="mn hub${sel ? ' sel' : ''}${lk && lk.over === n.id && !lk.overAnc ? ' drop' : ''}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` +
+        (live ? `<title>Svincolo: trascinalo per spostare la tappa · Tasto destro: opzioni</title>` : '') +
+        (sel ? `<circle class="ring" cx="${c}" cy="${c}" r="${c + 3}"/>` : '') +
+        `<circle class="hubhit" cx="${c}" cy="${c}" r="${c}"/>${spokes ? `<path class="edge hubline" d="${spokes}"/>` : ''}<circle class="hubdot" cx="${c}" cy="${c}" r="5.5"/>` + anchors + fold + `</g>`;
+      return;
     }
     if (previews && folded && n.foldPrev) prevs += foldPreviewMarkup(n, l, live);
     const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${(lk && lk.over === n.id && !lk.overAnc) || (live && S.dropOn === n.id) ? ' drop' : ''}`;
-    nodes += `<g class="${cls}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` +
+    // testo troncato (troppe righe o riga troppo lunga): al passaggio si legge per intero
+    const flat = s => String(s || '').replace(/\s+/g, ' ').trim(), cut = live && n.text && flat(l.lines.join(' ')) !== flat(n.text);
+    nodes += `<g class="${cls}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` + (cut ? `<title>${esc(n.text)}</title>` : '') +
       // idea primaria (stile 0): bagliore dietro il blocco, per riconoscerla subito
       (dd === 0 ? `<rect class="glow" x="-4" y="-4" width="${l.w + 8}" height="${l.h + 8}" rx="14"/>` : '') +
       (sel ? `<rect class="ring" x="-5" y="-5" width="${l.w + 10}" height="${l.h + 10}" rx="${dd === 0 ? 14 : 11}"/>` : '') + tag +
@@ -402,7 +429,7 @@ function addChild(id) {
   const c = mk('Nuova idea'), f0 = findM(curTree(), id), P0 = f0 && pinsOf(f0.n);
   if (P0 && !P0.o.length && P0.s.length) c.edge = { str: true, sp: 0 }; // blocco senza uscite: il figlio è una sua parte
   mutate(t => { const f = findM(t, id); if (f) f.n.children.push(c); });
-  selectOnly(c.id); render(); startEdit(c.id, true);
+  selectOnly(c.id); render(); startEdit(c.id, true); markFresh(id);
 }
 function addSibling(id) {
   const f = findM(curTree(), id); if (!f) return; if (!f.p) return addChild(id);
@@ -410,17 +437,17 @@ function addSibling(id) {
   if (isStr(f.n.edge)) c.edge = { str: true, sp: f.n.edge.sp || 0 }; // stesso pallino di struttura
   else if (f.n.edge && f.n.edge.po != null) c.edge = { po: f.n.edge.po }; // stessa uscita del genitore
   mutate(t => { const g = findM(t, id); g.p.children.splice(g.p.children.indexOf(g.n) + 1, 0, c); });
-  selectOnly(c.id); render(); startEdit(c.id, true);
+  selectOnly(c.id); render(); startEdit(c.id, true); markFresh(id);
 }
 function addFreeBlock(x, y) {
   const c = { ...mk('Nuovo blocco'), x: Math.round(x), y: Math.round(y - 15) };
   mutate(t => (t.free = t.free || []).push(c));
-  selectOnly(c.id); render(); startEdit(c.id, true);
+  selectOnly(c.id); render(); startEdit(c.id, true); markFresh();
 }
 function addCanvasNote(x, y) {
   const nt = { id: uid(), x: Math.round(x), y: Math.round(y), text: 'Nota' };
   mutate(t => (t.notes = t.notes || []).push(nt));
-  selectOnly(nt.id); render(); startNoteEdit(nt.id);
+  selectOnly(nt.id); render(); startNoteEdit(nt.id); markFresh();
 }
 // toglie i collegamenti aggiuntivi che puntano a blocchi non più presenti
 function cleanLinks(t) { if (t.links) { t.links = t.links.filter(x => findM(t, x.from) && findM(t, x.to)); if (!t.links.length) delete t.links; } }
@@ -429,9 +456,26 @@ function removeSelected() {
   if (!ids.length) return;
   const f0 = findM(t, ids.includes(S.sel) ? S.sel : ids[0]), pid = f0 && f0.p && !ids.includes(f0.p.id) ? f0.p.id : null;
   mutate(tt => {
+    // si elimina solo il blocco, non quello che viene dopo: i suoi rami passano al genitore (A → X → B diventa A → B,
+    // dalla stessa uscita di A e nello stesso ingresso di B) o, se X non ha genitore, restano liberi dove sono
+    const bridge = (n, p, list) => {
+      const kids = n.children; n.children = [];
+      kids.forEach(c => {
+        if (p) {
+          const up = n.edge || {}, ed = { ...(c.edge || {}) };
+          ['po', 'ps', 'str', 'sp'].forEach(k => delete ed[k]);
+          ['po', 'ps', 'str', 'sp'].forEach(k => { if (up[k] !== undefined) ed[k] = up[k]; });
+          if (Object.keys(ed).length) c.edge = ed; else delete c.edge;
+        } else delete c.edge;
+        delete c.dx; delete c.dy;
+      });
+      if (p) list.splice(list.indexOf(n), 1, ...kids);
+      else { list.splice(list.indexOf(n), 1); (tt.free = tt.free || []).push(...kids); }
+    };
+    if (delRoot) { (tt.free = tt.free || []).push(...tt.children.map(c => { delete c.edge; return c; })); tt.children = []; }
     ids.forEach(id => {
       if (id === tt.id) return;
-      const f = findM(tt, id); if (f && f.list) { f.list.splice(f.list.indexOf(f.n), 1); return; }
+      const f = findM(tt, id); if (f && f.list) { bridge(f.n, f.p, f.list); return; }
       const nt = findNote(tt, id); if (nt) tt.notes.splice(tt.notes.indexOf(nt), 1);
       const g = findGroup(tt, id); if (g) { tt.groups.splice(tt.groups.indexOf(g), 1); if (!tt.groups.length) delete tt.groups; } // solo il riquadro
     });
@@ -506,27 +550,35 @@ function detach(id, msg = 'Blocco staccato') {
   selectOnly(id); render(); toast(msg);
 }
 // blocco intermedio su un collegamento (tasto destro sul collegamento): A → nuovo → B, nessun blocco si sposta
-function insertOnLink(key) {
+// hub = svincolo: un punto senza testo che fa solo da tappa; i pallini guardano verso i due blocchi
+function insertOnLink(key, hub) {
   const t = curTree(), Lk = allLinks(t).find(L => L.key === key); if (!Lk) return;
-  const g = linkGeom(Lk.from, S.L.get(Lk.from.id), Lk.to, S.L.get(Lk.to.id), Lk.e);
-  const n = mk('Nuova idea'), pi = Math.max(0, inIdx(Lk.to, Lk.e)), po = Math.max(0, outIdx(Lk.from, Lk.e));
+  const fl = S.L.get(Lk.from.id), tl = S.L.get(Lk.to.id), g = linkGeom(Lk.from, fl, Lk.to, tl, Lk.e);
+  const n = hub ? { ...mk(''), hub: true } : mk('Nuova idea'), pi = Math.max(0, inIdx(Lk.to, Lk.e)), po = Math.max(0, outIdx(Lk.from, Lk.e));
   const SZ = sizeMap({ id: 'tmp', text: '', children: [n] }), s = SZ.get(n.id);
   n.x = Math.round(g.mx - s.w / 2); n.y = Math.round(g.my - s.h / 2);
-  const keep = { note: Lk.e.note, dash: Lk.e.dash };
+  if (hub) {
+    const hl = { x: n.x, y: n.y, w: s.w, h: s.h };
+    n.pin = { i: [facePin(hl, fl.x + fl.w / 2, fl.y + fl.h / 2)], o: [facePin(hl, tl.x + tl.w / 2, tl.y + tl.h / 2)], s: [] };
+    if (n.pin.i[0][0] === n.pin.o[0][0]) n.pin.o[0] = [{ l: 'r', r: 'l', t: 'b', b: 't' }[n.pin.i[0][0]], 0.5];
+  }
+  const keep = { note: Lk.e.note, dash: Lk.e.dash, line: Lk.e.line, shape: Lk.e.shape };
   mutate(tt => {
     if (Lk.extra) {
       // il nuovo blocco diventa figlio del primo blocco, poi un collegamento aggiuntivo verso il secondo
       tt.links = tt.links.filter(x => x.id !== key.slice(2)); if (!tt.links.length) delete tt.links;
       n.edge = { po, ...keep }; findM(tt, Lk.from.id).n.children.push(n);
-      (tt.links = tt.links || []).push({ id: uid(), from: n.id, to: Lk.to.id, po: 0, pi });
+      const lx = { id: uid(), from: n.id, to: Lk.to.id, po: 0, pi }; if (hub && Lk.e.shape) lx.shape = Lk.e.shape;
+      (tt.links = tt.links || []).push(lx);
     } else {
       const f = findM(tt, Lk.to.id), i = f.p.children.indexOf(f.n);
       n.edge = { po, ...keep }; f.p.children.splice(i, 1, n); n.children.push(f.n);
-      f.n.edge = { pi }; if (!pi) delete f.n.edge;
+      f.n.edge = { pi }; if (hub && Lk.e.shape) f.n.edge.shape = Lk.e.shape; // il tratto dopo lo svincolo resta dello stesso tipo
+      if (!f.n.edge.pi) delete f.n.edge.pi; if (!Object.keys(f.n.edge).length) delete f.n.edge;
     }
     Object.keys(n.edge).forEach(k => { if (n.edge[k] === undefined) delete n.edge[k]; });
   });
-  selectOnly(n.id); render(); startEdit(n.id, true);
+  selectOnly(n.id); render(); if (!hub) { startEdit(n.id, true); markFresh(); }
 }
 function toggleFlip(id) { mutate(t => { const f = findM(t, id); if (!f) return; delete f.n.pin; if (f.n.flip) delete f.n.flip; else f.n.flip = true; }); }
 function togglePrimary(id) { mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.primary) { if (f.n === t) f.n.primary = false; else delete f.n.primary; } else f.n.primary = true; }); }
@@ -591,6 +643,8 @@ function cloneFresh(n) {
 // copia "staccata": senza i contenuti del livello (se era la radice) e senza collegamento in entrata
 function looseCopy(n) { const c = cloneFresh(n); ['free', 'notes', 'links', 'groups', 'edge'].forEach(k => delete c[k]); return c; }
 function selectMany(ids) { S.sels = new Set(ids); S.sel = ids[ids.length - 1] || null; S.esel = null; }
+// il blocco con tutti i suoi rami: trascinandolo si sposta tutto insieme
+function selectBranch(id) { const f = findM(curTree(), id); if (!f) return; const ids = []; walk(f.n, d => ids.push(d.id)); selectMany(ids); S.sel = id; render(); }
 // altezza del sotto-albero sullo schermo (per mettere la copia subito sotto)
 function treeSpan(n, L) { let y1 = Infinity, y2 = -Infinity; walk(n, d => { const l = L.get(d.id); if (l) { y1 = Math.min(y1, l.y); y2 = Math.max(y2, l.y + l.h); } }); return y2 - y1; }
 function duplicateSelected() {
@@ -609,12 +663,15 @@ function duplicateSelected() {
 function copySelected() {
   const t = curTree(), nodes = topSelected(t).map(n => looseCopy(n)), notes = (t.notes || []).filter(nt => S.sels.has(nt.id)).map(nt => ({ ...nt }));
   if (!nodes.length && !notes.length) return;
-  S.clip = { nodes, notes }; toast(`Copiat${nodes.length + notes.length > 1 ? 'i' : 'o'}: ${nodes.length + notes.length}`);
+  S.clip = { nodes, notes, src: topSelected(t).map(n => n.id) }; toast(`Copiat${nodes.length + notes.length > 1 ? 'i' : 'o'}: ${nodes.length + notes.length}`);
 }
 // incolla: dentro il blocco selezionato (come rami, accanto a lui) oppure liberi nel punto indicato
-function pasteClip(at) {
+// inside = richiesto dal menu "Incolla dentro questo blocco". Con Ctrl+V il blocco appena copiato (ancora selezionato)
+// non riceve la propria copia: va libera dove sta il mouse.
+function pasteClip(at, inside = !at) {
   if (!S.clip) return toast('Niente da incollare');
-  const t = curTree(), target = S.sels.size === 1 && findM(t, S.sel) ? S.sel : null, ids = [];
+  const t = curTree(), ids = [];
+  const target = S.sels.size === 1 && findM(t, S.sel) && (inside || !(S.clip.src || []).includes(S.sel)) ? S.sel : null;
   mutate(tt => {
     S.clip.nodes.forEach((n, i) => {
       const c = cloneFresh(n), ox = c.x, oy = c.y;
@@ -673,7 +730,8 @@ function foldInto(id, movers) {
   if (t.free && !t.free.length) delete t.free;
   target.fold = true;
   selectOnly(id); save(); render();
-  toast(`${countDesc(target)} blocchi compressi in «${ell(target.text || 'Senza titolo', 160, `500 13px ${FB}`)}» · Ctrl+Z per annullare`);
+  const cnt = countDesc(target);
+  toast(`${cnt} ${cnt === 1 ? 'blocco compresso' : 'blocchi compressi'} in «${ell(target.text || 'Senza titolo', 160, `500 13px ${FB}`)}» · Ctrl+Z per annullare`);
   return true;
 }
 function topSelected(tree) {

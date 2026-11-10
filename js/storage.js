@@ -42,12 +42,13 @@ function load() {
   S.projects = [p]; S.pid = p.id; S.root = root; saveNow();
 }
 function writeStore() {
-  const p = curProject(); p.root = S.root; p.updated = Date.now();
+  // la data cambia solo se c'è stata una modifica, non aprendo o lasciando il progetto
+  const p = curProject(); p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; }
   try { localStorage.setItem(KEY, JSON.stringify({ projects: S.projects, cur: S.pid })); return true; }
   catch (e) { toast('Salvataggio non disponibile in questo browser'); return false; }
 }
-let saveT;
-function save() { clearTimeout(saveT); saveT = setTimeout(writeStore, 250); }
+let saveT, dirty = false;
+function save() { dirty = true; clearTimeout(saveT); saveT = setTimeout(writeStore, 250); }
 function saveNow() { clearTimeout(saveT); return writeStore(); }
 
 /* ---------- la mappa: un solo livello ---------- */
@@ -97,11 +98,18 @@ function pruneSel() {
 }
 
 /* ---------- undo ---------- */
-function snapshot() { S.undo.push(JSON.stringify(S.root)); if (S.undo.length > 100) S.undo.shift(); }
+// ogni nuova modifica svuota la pila del "rifai"
+function snapshot() { S.undo.push(JSON.stringify(S.root)); if (S.undo.length > 100) S.undo.shift(); S.redo = []; }
 function undo() {
   if (!S.undo.length) return toast('Niente da annullare');
-  S.root = JSON.parse(S.undo.pop()); curTree(); pruneSel(); save(); render();
+  S.redo.push(JSON.stringify(S.root));
+  S.root = JSON.parse(S.undo.pop()); pruneSel(); save(); render();
+}
+function redo() {
+  if (!S.redo.length) return toast('Niente da rifare');
+  S.undo.push(JSON.stringify(S.root));
+  S.root = JSON.parse(S.redo.pop()); pruneSel(); save(); render();
 }
 // ogni modifica passa da qui: snapshot per undo → modifica dell'albero visibile → salva → ridisegna
 // su una tela vuota il primo blocco aggiunto (o incollato) diventa la radice dei dati del livello
-function mutate(fn) { snapshot(); fn(curTree()); const t = curTree(); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }
+function mutate(fn) { $('#hint').hidden = true; snapshot(); fn(curTree()); const t = curTree(); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }

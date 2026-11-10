@@ -31,7 +31,7 @@ $('#mProj').addEventListener('click', e => {
   const o = e.target.closest('[data-open]'); if (o) { closeDrops(); return openProject(o.dataset.open); }
   const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
   if (a === 'pdel') { // due clic per confermare
-    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Clic di nuovo per eliminare'; return; }
+    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Clic di nuovo per eliminare (non si può annullare)'; return; }
     closeDrops(); return deleteProject();
   }
   closeDrops();
@@ -54,7 +54,7 @@ function saveProject() { if (saveNow()) toast('Progetto salvato'); }
 function switchTo(id) {
   if (editing) endEdit(true);
   saveNow(); S.pid = id; S.root = curProject().root;
-  S.undo = []; S.views = {}; clearSel(); render(); fit(); saveNow();
+  S.undo = []; S.redo = []; S.views = {}; clearSel(); render(); fit(); saveNow();
 }
 function openProject(id) { if (id !== S.pid) { switchTo(id); toast('Aperto: ' + curProject().name); } }
 function newProject() {
@@ -63,8 +63,8 @@ function newProject() {
 }
 function deleteProject() {
   const i = S.projects.findIndex(p => p.id === S.pid), name = curProject().name;
-  S.projects.splice(i, 1); S.pid = S.projects[0].id; S.root = curProject().root;
-  S.undo = []; S.views = {}; clearSel(); render(); fit(); saveNow(); toast('Eliminato: ' + name);
+  S.projects.splice(i, 1); S.pid = [...S.projects].sort((a, b) => b.updated - a.updated)[0].id; // si apre il più recente S.root = curProject().root;
+  S.undo = []; S.redo = []; S.views = {}; clearSel(); render(); fit(); saveNow(); toast('Eliminato: ' + name);
 }
 const fileName = () => (curProject().name || 'mappa').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'mappa';
 function downloadBlob(blob, name) {

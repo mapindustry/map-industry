@@ -52,16 +52,32 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - `tag` = etichetta (sigla o nota breve) su una linguetta sopra il bordo (`tagLeft` evita i pallini in alto);
     doppio clic per scriverla. Le idee primarie hanno un bagliore dietro (`.glow`, `--glow`).
   - collegamenti: quello principale è il legame padre→figlio dell'albero (`edge` sul figlio: `po`, `pi`, `note`,
-    `dash`, `shape: 'sq'` = squadrato, `nx`, `ny`; `str` + `sp` per un collegamento di struttura, a puntini);
+    `shape` (vuoto = morbida, `'st'` dritta, `'sq'` squadrata), `line` (`solid`/`dash`/`dot`, vedi `lineOf`: di serie
+    puntini per la struttura e continuo per il resto; `dash: true` è il formato vecchio), `lw` (spessore, `lwOf`),
+    `nx`, `ny`; `str` + `sp`
+    per un collegamento di struttura);
     i **collegamenti aggiuntivi** (più ingressi per blocco) stanno in `tree.links`
     `{ id, from, to, po, pi, ... }`. `allLinks(tree)` li elenca tutti con una chiave: id del figlio o `'x:' + id`;
     `edgeData(tree, chiave)` restituisce i dati modificabili. `link()` crea il legame d'albero se il blocco d'arrivo
     è senza genitore, altrimenti un collegamento aggiuntivo; vieta sé stesso, doppioni e doppio senso.
-  - `w/h`, `color`, `fs`, `bw`, `op` come prima.
+  - `hub` = **svincolo**: blocco-punto senza testo (`HUB` px), tappa di un collegamento (menu del collegamento →
+    Inserisci uno svincolo, `insertOnLink(key, true)`); pallini visibili solo al passaggio o con la selezione.
+  - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
+  - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
+    uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.
 - Selezione di un collegamento: `S.esel` = chiave. Eliminare il principale = `detach` (il blocco resta libero, stessa
   posizione); un aggiuntivo si toglie da `tree.links`. Appunti: `S.clip` (`cloneFresh` rinomina id e collegamenti).
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.
 - Ogni modifica passa da `mutate(fn)` (snapshot per undo → modifica della mappa → salva → `render()`).
+  Annulla = Ctrl+Z (`S.undo`), rifai = Ctrl+Maiusc+Z o Ctrl+Y (`S.redo`, svuotata da ogni nuovo `snapshot`).
+- Rifiniture dell'interazione (verifica UX del 2026-11-10, vedi `verifica-ux-ui-2026-11-10.md`):
+  - una selezione trascinata entra in un blocco solo dopo una sosta sopra di lui (`DROP_WAIT`), non al semplice passaggio;
+  - il testo di blocchi e note tiene gli a capo (Maiusc+Invio; `wrap` divide per `\n`); un blocco con `flip` cresce
+    verso l'esterno (resta fermo il bordo destro, `endEdit`); Esc su un elemento appena creato lo toglie (`markFresh`);
+  - frecce = selezione al blocco vicino (`moveSel`); Ctrl+V sul blocco appena copiato incolla libero, non dentro
+    (`S.clip.src`); "Seleziona il ramo" e "Adatta alla vista" nei menu; forma e tratto lasciano aperto il menu;
+  - menu del blocco: colore, azioni, Elimina, poi Stile e Pallini in fondo; la riga di aiuto sparisce alla prima modifica;
+  - la data del progetto cambia solo con una modifica (`dirty`); il bagliore non va nell'esportazione.
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;
   con `live=false` produce la versione statica per anteprima ed esportazione. Testo utente sempre via `esc()`.
 - Dopo un clic la tela viene ridisegnata: nei gestori di `dblclick`/`contextmenu` usa `document.elementFromPoint`.

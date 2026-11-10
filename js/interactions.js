@@ -7,6 +7,7 @@
 // Clic su un pallino (senza trascinare) = menu del pallino: tipo, duplica, elimina.
 // Le posizioni sono fisse: collegare o staccare non sposta nessun blocco.
 let P = null, spaceDown = false;
+const DROP_WAIT = 450; // ms di sosta sopra un blocco prima che diventi la destinazione del rilascio
 const boxEl = $('#box');
 
 cv.addEventListener('pointerdown', e => {
@@ -85,12 +86,17 @@ cv.addEventListener('pointermove', e => {
   }
   if (P.mode === 'drag') {
     P.movers.forEach(m => { m.o.x = Math.round(m.ox + dx / v.k); m.o.y = Math.round(m.oy + dy / v.k); });
-    // sopra un altro blocco: rilasciando, la struttura selezionata si comprime dentro di lui (foldInto)
-    S.dropOn = null;
+    // sopra un altro blocco: dopo una breve sosta (DROP_WAIT) quello diventa la destinazione e, rilasciando,
+    // la struttura selezionata si comprime dentro di lui (foldInto). Senza sosta è solo uno spostamento.
+    let cand = null;
     if (!P.alt) {
       const p = toSvg(e.clientX, e.clientY), t = curTree();
-      S.L.forEach((l, id) => { if (!S.sels.has(id) && p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h) S.dropOn = id; });
-      if (S.dropOn && !canFoldInto(t, S.dropOn)) S.dropOn = null;
+      S.L.forEach((l, id) => { if (!S.sels.has(id) && p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h) cand = id; });
+      if (cand && !canFoldInto(t, cand)) cand = null;
+    }
+    if (cand !== P.cand) {
+      P.cand = cand; S.dropOn = null; clearTimeout(P.dropT);
+      if (cand) { const me = P; P.dropT = setTimeout(() => { if (P === me && me.cand === cand) { S.dropOn = cand; render(); } }, DROP_WAIT); }
     }
     return render();
   }
@@ -119,7 +125,7 @@ function dragBox(e) {
 }
 
 function endPointer(e) {
-  if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true;
+  if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true; clearTimeout(P.dropT);
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
     if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
@@ -182,11 +188,30 @@ cv.addEventListener('pointerover', e => {
 cv.addEventListener('pointerout', e => { if (e.target.closest('[data-fold]')) hidePreview(); });
 
 /* ---------- tastiera ---------- */
+// frecce: la selezione passa al blocco visibile più vicino in quella direzione (e la vista lo segue se è fuori schermo)
+function moveSel(key) {
+  const a = S.L.get(S.sel), ax = a.x + a.w / 2, ay = a.y + a.h / 2, hor = key === 'ArrowLeft' || key === 'ArrowRight';
+  const sign = key === 'ArrowRight' || key === 'ArrowDown' ? 1 : -1;
+  let best = null, bd = Infinity;
+  S.L.forEach((l, id) => {
+    if (id === S.sel) return;
+    const dx = l.x + l.w / 2 - ax, dy = l.y + l.h / 2 - ay, along = (hor ? dx : dy) * sign, across = Math.abs(hor ? dy : dx);
+    if (along <= 0 || across > along * 2) return;
+    const d = along + across * 2; if (d < bd) { bd = d; best = id; }
+  });
+  if (!best) return;
+  selectOnly(best);
+  const l = S.L.get(best), v = view(), m = 40, x1 = v.x + l.x * v.k, y1 = v.y + l.y * v.k, x2 = x1 + l.w * v.k, y2 = y1 + l.h * v.k;
+  if (x1 < m) v.x += m - x1; else if (x2 > innerWidth - m) v.x -= x2 - (innerWidth - m);
+  if (y1 < BAR_H + m) v.y += BAR_H + m - y1; else if (y2 > innerHeight - m) v.y -= y2 - (innerHeight - m);
+  v.fresh = false; render();
+}
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (editing) endEdit(true); return saveProject(); }
   if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar'))) return;
   if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; cv.classList.add('grab'); } return; }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return undo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo(); }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();
     if (k === 'c') { e.preventDefault(); return copySelected(); }
@@ -207,6 +232,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return removeSelected(); }
   const t = curTree();
   if (!S.sel) { if (e.key === 'Tab') { e.preventDefault(); if (!t.void) { selectOnly(t.id); render(); } } return; }
+  if (e.key.startsWith('Arrow') && S.L.get(S.sel)) { e.preventDefault(); return moveSel(e.key); }
   if (findGroup(t, S.sel)) { if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); startGroupEdit(S.sel); } return; }
   if (findNote(t, S.sel)) { if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); startNoteEdit(S.sel); } return; }
   if (e.key === 'Tab') { e.preventDefault(); return addChild(S.sel); }

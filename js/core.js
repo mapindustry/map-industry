@@ -10,7 +10,7 @@ const FB = '"Instrument Sans", "Segoe UI", system-ui, sans-serif';
 // views: pan/zoom della mappa · L: layout calcolato dei blocchi visibili
 // projects/pid: progetti salvati e quello aperto · link: collegamento che si sta trascinando
 // E: punti medi dei collegamenti (per le note) · NL: layout delle note sulla tela
-const S = { projects: [], pid: null, root: null, sel: null, sels: new Set(), esel: null, views: {}, undo: [], L: null, E: null, NL: null, link: null, clip: null, dropOn: null };
+const S = { projects: [], pid: null, root: null, sel: null, sels: new Set(), esel: null, views: {}, undo: [], redo: [], L: null, E: null, NL: null, link: null, clip: null, dropOn: null };
 const BAR_H = 48; // altezza della barra dei menu
 const cv = $('#cv'), vp = $('#vp');
 
@@ -24,14 +24,17 @@ function ell(t, maxW, font) {
   return t.trimEnd() + '…';
 }
 function wrap(t, maxW, font, maxLines = 4) {
-  const words = String(t || '').split(/\s+/).filter(Boolean);
-  if (!words.length) return [''];
-  const lines = []; let cur = '';
-  for (const w of words) {
-    const test = cur ? cur + ' ' + w : w;
-    if (!cur || tw(test, font) <= maxW) cur = test; else { lines.push(cur); cur = w; }
-  }
-  lines.push(cur);
+  // gli a capo scritti dall'utente (Maiusc+Invio) restano: ogni paragrafo va a capo per conto suo
+  const lines = [];
+  String(t || '').split('\n').forEach(par => {
+    let cur = '';
+    for (const w of par.split(/\s+/).filter(Boolean)) {
+      const test = cur ? cur + ' ' + w : w;
+      if (!cur || tw(test, font) <= maxW) cur = test; else { lines.push(cur); cur = w; }
+    }
+    if (cur) lines.push(cur);
+  });
+  if (!lines.length) return [''];
   const out = lines.map(l => ell(l, maxW, font));
   if (out.length > maxLines) { const k = out.slice(0, maxLines); k[maxLines - 1] = ell(k[maxLines - 1] + '…', maxW, font); return k; }
   return out;
