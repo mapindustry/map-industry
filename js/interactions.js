@@ -20,8 +20,8 @@ cv.addEventListener('pointerdown', e => {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
     const id = e.target.closest('.enote').dataset.edge, ed = edgeData(curTree(), id) || {};
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
-  } else if (e.target.closest('[data-foldprev]')) {
-    return toggleFold(e.target.closest('[data-foldprev]').dataset.foldprev); // clic sullo schema: si aprono i rami
+  } else if (gr && e.target.closest('[data-gfold]')) {
+    hidePreview(); return toggleGroupFold(gr.dataset.grp); // "+N" del gruppo compresso: si espande
   } else if (g && e.target.closest('[data-fold]')) {
     const k = e.target.closest('[data-fold]').dataset.fold; // etichetta "+N": riapre i rami compressi (tutti o di un pallino)
     hidePreview(); return toggleFold(g.dataset.id, k === 'all' ? null : k);
@@ -40,10 +40,13 @@ cv.addEventListener('pointerdown', e => {
     P = { ...base, mode: 'resize', id: grp.id, grp: true, w0: grp.w, h0: grp.h };
   } else if (g || cn || gr) {
     const id = g ? g.dataset.id : cn ? cn.dataset.note : gr.dataset.grp;
-    if (e.shiftKey || e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
-    const wasMulti = S.sels.has(id) && S.sels.size > 1;
-    if (!S.sels.has(id)) selectOnly(id); else S.sel = id;
-    P = { ...base, mode: 'drag', id, movers: dragMovers(curTree()), wasMulti, alt: e.altKey };
+    if (e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
+    // Maiusc: con un clic aggiunge o toglie dalla selezione; trascinando, la selezione scorre su un binario
+    const wasSel = S.sels.has(id), wasMulti = !e.shiftKey && wasSel && S.sels.size > 1;
+    if (e.shiftKey) { if (!wasSel) toggleSel(id); else S.sel = id; render(); }
+    else if (!wasSel) selectOnly(id); else S.sel = id;
+    P = { ...base, mode: 'drag', id, movers: dragMovers(curTree()), wasMulti, alt: e.altKey, shiftOff: e.shiftKey && wasSel };
+    const lockS = lockedSet(curTree()); P.locked = P.movers.some(m => lockS.has(m.o)); // gruppo bloccato: non si sposta
   } else {
     // sfondo o collegamento: trascinando si disegna il riquadro, con un clic su un collegamento lo si seleziona
     const edge = e.target.closest('[data-edge]');
@@ -58,6 +61,7 @@ cv.addEventListener('pointermove', e => {
   if (!P) return;
   const dx = e.clientX - P.sx, dy = e.clientY - P.sy;
   if (!P.moved && Math.hypot(dx, dy) < 4) return;
+  if (P.mode === 'drag' && P.locked) { if (!P.warned) { P.warned = true; toast('Gruppo bloccato: sbloccalo dal menu per spostarlo'); } return; }
   if (!P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) {
     snapshot();
     if (P.mode === 'drag' && P.alt) P.movers = altCopies(curTree()); // Alt + trascina: si sposta la copia
@@ -90,7 +94,12 @@ cv.addEventListener('pointermove', e => {
     return render();
   }
   if (P.mode === 'drag') {
-    P.movers.forEach(m => { m.o.x = Math.round(m.ox + dx / v.k); m.o.y = Math.round(m.oy + dy / v.k); });
+    // Maiusc tenuto: il movimento resta su un binario orizzontale o verticale (quello dello spostamento maggiore)
+    const rail = e.shiftKey ? (Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v') : null;
+    const mx = rail === 'v' ? 0 : dx, my = rail === 'h' ? 0 : dy;
+    P.movers.forEach(m => { m.o.x = Math.round(m.ox + mx / v.k); m.o.y = Math.round(m.oy + my / v.k); });
+    const pl = S.L.get(P.id) || S.NL.get(P.id) || findGroup(curTree(), P.id);
+    S.rail = rail && pl ? { dir: rail, x: pl.x + pl.w / 2 + mx / v.k, y: pl.y + pl.h / 2 + my / v.k } : null;
     // sopra un altro blocco: dopo una breve sosta (DROP_WAIT) quello diventa la destinazione e, rilasciando,
     // la struttura selezionata si comprime dentro di lui (foldInto). Senza sosta è solo uno spostamento.
     let cand = null;
@@ -122,7 +131,8 @@ function dragBox(e) {
   const a = toSvg(x1, y1), b = toSvg(x2, y2);
   const hit = M => [...M].filter(([, l]) => l.x < b.x && l.x + l.w > a.x && l.y < b.y && l.y + l.h > a.y).map(([id]) => id);
   // i gruppi solo se il riquadro li contiene per intero (si può selezionare anche dentro un gruppo)
-  const gh = (curTree().groups || []).filter(g => g.x >= a.x && g.y >= a.y && g.x + g.w <= b.x && g.y + g.h <= b.y).map(g => g.id);
+  const GH = groupHidden(curTree());
+  const gh = (curTree().groups || []).filter(g => { const r = gRect(g); return !GH.has(g.id) && r.x >= a.x && r.y >= a.y && r.x + r.w <= b.x && r.y + r.h <= b.y; }).map(g => g.id);
   const hits = hit(S.L).concat(hit(S.NL), gh);
   S.sels = new Set(P.add ? [...P.prev, ...hits] : hits);
   S.sel = hits.length ? hits[hits.length - 1] : [...S.sels].pop() || null;
@@ -131,6 +141,7 @@ function dragBox(e) {
 
 function endPointer(e) {
   if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true; clearTimeout(P.dropT);
+  if (S.rail) { S.rail = null; render(); }
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
     if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
@@ -158,6 +169,7 @@ function endPointer(e) {
     if (P.mode === 'enote' || (P.mode === 'box' && P.edge)) selectEdge(P.id || P.edge);
     else if (P.mode === 'box' && !P.add) clearSel();
     if (P.mode === 'drag' && P.wasMulti) selectOnly(P.id);
+    if (P.mode === 'drag' && P.shiftOff) { toggleSel(P.id); render(); } // Maiusc+clic su un selezionato: lo toglie
     if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel) render();
   } else if (P.mode === 'drag' && S.dropOn) {
     const id = S.dropOn; S.dropOn = null; foldInto(id, P.movers);
@@ -187,10 +199,11 @@ cv.addEventListener('wheel', e => {
 }, { passive: false });
 // anteprima dei rami compressi passando sull'etichetta "+N"
 cv.addEventListener('pointerover', e => {
+  const gf = e.target.closest('[data-gfold]'); if (gf && !P) return showGroupPreview(gf.dataset.gfold);
   const s = e.target.closest('[data-fold]'); if (!s || P) return;
   showPreview(s.closest('.mn').dataset.id, s.getBoundingClientRect(), s.dataset.fold === 'all' ? null : s.dataset.fold);
 });
-cv.addEventListener('pointerout', e => { if (e.target.closest('[data-fold]')) hidePreview(); });
+cv.addEventListener('pointerout', e => { if (e.target.closest('[data-fold], [data-gfold]')) hidePreview(); });
 
 /* ---------- tastiera ---------- */
 // frecce: la selezione passa al blocco visibile più vicino in quella direzione (e la vista lo segue se è fuori schermo)

@@ -1,5 +1,5 @@
 // Mappa mentale: posizioni, pallini, collegamenti, disegno e operazioni sui blocchi
-// Blocco: { id, text, children[], x, y, w?, h?, primary?, flip?, pin?, color?, fs?, bw?, op?, fold?, foldPrev?, tag?, edge? }
+// Blocco: { id, text, children[], x, y, w?, h?, primary?, flip?, pin?, color?, fs?, bw?, op?, fold?, tag?, edge? }
 //   x/y = angolo in alto a sinistra, FISSO: collegare, staccare o ricollegare non sposta nessun blocco
 //   primary = "idea primaria" (attributo scelto dall'utente, anche su più blocchi): stile marcato,
 //             di serie ingresso in alto e due uscite laterali
@@ -9,7 +9,6 @@
 //   fold = rami compressi nel blocco: i discendenti non si disegnano (etichetta "+N"), restano dove sono
 //   flip = di serie ingresso a destra e uscita a sinistra · w/h = dimensione a mano
 //   color = indice 0–5 dei token --c0…--c5 · fs = testo (px) · fw = peso del carattere (300–700) · bw = bordo · op = opacità del riquadro
-//   foldPrev = con i rami compressi, schema in piccolo mostrato sotto il blocco
 //   tag = etichetta: sigla o nota breve su una linguetta attaccata al bordo in alto
 //   edge = { po?, pi?, str?, sp?, note?, dash?, nx?, ny? } del collegamento "principale" che entra nel blocco dal genitore
 //          po/pi = indice del pallino d'uscita del genitore / d'ingresso del blocco; nx/ny = spostamento della nota
@@ -20,11 +19,15 @@
 // Nota sulla tela (in tree.notes): { id, x, y, text }
 // Gruppo (in tree.groups): { id, x, y, w, h, text } riquadro con titolo. Contiene ciò che vi sta tutto dentro:
 //   trascinato dal titolo o dal bordo si sposta con il contenuto; un blocco portato dentro o fuori entra o esce.
+//   Stile: color, line ('dash' di serie | 'solid' | 'dot' | 'none'), bw (bordo), fo (opacità dello sfondo),
+//   tfs/tfw (dimensione e peso del titolo), ta ('c' = titolo al centro).
+//   fold + hide = compresso: resta la barra del titolo, gli elementi in `hide` (id presi al momento) non si vedono;
+//   lock = bloccato: né il gruppo né il suo contenuto si spostano.
 const DEF_FS = [16, 14, 13];
 const fsOf = (n, depth) => n.fs || DEF_FS[Math.min(depth, 2)];
 // peso del carattere: scelto sul blocco (fw) o di serie (600 per primarie e primo livello, 400 dopo)
 const fwOf = (n, depth) => n.fw || (depth <= 1 ? 600 : 400);
-const nodeFont = (n, depth) => `${fwOf(n, depth)} ${fsOf(n, depth)}px ${FB}`;
+const nodeFont = (n, depth) => `${n.it ? 'italic ' : ''}${fwOf(n, depth)} ${fsOf(n, depth)}px ${FB}`; // it = corsivo
 const bwOf = (n, depth) => n.bw ?? (depth === 0 ? 2 : 1.4);
 const hasColor = n => n.color !== undefined && n.color !== null && n.color !== '';
 const hasPos = n => n.x !== undefined && n.y !== undefined;
@@ -146,6 +149,18 @@ function mindLayout(tree) {
   // i rami compressi non hanno posto nel disegno: senza voce in L non si disegnano né loro né i loro collegamenti
   const L = new Map(), hid = foldedSet(tree);
   walkAll(tree, n => { if (!hid.has(n.id)) L.set(n.id, { ...SZ2.get(n.id), x: n.x, y: n.y }); });
+  // gruppi compressi: i blocchi nascosti escono da L (L.full li tiene tutti) e i loro collegamenti arrivano alla
+  // barra del gruppo (L.px: id → riquadro della barra, con gid per non disegnare quelli interni al gruppo)
+  const GH = groupHidden(tree);
+  L.full = new Map(L); L.px = new Map();
+  (tree.groups || []).forEach(g => {
+    if (!g.fold || GH.has(g.id)) return;
+    const bar = gRect(g), all = new Set();
+    const rec = h => (h.hide || []).forEach(id => { if (all.has(id)) return; all.add(id); const k = findGroup(tree, id); if (k && k.fold) rec(k); });
+    rec(g);
+    all.forEach(id => { const l = L.full.get(id); if (l) L.px.set(id, { ...bar, depth: l.depth, gid: g.id }); });
+  });
+  GH.forEach(id => L.delete(id));
   return L;
 }
 // Ramo compresso (fold sul blocco): i discendenti restano nei dati con le loro posizioni, ma non si vedono;
@@ -182,6 +197,7 @@ function notesLayout(tree) {
     const lines = wrap(nt.text || 'Nota', 220, CNOTE_FONT, 10);
     NL.set(nt.id, { x: nt.x, y: nt.y, lines, w: Math.max(60, Math.max(...lines.map(s => tw(s, CNOTE_FONT))) + 22), h: lines.length * 18 + 14 });
   });
+  NL.full = new Map(NL); groupHidden(tree).forEach(id => NL.delete(id)); // note dentro un gruppo compresso
   return NL;
 }
 const shiftTree = (n, dx, dy) => walk(n, d => { if (hasPos(d)) { d.x = Math.round(d.x + dx); d.y = Math.round(d.y + dy); } });
@@ -221,6 +237,13 @@ const isStr = e => !!(e && e.str);
 const lineOf = e => (e && e.line) || (e && e.dash ? 'dash' : isStr(e) ? 'dot' : 'solid');
 // spessore: scelto sul collegamento (lw) o di serie (puntini 2.4, dall'idea primaria 2.2, altrimenti 1.5)
 const lwOf = (e, depth) => (e && e.lw) || (lineOf(e) === 'dot' ? 2.4 : depth === 0 ? 2.2 : 1.5);
+// distanza tra puntini o trattini (gap, px; di serie 5) e opacità della linea (op, 0.1–1; di serie 1)
+const GAP = 5, gapOf = e => (e && e.gap) || GAP, eopOf = e => (e && e.op) || 1;
+function edgeStyle(e, w) {
+  const ln = lineOf(e), da = ln === 'dot' ? `1 ${gapOf(e)}` : ln === 'dash' ? `7 ${gapOf(e)}` : '';
+  return `stroke-width:${w}px;` + (da && e && e.gap ? `stroke-dasharray:${da};` : '') + (e && e.op ? `stroke-opacity:${e.op};` : '');
+}
+const linkData = key => { const L = allLinks(curTree()).find(x => x.key === key); return L ? L.e : {}; };
 function linkWidth(key) { const t = curTree(), L = allLinks(t).find(x => x.key === key); return L ? lwOf(L.e, (S.L.get(L.from.id) || {}).depth) : 1.5; }
 // pallino sotto il punto p (coordinate della tela): le aree di presa dei pallini vicini si sovrappongono, quindi
 // vale il più vicino, non quello disegnato sopra; `want` = tipo preferito quando ce ne sono più nel raggio
@@ -301,39 +324,20 @@ const TIP = {
 };
 const PIN_TIP = ' · Clic: tipo, duplica, elimina';
 
-// Anteprima dei rami compressi: il blocco con i suoi rami aperti, in piccolo (copia, i dati non cambiano)
-function foldMini(n, key) {
-  const t = JSON.parse(JSON.stringify(n)); delete t.fold; delete t.foldOut; delete t.foldPrev; delete t.edge; t.primary = !!n.primary;
-  if (key) t.children = t.children.filter((c, i) => pinKey(n, n.children[i]) === key); // solo i rami di quel pallino
-  const L = mindLayout(t); return { t, L, b: levelBounds(L, new Map()) };
-}
-// schema dei rami compressi disegnato sulla tela, sotto il blocco (tasto destro → Mostra anteprima)
-function foldPreviewMarkup(n, l, live) {
-  const { t, L, b } = foldMini(n);
-  const pad = 14, head = 20, k = Math.min(0.55, 300 / (b.w + pad * 2), 190 / (b.h + pad * 2));
-  const w = Math.max(170, (b.w + pad * 2) * k), h = (b.h + pad * 2) * k + head, x = l.x, y = l.y + l.h + 16;
-  const title = `Rami compressi · ${countDesc(n)} blocchi`;
-  return `<g class="subprev"${live ? ` data-foldprev="${n.id}"` : ''}>${live ? '<title>Clic per aprire i rami a ventaglio</title>' : ''}` +
-    `<path class="splead" d="M${x + 18},${l.y + l.h} L${x + 18},${y}"/>` +
-    `<rect class="spbox" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/>` +
-    `<text class="sptitle" x="${x + 10}" y="${y + 14}">${esc(ell(title, w - 18, `600 10.5px ${FB}`))}</text>` +
-    `<g transform="translate(${x + (w - b.w * k) / 2 - b.x * k},${y + head + pad * k - b.y * k}) scale(${k})">${treeMarkup(t, L, new Map(), false, false)}</g></g>`;
-}
-
 // markup SVG della mappa; live = tela interattiva (selezione, pallini, maniglie), altrimenti anteprima/esportazione
-// previews = disegna anche gli schemi dei rami compressi con l'anteprima accesa
-function treeMarkup(tree, L, NL, live, previews = live) {
+function treeMarkup(tree, L, NL, live) {
   const single = live && S.sels.size === 1 && !editing, lk = live ? S.link : null;
   const F = live ? findMarks(tree, L) : null, fcls = id => !F || !F.on ? '' : (F.hit.has(id) ? ' hit' : '') + (F.cur === id ? ' cur' : '') + (F.inside.has(id) ? ' hitin' : '');
-  const E = new Map(); let edges = '', notes = '', nodes = '', prevs = '';
+  const E = new Map(); let edges = '', notes = '', nodes = '';
   allLinks(tree).forEach(({ key, from, to, e }) => {
-    const pl = L.get(from.id), cl = L.get(to.id); if (!pl || !cl) return;
+    const PX = L.px || new Map(), pl = L.get(from.id) || PX.get(from.id), cl = L.get(to.id) || PX.get(to.id);
+    if (!pl || !cl || (pl.gid && pl.gid === cl.gid)) return; // dentro lo stesso gruppo compresso: non si vede
     const g = linkGeom(from, pl, to, cl, e);
     // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
     const nx = g.mx + (e.nx || 0), ny = g.my + (e.ny || 0);
     E.set(key, { x: nx, y: ny });
     const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (live && S.esel === key ? ' sel' : '');
-    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="stroke-width:${lwOf(e, pl.depth) + (live && S.esel === key ? 1 : 0)}px" d="${g.d}"/>` +
+    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="${edgeStyle(e, lwOf(e, pl.depth) + (live && S.esel === key ? 1 : 0))}" d="${g.d}"/>` +
       (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
     if (e.note && !(editing && editing.kind === 'edge' && editing.id === key)) {
       const lines = wrap(e.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
@@ -346,7 +350,7 @@ function treeMarkup(tree, L, NL, live, previews = live) {
   walkAll(tree, n => {
     const l = L.get(n.id); if (!l) return; // dentro un ramo compresso
     const sel = live && S.sels.has(n.id), dd = Math.min(l.depth, 2), pad = (l.h - l.lines.length * l.lh) / 2;
-    const fsSt = n.fs || n.fw ? ` style="${n.fs ? `font-size:${n.fs}px;` : ''}${n.fw ? `font-weight:${n.fw}` : ''}"` : '';
+    const fsSt = n.fs || n.fw || n.it ? ` style="${n.fs ? `font-size:${n.fs}px;` : ''}${n.fw ? `font-weight:${n.fw};` : ''}${n.it ? 'font-style:italic' : ''}"` : '';
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
     const txt = l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
     // ramo compresso: etichetta "+N" sull'angolo in alto a sinistra; con un clic si riapre, passandoci sopra l'anteprima
@@ -391,7 +395,6 @@ function treeMarkup(tree, L, NL, live, previews = live) {
         `<circle class="hubhit" cx="${c}" cy="${c}" r="${c}"/>${spokes ? `<path class="edge hubline" d="${spokes}"/>` : ''}<circle class="hubdot" cx="${c}" cy="${c}" r="5.5"/>` + anchors + fold + `</g>`;
       return;
     }
-    if (previews && folded && n.foldPrev) prevs += foldPreviewMarkup(n, l, live);
     const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${(lk && lk.over === n.id && !lk.overAnc) || (live && S.dropOn === n.id) ? ' drop' : ''}${fcls(n.id)}`;
     // testo troncato (troppe righe o riga troppo lunga): al passaggio si legge per intero
     const flat = s => String(s || '').replace(/\s+/g, ' ').trim(), cut = live && n.text && flat(l.lines.join(' ')) !== flat(n.text);
@@ -409,6 +412,7 @@ function treeMarkup(tree, L, NL, live, previews = live) {
   let cnotes = '';
   (tree.notes || []).forEach(nt => {
     const l = NL.get(nt.id), sel = live && S.sels.has(nt.id), hide = editing && editing.kind === 'note' && editing.id === nt.id;
+    if (!l) return; // nascosta in un gruppo compresso
     cnotes += `<g class="cnote${sel ? ' sel' : ''}${fcls(nt.id)}${hide ? ' editing' : ''}"${live ? ` data-note="${nt.id}"` : ''} transform="translate(${l.x},${l.y})">` +
       (sel ? `<rect class="ring" x="-4" y="-4" width="${l.w + 8}" height="${l.h + 8}" rx="7"/>` : '') +
       `<rect class="nbox" width="${l.w}" height="${l.h}" rx="4"/><rect class="nbar" width="3" height="${l.h}" rx="1.5"/>` +
@@ -416,18 +420,33 @@ function treeMarkup(tree, L, NL, live, previews = live) {
   });
   // gruppi: riquadri sotto a tutto; si prendono dal titolo o dal bordo, l'interno lascia passare i clic
   let grps = '';
+  const GH = groupHidden(tree);
   (tree.groups || []).forEach(g => {
+    if (GH.has(g.id)) return; // dentro un gruppo compresso
     const sel = live && S.sels.has(g.id), hide = editing && editing.kind === 'group' && editing.id === g.id;
-    grps += `<g class="grp${sel ? ' sel' : ''}${hide ? ' editing' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
-      `<rect class="gbox" width="${g.w}" height="${g.h}" rx="12"/>` +
-      (live ? `<rect class="ghit" width="${g.w}" height="${g.h}" rx="12"/><rect class="ghead" width="${g.w}" height="${GHEAD}" rx="12"><title>Trascina per spostare il gruppo con il suo contenuto · Doppio clic: rinomina</title></rect>` : '') +
-      `<text class="gtitle" x="14" y="19">${esc(ell(g.text || 'Gruppo', g.w - 28, GFONT))}</text>` +
-      (sel ? `<rect class="ring" x="-5" y="-5" width="${g.w + 10}" height="${g.h + 10}" rx="15"/>` : '') +
-      (sel && single ? `<rect class="rsz" data-rsz="1" x="${g.w - 4}" y="${g.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
+    const r = gRect(g), hd = gHead(g), ln = glineOf(g), fs = gfsOf(g);
+    const boxSt = `stroke-width:${gbwOf(g)}px;fill-opacity:${gfoOf(g)};` + (ln === 'none' ? 'stroke:none;' : `stroke-dasharray:${GLINE[ln]};`);
+    // a destra nella barra: "+N" del gruppo compresso e il lucchetto del gruppo bloccato
+    const cnt = g.fold ? (g.hide || []).filter(id => findM(tree, id) || findNote(tree, id)).length : 0;
+    const bw = tw('+' + cnt, `600 11px ${FB}`) + 12, bx = r.w - bw - 10, by = (hd - 18) / 2;
+    const badge = g.fold ? `<g class="fold"${live ? ` data-gfold="${g.id}"` : ''}>${live ? '<title>Clic: espandi il gruppo</title>' : ''}<rect x="${bx}" y="${by}" width="${bw}" height="18" rx="9"/>` +
+      `<text x="${bx + bw / 2}" y="${by + 13}" text-anchor="middle">+${cnt}</text></g>` : '';
+    const lx = (g.fold ? bx : r.w) - 22, lock = g.lock && live ? `<g class="glock" transform="translate(${lx},${Math.round((hd - 13) / 2)})"><title>Gruppo bloccato</title><rect x="0.5" y="5.5" width="10" height="7" rx="1.5"/><path d="M2.8 5.5V3.8a2.7 2.7 0 0 1 5.4 0V5.5"/></g>` : '';
+    const right = (g.fold ? bw + 10 : 0) + (lock ? 24 : 0), cx = g.ta === 'c';
+    const tx = cx ? (r.w - right) / 2 : 14, tmax = r.w - 28 - right;
+    grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
+      `<rect class="gbox" width="${r.w}" height="${r.h}" rx="12" style="${boxSt}"/>` +
+      (live ? `<rect class="ghit" width="${r.w}" height="${r.h}" rx="12"/><rect class="ghead" width="${r.w}" height="${hd}" rx="12"><title>${g.lock ? 'Gruppo bloccato' : 'Trascina per spostare il gruppo con il suo contenuto'} · Doppio clic: rinomina</title></rect>` : '') +
+      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${esc(ell(g.text || 'Gruppo', tmax, gFont(g)))}</text>` +
+      badge + lock +
+      (sel ? `<rect class="ring" x="-5" y="-5" width="${r.w + 10}" height="${r.h + 10}" rx="15"/>` : '') +
+      (sel && single && !g.fold && !g.lock ? `<rect class="rsz" data-rsz="1" x="${r.w - 4}" y="${r.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
   });
   if (live) S.E = E;
   const rubber = lk && lk.x2 != null && !lk.pinMove ? `<path class="rubber" d="M${lk.x1},${lk.y1} L${lk.x2},${lk.y2}"/>` : '';
-  return `<g>${grps}</g><g>${prevs}</g><g>${edges}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
+  // binario (Maiusc + trascina): linea guida lungo la direzione in cui scorre il blocco
+  const rl = live && S.rail, rail = rl ? `<path class="rail" d="${rl.dir === 'h' ? `M${rl.x - 1e4},${rl.y} H${rl.x + 1e4}` : `M${rl.x},${rl.y - 1e4} V${rl.y + 1e4}`}"/>` : '';
+  return `<g>${grps}</g>${rail}<g>${edges}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
 }
 
 function render() {
@@ -762,16 +781,146 @@ function dragMovers(t) {
   walkAll(t, d => { if (S.sels.has(d.id)) addB(d); });
   (t.notes || []).filter(nt => S.sels.has(nt.id)).forEach(add);
   (t.groups || []).filter(g => S.sels.has(g.id)).forEach(g => {
-    add(g);
-    walkAll(t, d => { const l = S.L.get(d.id); if (l && within(l, g)) addB(d); });
-    (t.notes || []).forEach(nt => { const l = S.NL.get(nt.id); if (l && within(l, g)) add(nt); });
-    t.groups.forEach(h => { if (h !== g && within(h, g)) add(h); });
+    add(g); groupItems(t, g).forEach(i => i.kind === 'node' ? addB(i.o) : add(i.o));
   });
   return out;
 }
 
+/* ---------- copia e incolla lo stile ---------- */
+// Stile di un blocco (colore, testo, peso, bordo, opacità) o di un collegamento (forma, tratto, spessore, distanza dei
+// puntini, opacità): si copiano i valori come si vedono, così chi li riceve appare uguale. S.style = { kind, data }.
+// Testo, posizione, dimensione, pallini e note restano quelli di chi riceve lo stile.
+function copyStyle() {
+  const t = curTree();
+  if (S.esel) {
+    const e = edgeData(t, S.esel) || {};
+    S.style = { kind: 'edge', data: { shape: e.shape || '', line: lineOf(e), lw: linkWidth(S.esel), gap: gapOf(e), op: eopOf(e) } };
+    return toast('Stile del collegamento copiato');
+  }
+  const g = S.sel && findGroup(t, S.sel);
+  if (g) {
+    S.style = { kind: 'group', data: { color: hasColor(g) ? g.color : null, line: glineOf(g), bw: gbwOf(g), fo: gfoOf(g), tfs: gfsOf(g), tfw: gfwOf(g), ta: g.ta || 'l', ti: !!g.ti } };
+    return toast('Stile del gruppo copiato');
+  }
+  const f = S.sel && findM(t, S.sel), l = f && S.L.get(f.n.id);
+  if (!f || !l) return toast('Seleziona un blocco o un collegamento');
+  const n = f.n;
+  S.style = { kind: 'node', data: { color: hasColor(n) ? n.color : null, fs: fsOf(n, l.depth), fw: fwOf(n, l.depth), bw: bwOf(n, l.depth), op: n.op ?? null, it: n.it ? true : null } };
+  toast('Stile del blocco copiato');
+}
+function pasteStyle() {
+  const st = S.style; if (!st) return toast('Nessuno stile copiato');
+  if (S.esel) {
+    if (st.kind !== 'edge') return toast('Lo stile copiato è di un blocco: incollalo su un blocco');
+    setEdge(S.esel, { ...st.data, dash: false }); return toast('Stile incollato');
+  }
+  const gids = [...S.sels].filter(id => findGroup(curTree(), id));
+  if (gids.length && st.kind === 'group') { setGroupStyle(st.data, gids); return toast('Stile incollato'); }
+  if (gids.length && ![...S.sels].some(id => S.L.has(id))) return toast('Lo stile copiato non è di un gruppo');
+  if (![...S.sels].some(id => S.L.has(id))) return toast('Seleziona un blocco o un collegamento');
+  if (st.kind !== 'node') return toast(st.kind === 'group' ? 'Lo stile copiato è di un gruppo: incollalo su un gruppo' : 'Lo stile copiato è di un collegamento: incollalo su un collegamento');
+  eachSelected(n => Object.entries(st.data).forEach(([k, v]) => { if (v === null) delete n[k]; else n[k] = v; }));
+  toast('Stile incollato');
+}
+
+/* ---------- allinea e spazia ---------- */
+// Blocchi e note selezionati: allineati a un lato (o al centro) del riquadro che li contiene tutti, oppure
+// equidistanti (stesso spazio vuoto tra uno e l'altro; il primo e l'ultimo restano dove sono, se c'è posto).
+// Un blocco con i rami compressi si porta dietro i rami nascosti, come quando lo si trascina.
+const ARRANGE = { al: 1, ac: 1, ar: 1, at: 1, am: 1, ab: 1, dh: 1, dv: 1 };
+function arrangeSelected(op) {
+  const t = curTree(), items = [...S.sels].map(id => {
+    const f = findM(t, id); if (f && S.L.get(id)) return { o: f.n, l: S.L.get(id), node: true };
+    const nt = findNote(t, id); return nt && S.NL.get(id) ? { o: nt, l: S.NL.get(id) } : null;
+  }).filter(Boolean);
+  const dist = op[0] === 'd';
+  if (items.length < (dist ? 3 : 2)) return toast(dist ? 'Seleziona almeno tre blocchi' : 'Seleziona almeno due blocchi');
+  const locked = lockedSet(t); if (items.some(i => locked.has(i.o))) return toast('Alcuni elementi sono in un gruppo bloccato');
+  const x1 = Math.min(...items.map(i => i.l.x)), x2 = Math.max(...items.map(i => i.l.x + i.l.w));
+  const y1 = Math.min(...items.map(i => i.l.y)), y2 = Math.max(...items.map(i => i.l.y + i.l.h));
+  items.forEach(i => { i.x = i.l.x; i.y = i.l.y; });
+  if (op === 'al') items.forEach(i => { i.x = x1; });
+  else if (op === 'ac') items.forEach(i => { i.x = (x1 + x2) / 2 - i.l.w / 2; });
+  else if (op === 'ar') items.forEach(i => { i.x = x2 - i.l.w; });
+  else if (op === 'at') items.forEach(i => { i.y = y1; });
+  else if (op === 'am') items.forEach(i => { i.y = (y1 + y2) / 2 - i.l.h / 2; });
+  else if (op === 'ab') items.forEach(i => { i.y = y2 - i.l.h; });
+  else {
+    const [p, s] = op === 'dh' ? ['x', 'w'] : ['y', 'h'];
+    items.sort((a, b) => (a.l[p] + a.l[s] / 2) - (b.l[p] + b.l[s] / 2));
+    const first = items[0].l, last = items[items.length - 1].l;
+    // se si sovrapporrebbero (blocchi già incolonnati), si stendono con uno spazio minimo e l'ultimo si sposta
+    const gap = Math.max(24, (last[p] + last[s] - first[p] - items.reduce((k, i) => k + i.l[s], 0)) / (items.length - 1));
+    let at = first[p]; items.forEach(i => { i[p] = at; at += i.l[s] + gap; });
+  }
+  mutate(() => items.forEach(i => {
+    const dx = Math.round(i.x - i.l.x), dy = Math.round(i.y - i.l.y); if (!dx && !dy) return;
+    const mv = o => { o.x = Math.round(o.x + dx); o.y = Math.round(o.y + dy); };
+    if (!i.node) return mv(i.o);
+    mv(i.o); i.o.children.forEach(c => { if (isFoldedChild(i.o, c)) walk(c, d => { if (hasPos(d)) mv(d); }); });
+  }));
+}
+
 /* ---------- gruppi ---------- */
 const findGroup = (tree, id) => (tree.groups || []).find(g => g.id === id);
+const GLINE = { solid: 'none', dash: '6 4', dot: '0.1 4.5' };
+const glineOf = g => g.line || 'dash', gbwOf = g => g.bw ?? 1.2, gfoOf = g => g.fo ?? 0.08;
+const gfsOf = g => g.tfs || 13, gfwOf = g => g.tfw || 600, gFont = g => `${g.ti ? 'italic ' : ''}${gfwOf(g)} ${gfsOf(g)}px ${FB}`; // ti = titolo in corsivo
+const gHead = g => Math.max(GHEAD, Math.round(gfsOf(g) + 15)); // la barra del titolo cresce con il titolo
+// riquadro visibile: compresso = solo la barra, larga almeno quanto titolo, "+N" e lucchetto
+const gRect = g => g.fold ? { x: g.x, y: g.y, w: Math.max(g.w, Math.ceil(tw(g.text || 'Gruppo', gFont(g))) + 80 + (g.lock ? 24 : 0)), h: gHead(g) } : g;
+// id nascosti dai gruppi compressi (blocchi, note, gruppi)
+function groupHidden(tree) { const H = new Set(); (tree.groups || []).forEach(g => { if (g.fold) (g.hide || []).forEach(id => H.add(id)); }); return H; }
+// contenuto di un gruppo: ciò che vi sta tutto dentro (contando anche gli elementi nascosti) oppure, se è compresso,
+// gli elementi che ha nascosto più ciò che sta dentro la barra. [{ o, id, kind: 'node'|'note'|'group', l }]
+function groupItems(t, g) {
+  const LF = S.L.full || S.L, NF = S.NL.full || S.NL, box = gRect(g), hid = g.fold ? new Set(g.hide || []) : null;
+  const inG = (id, l) => !!l && (hid ? hid.has(id) || within(l, box) : within(l, g)), out = [];
+  walkAll(t, d => { const l = LF.get(d.id); if (inG(d.id, l)) out.push({ o: d, id: d.id, kind: 'node', l }); });
+  (t.notes || []).forEach(nt => { const l = NF.get(nt.id); if (inG(nt.id, l)) out.push({ o: nt, id: nt.id, kind: 'note', l }); });
+  (t.groups || []).forEach(h => { if (h !== g && inG(h.id, h)) out.push({ o: h, id: h.id, kind: 'group', l: h }); });
+  return out;
+}
+// oggetti che non si possono spostare: i gruppi bloccati e il loro contenuto
+function lockedSet(t) {
+  const out = new Set(); (t.groups || []).forEach(g => { if (g.lock) { out.add(g); groupItems(t, g).forEach(i => out.add(i.o)); } }); return out;
+}
+// stile dei gruppi selezionati (i valori di serie si tolgono dai dati)
+const GDEF = { line: 'dash', bw: 1.2, fo: 0.08, tfs: 13, tfw: 600, ta: 'l', color: null, ti: false };
+function setGroupStyle(patch, ids = [...S.sels]) {
+  mutate(t => ids.forEach(id => {
+    const g = findGroup(t, id); if (!g) return;
+    Object.entries(patch).forEach(([k, v]) => { if (v === null || v === undefined || v === '' || v === GDEF[k]) delete g[k]; else g[k] = v; });
+  }));
+}
+function toggleGroupFold(id) {
+  const t = curTree(), g = findGroup(t, id); if (!g) return;
+  if (g.fold) return mutate(tt => { const h = findGroup(tt, id); delete h.fold; delete h.hide; });
+  const ids = groupItems(t, g).map(i => i.id);
+  if (!ids.length) return toast('Il gruppo è vuoto');
+  mutate(tt => { const h = findGroup(tt, id); h.fold = true; h.hide = ids; });
+  selectOnly(id); render();
+}
+// adatta al contenuto: il riquadro si stringe o si allarga attorno a ciò che contiene, con il margine di serie
+function fitGroup(id) {
+  const t = curTree(), g = findGroup(t, id); if (!g) return;
+  const its = groupItems(t, g); if (!its.length) return toast('Il gruppo è vuoto');
+  const x1 = Math.min(...its.map(i => i.l.x)), y1 = Math.min(...its.map(i => i.l.y));
+  const x2 = Math.max(...its.map(i => i.l.x + i.l.w)), y2 = Math.max(...its.map(i => i.l.y + i.l.h)), hd = gHead(g);
+  mutate(tt => {
+    const h = findGroup(tt, id);
+    h.x = Math.round(x1 - GPAD); h.y = Math.round(y1 - GPAD - hd);
+    h.w = Math.max(GMIN[0], Math.round(x2 - x1 + GPAD * 2), Math.ceil(tw(h.text || 'Gruppo', gFont(h))) + 28);
+    h.h = Math.max(GMIN[1], Math.round(y2 - y1 + GPAD * 2 + hd));
+  });
+}
+function selectGroupContents(id) {
+  const t = curTree(), g = findGroup(t, id); if (!g) return;
+  if (g.fold) return toast('Espandi il gruppo per selezionarne il contenuto');
+  const ids = groupItems(t, g).map(i => i.id); if (!ids.length) return toast('Il gruppo è vuoto');
+  S.sels = new Set(ids); S.sel = ids[0]; S.esel = null; render();
+}
+const toggleGroupLock = id => mutate(t => { const g = findGroup(t, id); if (g) { if (g.lock) delete g.lock; else g.lock = true; } });
 const within = (l, g) => l.x >= g.x && l.y >= g.y && l.x + l.w <= g.x + g.w && l.y + l.h <= g.y + g.h;
 // riquadro attorno ai blocchi e alle note selezionati, con lo spazio per il titolo
 function groupSelected() {
@@ -795,12 +944,12 @@ function setEdge(key, patch) {
   mutate(t => {
     const e = edgeData(t, key, true); if (!e) return;
     Object.assign(e, patch);
+    if (e.gap === GAP) delete e.gap; if (e.op >= 1) delete e.op; // valori di serie: non si salvano
     // si tolgono i valori vuoti; po (indice dell'uscita) vale anche 0
     Object.keys(e).forEach(k => { if (['id', 'from', 'to'].includes(k) || (k === 'po' && typeof e[k] === 'number')) return; if (!e[k]) delete e[k]; });
     if (!key.startsWith('x:')) { const f = findM(t, key); if (f && !Object.keys(f.n.edge).length) delete f.n.edge; }
   });
 }
-const toggleFoldPreview = id => mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.foldPrev) delete f.n.foldPrev; else f.n.foldPrev = true; });
 
 // riquadro che contiene tutta la mappa (coordinate della tela)
 function levelBounds(L, NL, G = []) {
@@ -820,13 +969,29 @@ function showPreview(id, rect, key) {
   delete t.notes; delete t.groups;
   const SZ = sizeMap(t), hid = foldedSet(t), GL = new Map();
   const add = d => { if (!hid.has(d.id) && hasPos(d) && SZ.get(d.id)) GL.set(d.id, { ...SZ.get(d.id), x: d.x, y: d.y }); };
-  walkAll(t, d => { if (!S.L.has(d.id)) add(d); });
+  walkAll(t, d => { if (!(S.L.full || S.L).has(d.id)) add(d); });
   if (!GL.size) return;
   add(n); // il blocco di partenza (coperto da quello vero), per disegnare i collegamenti verso i rami
   // altri blocchi visibili collegati ai rami (collegamenti aggiuntivi), sempre coperti da quelli veri
   (t.links || []).forEach(x => [[x.from, x.to], [x.to, x.from]].forEach(([a, b]) => { if (GL.has(a) && !GL.has(b)) { const g = findM(t, b); if (g) add(g.n); } }));
+  ghostLayer(treeMarkup(t, GL, new Map(), false));
+}
+function ghostLayer(markup) {
   const g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', 'ghost'); g.id = 'ghost';
-  g.innerHTML = treeMarkup(t, GL, new Map(), false, false);
-  vp.insertBefore(g, vp.children[3] || null); // dopo gruppi, schemi e collegamenti; prima dei blocchi
+  g.innerHTML = markup;
+  vp.insertBefore(g, vp.children[2] || null); // dopo gruppi e collegamenti, prima dei blocchi
+}
+// gruppo compresso: passando sul "+N" il contenuto e il riquadro aperto compaiono in trasparenza
+function showGroupPreview(id) {
+  hidePreview();
+  const t = curTree(), g = findGroup(t, id); if (!g || !g.fold) return;
+  const ids = new Set(g.hide || []), LF = S.L.full || S.L, NF = S.NL.full || S.NL, GL = new Map(), NLh = new Map();
+  ids.forEach(i => { const l = LF.get(i); if (l) GL.set(i, l); const n = NF.get(i); if (n) NLh.set(i, n); });
+  // blocchi fuori dal gruppo collegati a quelli nascosti: disegnati sotto ai veri, servono per le linee
+  allLinks(t).forEach(({ from, to }) => [[from.id, to.id], [to.id, from.id]].forEach(([a, b]) => { if (ids.has(a) && !GL.has(b)) { const l = LF.get(b); if (l) GL.set(b, l); } }));
+  const c = JSON.parse(JSON.stringify(t));
+  c.notes = (c.notes || []).filter(nt => NLh.has(nt.id));
+  c.groups = (c.groups || []).filter(h => h.id === id || ids.has(h.id)).map(h => { delete h.fold; delete h.hide; delete h.lock; return h; });
+  ghostLayer(treeMarkup(c, GL, NLh, false));
 }
 function hidePreview() { const g = $('#ghost'); if (g) g.remove(); }

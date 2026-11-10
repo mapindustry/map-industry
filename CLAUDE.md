@@ -27,9 +27,26 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   `curTree()` = `S.root`; `setLevelRoot()` la sostituisce quando la radice cambia (vedi `promoteRoot`).
   La tela può restare vuota: eliminando l'ultimo blocco la radice diventa `{ void: true }` (contenitore invisibile
   che tiene le note, saltato da `walkAll`/`sizeMap`); `mutate` promuove a radice il primo blocco aggiunto.
+- Stile: Copia/Incolla stile in cima alla sezione Stile dei menu del blocco e del collegamento (`styleItems`; niente scorciatoie): `copyStyle`/`pasteStyle`, `S.style = { kind: 'node'|'edge'|'group', data }`
+  con i valori come si vedono (blocco: colore, fs, fw, bw, op; collegamento: shape, line, lw, gap, op). Si incolla solo
+  sullo stesso tipo; su tutti i blocchi selezionati. Testo, posizione, dimensione, pallini e note non si copiano.
+- Maiusc + trascina: la selezione scorre su un binario orizzontale o verticale (lo spostamento maggiore), con una
+  linea guida (`S.rail`, `.rail`); Maiusc + clic aggiunge o toglie dalla selezione (deciso al rilascio).
+- Disponi (menu del blocco con più blocchi o note selezionati): allinea in colonna (sinistra/centro/destra) o in riga
+  (alto/centro/basso) sul riquadro della selezione; con tre o più, stessa distanza in orizzontale/verticale (spazio vuoto
+  uguale, minimo 24 px). `arrangeSelected(op)`, un passo di annullamento; i rami compressi seguono il blocco.
 - Gruppi (`tree.groups`, `{ id, x, y, w, h, text }`): riquadri con titolo disegnati sotto a tutto. Nessun elenco di
   membri: contiene ciò che vi sta tutto dentro (`within`), e `dragMovers` lo porta con sé. Si prendono dal titolo o
   dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro.
+  - contenuto: `groupItems(t, g)` (usa `S.L.full`/`S.NL.full`, cioè anche gli elementi nascosti dai gruppi compressi);
+  - stile (`groupMenuHtml`, `setGroupStyle`, valori di serie in `GDEF` tolti dai dati): `color`, `line` (`GLINE`), `bw`,
+    `fo` (opacità dello sfondo), `tfs`/`tfw`/`ti` (titolo, `ti` = corsivo; la barra `gHead` cresce con lui), `ta: 'c'`; copia/incolla stile;
+  - Adatta al contenuto (`fitGroup`), Seleziona il contenuto, Blocca (`lock`: `lockedSet` ferma trascinamenti e Disponi,
+    niente maniglia; lucchetto nella barra);
+  - Comprimi (`toggleGroupFold`): `fold` + `hide` = id presi al momento; resta la barra (`gRect`) con "+N"
+    (`data-gfold`: clic espande, passaggio = contenuto in trasparenza, `showGroupPreview`). `mindLayout`/`notesLayout`
+    tolgono i nascosti (`groupHidden`) e tengono tutto in `.full`; i collegamenti verso i nascosti arrivano alla barra
+    (`L.px`). Cerca (`revealHit`) espande il gruppo che nasconde il risultato.
 - Blocco: il modello completo è descritto in testa a `js/mind.js`. In breve:
   - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco; trascinare
     sposta solo i selezionati (i figli restano). Posizioni mancanti: `ensurePositions` (`placeNew` per i nuovi,
@@ -46,7 +63,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - Rami compressi: `fold` (tutti i rami) o `foldOut` (`['o:1','s:0']`, solo i rami che partono da quei pallini,
     dal menu del pallino). `mindLayout` toglie da `L` i discendenti (`foldedSet`/`isFoldedChild`), quindi non si
     disegnano né loro né i loro collegamenti; "+N" (sull'angolo, o accanto al pallino) per riaprirli, al passaggio
-    anteprima in trasparenza sulla tela, dove starebbero da aperti (`showPreview` → `<g id="ghost">` sotto ai blocchi); `foldPrev` = schema in piccolo sotto il blocco. Trascinando il blocco i rami nascosti
+    anteprima in trasparenza sulla tela, dove starebbero da aperti (`showPreview` → `<g id="ghost">` sotto ai blocchi). Lo schema in piccolo sotto il blocco (`foldPrev`) è stato tolto il 2026-11-10: `flattenSubs` lo cancella dai dati vecchi. Trascinando il blocco i rami nascosti
     lo seguono. Una selezione trascinata e lasciata sopra un blocco vi entra compressa (`foldInto`).
     I rami nuovi o riaperti senza posizione vanno oltre la colonna dei fratelli del genitore (`placeNew`).
   - `tag` = etichetta (sigla o nota breve) su una linguetta sopra il bordo (`tagLeft` evita i pallini in alto);
@@ -54,6 +71,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - collegamenti: quello principale è il legame padre→figlio dell'albero (`edge` sul figlio: `po`, `pi`, `note`,
     `shape` (vuoto = morbida, `'st'` dritta, `'sq'` squadrata), `line` (`solid`/`dash`/`dot`, vedi `lineOf`: di serie
     puntini per la struttura e continuo per il resto; `dash: true` è il formato vecchio), `lw` (spessore, `lwOf`),
+    `gap` (distanza tra puntini/trattini, `gapOf`, di serie 5), `op` (opacità della linea, `eopOf`; `edgeStyle` li applica),
     `nx`, `ny`; `str` + `sp`
     per un collegamento di struttura);
     i **collegamenti aggiuntivi** (più ingressi per blocco) stanno in `tree.links`
@@ -62,7 +80,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     è senza genitore, altrimenti un collegamento aggiuntivo; vieta sé stesso, doppioni e doppio senso.
   - `hub` = **svincolo**: blocco-punto senza testo (`HUB` px), tappa di un collegamento (menu del collegamento →
     Inserisci uno svincolo, `insertOnLink(key, true)`); pallini visibili solo al passaggio o con la selezione.
-  - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
+  - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.
 - Selezione di un collegamento: `S.esel` = chiave. Eliminare il principale = `detach` (il blocco resta libero, stessa
@@ -99,7 +117,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Note dei collegamenti: pillole chiare in corsivo (`--enote-*`), ben diverse dai blocchi e dalle note gialle della tela.
 - Collegamenti sempre neutri (`--edge`), mai del colore del blocco. Pallini sempre visibili: ingresso `--anc-in`
   (bianco), uscita `--anc-out` (grigio scuro con bordo chiaro), area di presa più grande del pallino.
-- `--canvas-inner` = sfondo delle anteprime dei rami compressi. Font: Instrument Sans. Logo: cerchi collegati.
+- Font: Instrument Sans. Logo: cerchi collegati.
 
 ## Verifica
 Nessun test automatico: `python -m http.server 8765`, prova le funzioni toccate, ricarica per il salvataggio,

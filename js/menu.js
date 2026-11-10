@@ -25,7 +25,42 @@ const seg = (label, opts) => `<div class="mrow seg"><span>${label}</span><div cl
   opts.map(([a, name, on, svg]) => `<button class="sg${on ? ' on' : ''}" data-a="${a}" title="${name}" aria-label="${name}" aria-pressed="${on}">${svg}</button>`).join('') + `</div></div>`;
 const ico = d => `<svg viewBox="0 0 28 14" width="28" height="14" aria-hidden="true"><path d="${d}"/></svg>`;
 const icoLine = da => `<svg viewBox="0 0 28 14" width="28" height="14" aria-hidden="true"><path d="M3 7H25"${da ? ` stroke-dasharray="${da}"` : ''}/></svg>`;
+// in cima alla sezione Stile: copia lo stile, e incollalo se quello copiato è dello stesso tipo (blocco o collegamento)
+const styleItems = (kind, n) => item('stcopy', 'Copia stile') +
+  (S.style && S.style.kind === kind ? item('stpaste', n > 1 ? `Incolla stile su ${n} blocchi` : 'Incolla stile') : '');
 const plural = (n, one, many) => n === 1 ? one : `${n} ${many}`;
+// corsivo del testo (blocchi) o del titolo (gruppi): Normale | Corsivo, il menu resta aperto
+const italicSeg = (p, on) => seg('Stile', [[p + '-off', 'Normale', !on, '<span class="sgt">Aa</span>'], [p + '-on', 'Corsivo', on, '<span class="sgt it">Aa</span>']]);
+// fila dei colori (blocchi e gruppi); cur = colore attuale ('' = nessuno, null = misto)
+const swatches = cur => `<div class="sws" role="group" aria-label="Colore">` +
+  `<button class="sw none${cur === '' ? ' on' : ''}" data-c="" title="Nessun colore" aria-label="Nessun colore"></button>` +
+  [0, 1, 2, 3, 4, 5].map(i => `<button class="sw c${i}${cur === String(i) ? ' on' : ''}" data-c="${i}" aria-label="Colore ${i + 1}"></button>`).join('') + `</div>`;
+
+/* ---------- gruppo ---------- */
+// azioni (rinomina, comprimi, seleziona e adatta al contenuto, blocca), Sciogli, poi lo stile: colore in alto come
+// per i blocchi, bordo, spessore, sfondo, titolo. Tutto ciò che si regola lascia aperto il menu.
+function groupMenuHtml(g) {
+  const t = curTree(), its = groupItems(t, g), cnt = its.filter(i => i.kind !== 'group').length, ln = glineOf(g);
+  const gs = [...S.sels].filter(id => findGroup(t, id)).length, fo = Math.round(gfoOf(g) * 100), ta = g.ta || 'l';
+  const box = da => `<svg viewBox="0 0 28 14" width="28" height="14" aria-hidden="true"><rect x="4" y="2" width="20" height="10" rx="3"${da ? ` stroke-dasharray="${da}"` : ''}/></svg>`;
+  return title('Gruppo', g.lock ? 'Bloccato: non si sposta' : 'Trascinalo dal titolo o dal bordo') + swatches(hasColor(g) ? String(g.color) : '') + SEP +
+    item('gedit', 'Rinomina', '', 'F2') +
+    item('gfold', g.fold ? 'Espandi il gruppo' : 'Comprimi il gruppo', '', plural(cnt, '1 elemento', 'elementi'), g.fold ? '' : 'Resta solo la barra del titolo') +
+    (g.fold ? '' : item('gsel', 'Seleziona il contenuto')) + item('gfit', 'Adatta al contenuto') +
+    item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') + SEP +
+    item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + SEP +
+    head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'group' ? item('stpaste', gs > 1 ? `Incolla stile su ${gs} gruppi` : 'Incolla stile') : '') +
+    seg('Bordo', [['gl-solid', 'Continuo', ln === 'solid', box('')], ['gl-dash', 'Tratteggiato', ln === 'dash', box('4 3')],
+      ['gl-dot', 'A puntini', ln === 'dot', box('0.1 3')], ['gl-none', 'Nessun bordo', ln === 'none', box('0 40')]]) +
+    stepper('Spessore', 'gbw', gbwOf(g) + ' px', 'vgbw', 'Bordo più sottile', 'Bordo più spesso') +
+    `<div class="mrow"><span>Sfondo</span><input type="range" id="mgfo" min="0" max="60" step="2" value="${fo}" aria-label="Opacità dello sfondo del gruppo"><span class="val" id="vgfo">${fo}%</span></div>` +
+    head('Titolo') + stepper('Testo', 'gfs', gfsOf(g) + ' px', 'vgfs', 'Titolo più piccolo', 'Titolo più grande') +
+    `<div class="mrow wide"><span>Peso</span><select id="mgfw" aria-label="Peso del titolo">${FW.map(([v, l]) => `<option value="${v}"${gfwOf(g) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>` +
+    italicSeg('gti', !!g.ti) +
+    seg('Posizione', [['gta-l', 'A sinistra', ta === 'l', ico('M4 4H18M4 10H13')], ['gta-c', 'Al centro', ta === 'c', ico('M7 4H21M9.5 10H18.5')]]);
+}
+// gruppi su cui agiscono le regolazioni dello stile: quelli selezionati (almeno quello del menu)
+const menuGroups = () => { const t = curTree(), ids = [...S.sels].filter(id => findGroup(t, id)); return ids.length ? ids : [MENU.id]; };
 
 /* ---------- blocco ---------- */
 function nodeMenuHtml() {
@@ -33,9 +68,7 @@ function nodeMenuHtml() {
   const one = nodes.length === 1 ? nodes[0] : null, prim = findM(t, S.sel) ? findM(t, S.sel).n : nodes[0], pl = S.L.get(prim.id);
   if (one && one.hub) return hubMenuHtml(one, t);
   const cur = one ? (hasColor(one) ? String(one.color) : '') : null;
-  let h = title(one ? 'Blocco' : `${nodes.length} blocchi`) + `<div class="sws" role="group" aria-label="Colore">` +
-    `<button class="sw none${cur === '' ? ' on' : ''}" data-c="" title="Nessun colore" aria-label="Nessun colore"></button>` +
-    [0, 1, 2, 3, 4, 5].map(i => `<button class="sw c${i}${cur === String(i) ? ' on' : ''}" data-c="${i}" aria-label="Colore ${i + 1}"></button>`).join('') + `</div>` + SEP;
+  let h = title(one ? 'Blocco' : `${nodes.length} blocchi`) + swatches(cur) + SEP;
   if (one) {
     const nd = countDesc(one);
     h += item('edit', 'Rinomina', '', 'F2') +
@@ -44,7 +77,6 @@ function nodeMenuHtml() {
       item('primary', 'Idea primaria', one.primary ? ' on' : '') + SEP;
     if (one.children.length) h +=
       item('fold', one.fold ? 'Espandi i rami' : 'Comprimi i rami', '', plural(nd, '1 blocco', 'blocchi')) +
-      (one.fold ? item('foldprev', 'Anteprima dei rami', one.foldPrev ? ' on' : '') : '') +
       item('selbranch', 'Seleziona il ramo') + SEP;
   }
   h += item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') +
@@ -52,11 +84,21 @@ function nodeMenuHtml() {
     item('group', 'Raggruppa', '', 'Ctrl+G') + SEP +
     (one && findM(t, one.id).p ? item('detach', 'Stacca dal collegamento') : '') +
     item('del', nodes.length > 1 ? `Elimina ${nodes.length} blocchi` : 'Elimina', ' dng', 'Canc');
+  // più blocchi (o note) selezionati: allinea e spazia, il menu resta aperto per provarne più d'uno
+  const many = [...S.sels].filter(id => S.L.has(id) || S.NL.has(id)).length;
+  if (many > 1) h += SEP + head('Disponi') +
+    seg('Colonna', [['al', 'Allinea a sinistra', false, ico('M4 1V13M8 4.5H23M8 9.5H17')], ['ac', 'Centra in colonna', false, ico('M14 1V13M6 4.5H22M9 9.5H19')],
+      ['ar', 'Allinea a destra', false, ico('M24 1V13M5 4.5H20M11 9.5H20')]]) +
+    seg('Riga', [['at', 'Allinea in alto', false, ico('M6 1.5H22M10.5 4.5V12.5M17.5 4.5V9')], ['am', 'Centra in riga', false, ico('M6 7H22M10.5 2V12M17.5 4V10')],
+      ['ab', 'Allinea in basso', false, ico('M6 12.5H22M10.5 1.5V9.5M17.5 5V9.5')]]) +
+    (many > 2 ? seg('Spazia', [['dh', 'Stessa distanza in orizzontale', false, ico('M3 2V12M25 2V12M10 4.5V9.5M18 4.5V9.5')],
+      ['dv', 'Stessa distanza in verticale', false, ico('M8 1.5H20M8 12.5H20M11 5.2H17M11 8.8H17')]]) : '');
   // stile e pallini in fondo: il menu è lungo, le azioni restano in vista
-  const op = Math.round((prim.op ?? 1) * 100);
-  h += SEP + head('Stile') +
+  const op =Math.round((prim.op ?? 1) * 100);
+  h += SEP + head('Stile') + styleItems('node', nodes.length) +
     `<div class="mrow"><span>Testo</span><button class="st" data-st="fs" data-d="-1" aria-label="Testo più piccolo">−</button><span class="numw"><input type="number" class="num" id="mfs" min="9" max="48" step="1" value="${fsOf(prim, pl.depth)}" aria-label="Dimensione del testo in px"> px</span><button class="st" data-st="fs" data-d="1" aria-label="Testo più grande">+</button></div>
     <div class="mrow wide"><span>Peso</span><select id="mfw" aria-label="Peso del carattere">${FW.map(([v, t]) => `<option value="${v}"${fwOf(prim, pl.depth) === v ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` +
+    italicSeg('it', !!prim.it) +
     stepper('Bordo', 'bw', bwOf(prim, pl.depth) + ' px', 'vbw', 'Bordo più sottile', 'Bordo più spesso') +
     `<div class="mrow"><span>Opacità</span><input type="range" id="mop" min="10" max="100" step="5" value="${op}" aria-label="Opacità del blocco"><span class="val" id="vop">${op}%</span></div>` +
     (nodes.some(n => n.w || n.h) ? item('autosize', 'Dimensione automatica') : '');
@@ -82,6 +124,20 @@ function refreshStyleVals() {
 // opacità: un solo passo di annullamento per ogni trascinamento del cursore
 let opArmed = true;
 menuEl.addEventListener('input', e => {
+  if (e.target.id === 'meop') { // opacità del collegamento: come quella dei blocchi, un passo di annullamento per gesto
+    const v = +e.target.value / 100; $('#veop').textContent = Math.round(v * 100) + '%';
+    if (opArmed) { snapshot(); opArmed = false; }
+    const ed = edgeData(curTree(), MENU.id, true); if (!ed) return;
+    if (v >= 1) delete ed.op; else ed.op = v;
+    if (!MENU.id.startsWith('x:')) { const f = findM(curTree(), MENU.id); if (f && !Object.keys(f.n.edge).length) delete f.n.edge; }
+    save(); render(); return;
+  }
+  if (e.target.id === 'mgfo') { // opacità dello sfondo del gruppo
+    const v = +e.target.value / 100; $('#vgfo').textContent = Math.round(v * 100) + '%';
+    if (opArmed) { snapshot(); opArmed = false; }
+    const t = curTree(); menuGroups().forEach(id => { const g = findGroup(t, id); if (g) { if (v === GDEF.fo) delete g.fo; else g.fo = v; } });
+    save(); render(); return;
+  }
   if (e.target.id !== 'mop') return;
   const v = +e.target.value / 100; $('#vop').textContent = Math.round(v * 100) + '%';
   if (opArmed) { snapshot(); opArmed = false; }
@@ -89,7 +145,8 @@ menuEl.addEventListener('input', e => {
   save(); render();
 });
 menuEl.addEventListener('change', e => {
-  if (e.target.id === 'mop') opArmed = true;
+  if (e.target.id === 'mop' || e.target.id === 'meop' || e.target.id === 'mgfo') opArmed = true;
+  if (e.target.id === 'mgfw') setGroupStyle({ tfw: +e.target.value }, menuGroups());
   // dimensione scritta a mano (9–48 px) e peso del carattere: valgono per tutti i blocchi selezionati
   if (e.target.id === 'mfs') { const v = Math.round(+e.target.value); if (v) { const fs = clamp(v, 9, 48); e.target.value = fs; eachSelected(n => { n.fs = fs; }); } }
   if (e.target.id === 'mfw') { const v = +e.target.value; eachSelected(n => { n.fw = v; }); }
@@ -138,12 +195,15 @@ cv.addEventListener('contextmenu', e => {
       item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota', '', 'Doppio clic') + (ed.note ? item('enotedel', 'Togli la nota') : '') +
       (ed.nx || ed.ny ? item('enotepos', 'Riporta la nota sulla linea') : '') +
       (isStr(ed) ? '' : SEP + item('einsert', 'Inserisci un blocco intermedio') + item('ehub', 'Inserisci uno svincolo')) + SEP +
-      item('edel', 'Elimina collegamento', ' dng', 'Canc') + SEP + head('Stile') +
+      item('edel', 'Elimina collegamento', ' dng', 'Canc') + SEP + head('Stile') + styleItems('edge', 1) +
       seg('Forma', [['curve', 'Morbida', sh === 'curve', ico('M3 11C13 11 15 3 25 3')], ['straight', 'Dritta', sh === 'st', ico('M3 11L25 3')],
         ['square', 'Squadrata', sh === 'sq', ico('M3 11H14V3H25')]]) +
       seg('Tratto', [['lsolid', 'Continuo', ln === 'solid', icoLine('')], ['ldash', 'Tratteggiato', ln === 'dash', icoLine('5 3')],
         ['ldot', 'A puntini', ln === 'dot', icoLine('0.1 4')]]) +
-      stepper('Spessore', 'lw', linkWidth(id) + ' px', 'vlw', 'Linea più sottile', 'Linea più spessa'), { kind: 'edge', id });
+      stepper('Spessore', 'lw', linkWidth(id) + ' px', 'vlw', 'Linea più sottile', 'Linea più spessa') +
+      // distanza tra puntini o trattini: solo con un tratto non continuo (la riga compare cambiando tratto)
+      `<div id="rgap"${ln === 'solid' ? ' hidden' : ''}>${stepper('Distanza', 'gap', gapOf(ed) + ' px', 'vgap', 'Puntini più vicini', 'Puntini più distanti')}</div>` +
+      `<div class="mrow"><span>Opacità</span><input type="range" id="meop" min="10" max="100" step="5" value="${Math.round(eopOf(ed) * 100)}" aria-label="Opacità del collegamento"><span class="val" id="veop">${Math.round(eopOf(ed) * 100)}%</span></div>`, { kind: 'edge', id });
   }
   if (cn) {
     selectOnly(cn.dataset.note); render();
@@ -152,9 +212,8 @@ cv.addEventListener('contextmenu', e => {
       item('del', 'Elimina nota', ' dng', 'Canc'), { kind: 'note', id: cn.dataset.note });
   }
   if (gr) {
-    selectOnly(gr.dataset.grp); render();
-    return showMenu(e.clientX, e.clientY, title('Gruppo', 'Trascinalo dal titolo o dal bordo') + item('gedit', 'Rinomina', '', 'F2') + SEP +
-      item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano'), { kind: 'group', id: gr.dataset.grp });
+    const id = gr.dataset.grp; if (!S.sels.has(id)) selectOnly(id); else S.sel = id;
+    render(); return showMenu(e.clientX, e.clientY, groupMenuHtml(findGroup(curTree(), id)), { kind: 'group', id });
   }
   const p = toSvg(e.clientX, e.clientY);
   clearSel(); render();
@@ -166,13 +225,26 @@ cv.addEventListener('contextmenu', e => {
 /* ---------- azioni ---------- */
 menuEl.addEventListener('click', e => {
   if (!MENU) return;
-  const sw = e.target.closest('[data-c]'); if (sw) { closeMenu(); return setColor(sw.dataset.c); }
+  const sw = e.target.closest('[data-c]');
+  if (sw) {
+    if (MENU.kind === 'group') { const ids = menuGroups(); closeMenu(); return setGroupStyle({ color: sw.dataset.c === '' ? null : +sw.dataset.c }, ids); }
+    closeMenu(); return setColor(sw.dataset.c);
+  }
   const st = e.target.closest('[data-st]');
   if (st) { // il menu resta aperto mentre si regola lo stile
     const d = +st.dataset.d;
+    if (st.dataset.st === 'gbw' || st.dataset.st === 'gfs') { // gruppo: spessore del bordo (½ px) e dimensione del titolo
+      const g = findGroup(curTree(), MENU.id), bw = st.dataset.st === 'gbw';
+      const v = bw ? clamp(Math.round((gbwOf(g) + d * 0.5) * 10) / 10, 0.5, 6) : clamp(gfsOf(g) + d, 9, 36);
+      setGroupStyle(bw ? { bw: v } : { tfs: v }, menuGroups()); $(bw ? '#vgbw' : '#vgfs').textContent = v + ' px'; return;
+    }
     if (st.dataset.st === 'lw') { // spessore del collegamento, a passi di mezzo pixel
       const w = clamp(Math.round((linkWidth(MENU.id) + d * 0.5) * 10) / 10, 0.5, 8);
       setEdge(MENU.id, { lw: w }); $('#vlw').textContent = w + ' px'; return;
+    }
+    if (st.dataset.st === 'gap') { // distanza tra puntini o trattini, a passi di 1 px
+      const g = clamp(gapOf(linkData(MENU.id)) + d, 2, 30);
+      setEdge(MENU.id, { gap: g }); $('#vgap').textContent = g + ' px'; return;
     }
     if (st.dataset.st === 'pin') { // contatore dei pallini: −/+ toglie l'ultimo o ne aggiunge uno
       const k = st.dataset.k, n = findM(curTree(), MENU.id || S.sel).n, len = pinsOf(n)[PK[k]].length;
@@ -190,6 +262,19 @@ menuEl.addEventListener('click', e => {
   if (a in SH || LN.includes(a)) {
     setEdge(id, a in SH ? { shape: SH[a] } : { line: a.slice(1), dash: false });
     (a in SH ? Object.keys(SH) : LN).forEach(k => { const x = menuEl.querySelector(`[data-a="${k}"]`); x.classList.toggle('on', k === a); x.setAttribute('aria-pressed', k === a); });
+    if (LN.includes(a)) $('#rgap').hidden = a === 'lsolid';
+    return;
+  }
+  if (a in ARRANGE) return arrangeSelected(a); // allinea / spazia: il menu resta aperto
+  // bordo e posizione del titolo del gruppo: il menu resta aperto
+  if (a === 'it-on' || a === 'it-off') { // corsivo dei blocchi selezionati
+    eachSelected(n => { if (a === 'it-on') n.it = true; else delete n.it; });
+    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+    return;
+  }
+  if (a.startsWith('gl-') || a.startsWith('gta-') || a.startsWith('gti-')) {
+    setGroupStyle(a.startsWith('gl-') ? { line: a.slice(3) } : a.startsWith('gti-') ? { ti: a === 'gti-on' } : { ta: a.slice(4) }, menuGroups());
+    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     return;
   }
   closeMenu();
@@ -210,10 +295,11 @@ menuEl.addEventListener('click', e => {
   else if (a === 'pinreset') resetPins(id);
   else if (a === 'einsert') insertOnLink(id);
   else if (a === 'ehub') insertOnLink(id, true);
-  else if (a === 'foldprev') toggleFoldPreview(id);
   else if (a === 'autosize') autoSize();
   else if (a === 'dup') duplicateSelected();
   else if (a === 'copy') copySelected();
+  else if (a === 'stcopy') copyStyle();
+  else if (a === 'stpaste') pasteStyle();
   else if (a === 'paste') pasteClip(M.kind === 'canvas' ? { x: M.x, y: M.y } : null);
   else if (a === 'del') removeSelected();
   else if (a === 'enote') startEdgeNote(id);
@@ -224,6 +310,10 @@ menuEl.addEventListener('click', e => {
   else if (a === 'group') groupSelected();
   else if (a === 'gedit') startGroupEdit(id);
   else if (a === 'ungroup') ungroup(id);
+  else if (a === 'gfold') toggleGroupFold(id);
+  else if (a === 'gsel') selectGroupContents(id);
+  else if (a === 'gfit') fitGroup(id);
+  else if (a === 'glock') toggleGroupLock(id);
   else if (a === 'addblock') addFreeBlock(M.x, M.y);
   else if (a === 'addnote') addCanvasNote(M.x, M.y);
 });

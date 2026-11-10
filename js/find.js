@@ -52,7 +52,12 @@ function revealHit(id) {
   if (S.L.has(id) || S.NL.has(id)) return;
   mutate(t => {
     const par = new Map(); walkAll(t, (n, p) => { if (p) par.set(n.id, p); });
-    let c = findM(t, id).n, p = par.get(c.id);
+    const f = findM(t, id);
+    if (!f) { (t.groups || []).forEach(g => { if (g.fold && (g.hide || []).includes(id)) { delete g.fold; delete g.hide; } }); return; } // nota
+    let c = f.n, p = par.get(c.id);
+    // un gruppo compresso che nasconde il risultato (o un blocco sopra di lui) si espande
+    const chain = new Set([id]); for (let q = p; q; q = par.get(q.id)) chain.add(q.id);
+    (t.groups || []).forEach(g => { if (g.fold && (g.hide || []).some(x => chain.has(x))) { delete g.fold; delete g.hide; } });
     while (p) {
       if (p.fold) delete p.fold;
       if (p.foldOut) { const k = pinKey(p, c); p.foldOut = p.foldOut.filter(x => x !== k); if (!p.foldOut.length) delete p.foldOut; }

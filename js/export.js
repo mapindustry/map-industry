@@ -38,8 +38,7 @@ function snapshotSvg() {
   root.dataset.theme = 'light';
   const t = curTree(), L = mindLayout(t), NL = notesLayout(t);
   const tmp = document.createElementNS(SVGNS, 'svg'); tmp.setAttribute('class', 'exp');
-  // con gli schemi delle strutture interne aperti
-  tmp.innerHTML = `<g>${treeMarkup(t, L, NL, false, true)}</g>`; document.body.appendChild(tmp);
+  tmp.innerHTML = `<g>${treeMarkup(t, L, NL, false)}</g>`; document.body.appendChild(tmp);
   try {
     const g = tmp.firstChild, bb = g.getBBox(); if (!bb.width) return null;
     const x = Math.floor(bb.x - XPAD), y = Math.floor(bb.y - XPAD), w = Math.ceil(bb.width + XPAD * 2), h = Math.ceil(bb.height + XPAD * 2);

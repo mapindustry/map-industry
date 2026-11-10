@@ -10,7 +10,7 @@ const FB = '"Instrument Sans", "Segoe UI", system-ui, sans-serif';
 // views: pan/zoom della mappa · L: layout calcolato dei blocchi visibili
 // projects/pid: progetti salvati e quello aperto · link: collegamento che si sta trascinando
 // E: punti medi dei collegamenti (per le note) · NL: layout delle note sulla tela
-const S = { projects: [], pid: null, root: null, sel: null, sels: new Set(), esel: null, views: {}, undo: [], redo: [], L: null, E: null, NL: null, link: null, clip: null, dropOn: null };
+const S = { projects: [], pid: null, root: null, sel: null, sels: new Set(), esel: null, views: {}, undo: [], redo: [], L: null, E: null, NL: null, link: null, clip: null, dropOn: null, rail: null, style: null };
 const BAR_H = 48; // altezza della barra dei menu
 const cv = $('#cv'), vp = $('#vp');
 

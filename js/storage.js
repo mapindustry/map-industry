@@ -60,10 +60,10 @@ function setLevelRoot(nr) { S.root = nr; }
 // ensurePositions li ridispone accanto al blocco (placeNew). Se la radice interna ripeteva il blocco, sparisce
 // e i suoi rami passano al blocco. I blocchi liberi interni diventano rami anche loro. true = convertito.
 function flattenSubs(level) {
-  const owners = []; walkAll(level, n => { if (n.sub) owners.push(n); });
+  const owners = []; walkAll(level, n => { delete n.foldPrev; if (n.sub) owners.push(n); }); // foldPrev: schema dei rami, tolto il 2026-11-10
   owners.forEach(n => {
     const sub = n.sub; delete n.sub;
-    if (n.subOpen) n.foldPrev = true; delete n.subOpen; // l'anteprima accesa resta accesa
+    delete n.subOpen;
     flattenSubs(sub); // prima quelle annidate
     const same = sub.void || !sub.text || sub.text === n.text;
     let tops;
