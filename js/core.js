@@ -40,4 +40,6 @@ function wrap(t, maxW, font, maxLines = 4) {
   return out;
 }
 let toastT;
+let roT = 0; // avviso della sola lettura: uno ogni tanto
+function roToast() { if (Date.now() - roT > 2500) { roT = Date.now(); toast('Mappa bloccata: clic sul lucchetto in alto per modificarla'); } }
 function toast(t) { const el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2000); }

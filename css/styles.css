@@ -206,6 +206,28 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .tab .tx{flex:none;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--muted);font:400 15px/1 var(--f-body);cursor:pointer;opacity:0}
 .tab:hover .tx,.tab.on .tx,.tab .tx:focus-visible{opacity:1}
 .tab .tx:hover{background:var(--line);color:var(--ink)}
+.lockb{display:flex;align-items:center;gap:6px;margin-left:auto}
+.lockb svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+.lockb:not(.on) .shackle{transform:translate(2.4px,-1.2px) rotate(18deg);transform-origin:11px 7px}
+.lockb.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+body.ro #cv .mn,body.ro #cv .cnote,body.ro #cv .grp .ghead,body.ro #cv .leg{cursor:default}
+body.ro #cv .anc{display:none}
+.ddr .ddm{left:auto;right:0}
+/* finestra di accesso */
+.auth{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:color-mix(in srgb,var(--canvas) 70%,transparent);backdrop-filter:blur(2px)}
+.authbox{position:relative;width:min(360px,calc(100vw - 32px));display:grid;gap:12px;padding:24px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px rgb(0 0 0 / .25);font:400 14px var(--f-body)}
+.authbox h2{margin:0 0 4px;font:700 18px var(--f-body)}
+.authbox label{display:grid;gap:5px;font-weight:600;font-size:13px}
+.authbox input{font:400 15px var(--f-body);color:var(--ink);background:var(--canvas);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.authbox input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.authbox .ago{font:600 14px var(--f-body);color:var(--on-accent);background:var(--accent);border:0;border-radius:8px;padding:10px;cursor:pointer}
+.authbox .ago:disabled{opacity:.6;cursor:default}
+.authbox .amsg{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.authbox .aerr{margin:0;color:var(--crit);font-size:13px}
+.authbox .alinks{margin:0;font-size:13px;color:var(--muted);text-align:center}
+.authbox a{color:var(--accent)}
+.authbox .ax{position:absolute;top:10px;right:10px;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:400 18px/1 var(--f-body);cursor:pointer}
+.authbox .ax:hover{background:var(--band);color:var(--ink)}
 .tadd{flex:none;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:400 18px/1 var(--f-body);cursor:pointer}
 .tadd:hover{background:var(--band);color:var(--ink)}
 #pName:hover{border-color:var(--line)}

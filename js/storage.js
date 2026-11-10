@@ -22,7 +22,7 @@ const findNote = (tree, id) => (tree.notes || []).find(x => x.id === id);
 const curProject = () => S.projects.find(p => p.id === S.pid);
 function load() {
   try {
-    const j = JSON.parse(localStorage.getItem(KEY) || 'null');
+    const j = JSON.parse(localStorage.getItem(storeKey()) || 'null');
     if (j && Array.isArray(j.projects) && j.projects.length) {
       S.projects = j.projects; S.pid = j.projects.some(p => p.id === j.cur) ? j.cur : j.projects[0].id; S.root = curProject().root;
       S.tabs = (j.tabs || []).filter(id => j.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
@@ -30,6 +30,8 @@ function load() {
       return;
     }
   } catch (e) {}
+  // con l'accesso e senza copia nel browser: un segnaposto, sostituito dalle mappe dell'account (cloudSync)
+  if (CL.session) { const p = { id: uid(), name: 'Caricamento…', updated: 0, root: mk('Idea primaria'), cloud: true }; S.projects = [p]; S.pid = p.id; S.tabs = [p.id]; S.root = p.root; return; }
   // primo avvio: recupera la mappa della versione precedente (v2, oppure la mappa mentale aperta nella v1)
   let root = null;
   try { const j = JSON.parse(localStorage.getItem(V2) || 'null'); if (j && j.root) root = j.root; } catch (e) {}
@@ -46,8 +48,8 @@ function load() {
 function writeStore() {
   // la data cambia solo se c'è stata una modifica, non aprendo o lasciando il progetto
   const p = curProject(); p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; }
-  fsSave(p); // anche nel file della cartella, se c'è
-  try { localStorage.setItem(KEY, JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
+  if (CL.session) cloudSave(p); else fsSave(p); // anche online (con l'accesso) o nel file della cartella
+  try { localStorage.setItem(storeKey(), JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
   catch (e) { if (FS.ok) return true; toast('Salvataggio non disponibile in questo browser'); return false; }
 }
 let saveT, dirty = false;
@@ -104,15 +106,20 @@ function pruneSel() {
 // ogni nuova modifica svuota la pila del "rifai"
 function snapshot() { S.undo.push(JSON.stringify(S.root)); if (S.undo.length > 100) S.undo.shift(); S.redo = []; }
 function undo() {
+  if (readOnly()) return roToast();
   if (!S.undo.length) return toast('Niente da annullare');
   S.redo.push(JSON.stringify(S.root));
   S.root = JSON.parse(S.undo.pop()); pruneSel(); save(); render();
 }
 function redo() {
+  if (readOnly()) return roToast();
   if (!S.redo.length) return toast('Niente da rifare');
   S.undo.push(JSON.stringify(S.root));
   S.root = JSON.parse(S.redo.pop()); pruneSel(); save(); render();
 }
 // ogni modifica passa da qui: snapshot per undo → modifica dell'albero visibile → salva → ridisegna
 // su una tela vuota il primo blocco aggiunto (o incollato) diventa la radice dei dati del livello
-function mutate(fn) { $('#hint').hidden = true; snapshot(); fn(curTree()); const t = curTree(); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }
+// sola lettura (lucchetto nella barra): il progetto aperto ha locked; si può guardare, cercare, copiare, aprire i rami
+const readOnly = () => !!(curProject() && curProject().locked) && !S.roOk;
+function mutate(fn) {
+  if (readOnly()) { roToast(); return render(); } $('#hint').hidden = true; snapshot(); fn(curTree()); const t = curTree(); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }

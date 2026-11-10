@@ -1,4 +1,4 @@
-# Officina Mappe
+# Map Industry
 
 Editor di **mappe mentali** nel browser: la tela a schermo intero e, sopra, una barra dei menu sottile.
 Si costruisce una funzione alla volta.

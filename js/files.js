@@ -42,14 +42,14 @@ async function freeName(name, keep) {
   const taken = await fsNames(), base = safeName(name);
   for (let i = 1; ; i++) { const n = base + (i > 1 ? ` (${i})` : '') + '.json'; if (n === keep || !taken.has(n.toLowerCase())) return n; }
 }
-const fileJson = p => JSON.stringify({ app: 'officina-mappe', version: 3, project: { id: p.id, name: p.name, updated: p.updated, root: p.root } }, null, 1);
+const fileJson = p => JSON.stringify({ app: 'officina-mappe', version: 3, project: { id: p.id, name: p.name, updated: p.updated, locked: p.locked || undefined, root: p.root } }, null, 1);
 // una mappa da un file: progetto salvato da qui, oppure una mappa della versione precedente
 function parseProject(text) {
   let j; try { j = JSON.parse(text); } catch (e) { return null; }
   const root = j && j.project && j.project.root || j && j.root || j && j.type === 'mind' && j.data && j.data.root;
   if (!root || !Array.isArray(root.children)) return null;
   flattenSubs(root);
-  return { id: (j.project && j.project.id) || null, name: (j.project && j.project.name) || j.name || root.text || 'Mappa', root };
+  return { id: (j.project && j.project.id) || null, name: (j.project && j.project.name) || j.name || root.text || 'Mappa', locked: !!(j.project && j.project.locked), root };
 }
 
 /* ---------- scrittura (una alla volta, in coda) ---------- */
@@ -65,7 +65,7 @@ async function writeFileNow(p) {
   FS.stamp[p.file] = (await h.getFile()).lastModified; FS.warned = false;
 }
 // chiamata da writeStore dopo ogni salvataggio nel browser
-function fsSave(p) { if (FS.ok && p) return fsQueue(() => writeFileNow(p)); }
+function fsSave(p) { if (FS.ok && p && !CL.session) return fsQueue(() => writeFileNow(p)); }
 
 /* ---------- lettura della cartella ---------- */
 // i progetti diventano i file della cartella. Quelli del browser senza file (nuovi, o di prima della cartella)
@@ -83,7 +83,7 @@ async function fsSync(migrate) {
     if (x) { byFile.delete(x.file); keep.push(mergeFile(p, x)); }
     else if (!p.file || migrate || p.id === S.pid) { delete p.file; keep.push(p); } // da scrivere nella cartella
   });
-  byFile.forEach(x => keep.push({ id: x.id && !keep.some(k => k.id === x.id) ? x.id : uid(), name: x.name, updated: x.time, root: x.root, file: x.file }));
+  byFile.forEach(x => keep.push({ id: x.id && !keep.some(k => k.id === x.id) ? x.id : uid(), name: x.name, updated: x.time, root: x.root, file: x.file, ...(x.locked ? { locked: true } : {}) }));
   S.projects = keep;
   if (!S.projects.some(p => p.id === S.pid)) { S.pid = [...S.projects].sort((a, b) => b.updated - a.updated)[0].id; S.root = curProject().root; S.undo = []; S.redo = []; }
   S.tabs = S.tabs.filter(id => S.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
@@ -95,7 +95,7 @@ function mergeFile(p, x) {
   FS.stamp[x.file] = x.time; p.file = x.file;
   const local = p.id === S.pid && dirty;
   if (!local && x.time > (p.updated || 0) - 1000) {
-    p.root = x.root; p.name = x.name; p.updated = x.time;
+    p.root = x.root; p.name = x.name; p.updated = x.time; if (x.locked) p.locked = true; else delete p.locked;
     if (p.id === S.pid) { S.root = p.root; S.undo = []; S.redo = []; pruneSel(); }
   } else p.newer = true; // la copia del browser è più recente (modifiche fatte prima di riconnettere): si riscrive il file
   return p;
@@ -107,7 +107,7 @@ async function fsReload(p) {
     const h = await FS.dir.getFileHandle(p.file), f = await h.getFile();
     if (FS.stamp[p.file] && f.lastModified <= FS.stamp[p.file]) return;
     const pr = parseProject(await f.text()); if (!pr) return;
-    p.root = pr.root; p.name = pr.name; p.updated = f.lastModified; FS.stamp[p.file] = f.lastModified;
+    p.root = pr.root; p.name = pr.name; p.updated = f.lastModified; if (pr.locked) p.locked = true; else delete p.locked; FS.stamp[p.file] = f.lastModified;
   } catch (e) { /* file sparito: resta la copia del browser, verrà riscritto */ delete p.file; }
 }
 
@@ -153,7 +153,7 @@ function fsTrash(p) {
 /* ---------- avvio ---------- */
 // cartella già scelta: se il permesso c'è si legge subito, altrimenti si chiede al primo clic o tasto
 async function fsInit() {
-  if (!fsSupported) return;
+  if (!fsSupported || CL.session) return; // con l'accesso le mappe stanno online
   let dir; try { dir = await idbGet('dir'); } catch (e) { return; }
   if (!dir) return;
   FS.dir = dir;

@@ -194,6 +194,12 @@ cv.addEventListener('contextmenu', e => {
   e.preventDefault();
   if (editing) return;
   hidePreview();
+  if (readOnly()) {
+    const el0 = document.elementFromPoint(e.clientX, e.clientY) || e.target, g0 = el0.closest('.mn[data-id]');
+    if (g0) { selectOnly(g0.dataset.id); render(); }
+    return showMenu(e.clientX, e.clientY, title('Sola lettura', 'La mappa è bloccata') + (g0 ? item('copy', 'Copia', '', 'Ctrl+C') : '') +
+      item('fit', 'Adatta alla vista') + SEP + item('unlock', 'Sblocca per modificare'), { kind: 'ro' });
+  }
   const el = document.elementFromPoint(e.clientX, e.clientY) || e.target;
   const g = el.closest('.mn[data-id]'), edge = el.closest('[data-edge]'), cn = el.closest('[data-note]'), gr = el.closest('[data-grp]');
   const an = g && el.closest('[data-anc]'), lg = el.closest('[data-leg]');
@@ -345,6 +351,7 @@ menuEl.addEventListener('click', e => {
   else if (a === 'group') groupSelected();
   else if (a === 'gedit') startGroupEdit(id);
   else if (a === 'ungroup') ungroup(id);
+  else if (a === 'unlock') toggleLock();
   else if (a === 'trdel' || a === 'tcdel') deleteTableLine(S.sel, MENU_CELL[0], MENU_CELL[1], a === 'trdel' ? 'row' : 'col');
   else if (a === 'legadd') addToLegend();
   else if (a === 'lredit') startLegendEdit(M.row);

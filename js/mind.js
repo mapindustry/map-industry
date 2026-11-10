@@ -183,6 +183,7 @@ const countPin = (n, key) => n.children.filter(c => pinKey(n, c) === key).reduce
 // key = un pallino ('o:1', 's:0'); senza key si comprimono o aprono tutti i rami del blocco
 function toggleFold(id, key) {
   const f = findM(curTree(), id); if (!f || !f.n.children.length) return;
+  if (readOnly()) { S.roOk = true; try { return toggleFold(id, key); } finally { S.roOk = false; } }
   if (key && !countPin(f.n, key)) return;
   let closed = false;
   mutate(t => {
@@ -903,6 +904,7 @@ function setGroupStyle(patch, ids = [...S.sels]) {
 }
 function toggleGroupFold(id) {
   const t = curTree(), g = findGroup(t, id); if (!g) return;
+  if (readOnly()) { S.roOk = true; try { return toggleGroupFold(id); } finally { S.roOk = false; } }
   if (g.fold) return mutate(tt => { const h = findGroup(tt, id); delete h.fold; delete h.hide; });
   const ids = groupItems(t, g).map(i => i.id);
   if (!ids.length) return toast('Il gruppo è vuoto');

@@ -14,7 +14,10 @@ cv.addEventListener('pointerdown', e => {
   closeMenu(); hidePreview();
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
   const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), lg = e.target.closest('[data-leg]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
-  if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr && !lg)) {
+  if (readOnly() && !e.target.closest('[data-fold], [data-gfold]')) {
+    // sola lettura: trascinando si sposta la vista, con un clic si seleziona (per guardare, cercare, copiare)
+    const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y, pick: g ? g.dataset.id : cn ? cn.dataset.note : gr ? gr.dataset.grp : null, ro: true };
+  } else if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr && !lg)) {
     e.preventDefault(); const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y };
   } else if (e.target.closest('.enote[data-edge]')) {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
@@ -176,6 +179,7 @@ function endPointer(e) {
     }
     render(); return toast(lk.kind === 'str' ? 'Rilascia su un blocco per collegarlo come sua parte' : 'Rilascia sull’ingresso di un blocco per collegarlo');
   }
+  if (P.ro && !P.moved) { if (P.pick) selectOnly(P.pick); else clearSel(); render(); P = null; return; }
   if (!P.moved) {
     const had = S.sels.size, hadE = S.esel;
     if (P.mode === 'enote' || (P.mode === 'box' && P.edge)) selectEdge(P.id || P.edge);
@@ -194,6 +198,7 @@ cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('dblclick', e => {
   // il primo clic ridisegna la tela: si guarda cosa c'è sotto il puntatore adesso, non e.target
+  if (readOnly()) return roToast();
   const el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
   // legenda: doppio clic su una riga = descrizione, altrove = titolo
   const lr = el.closest('[data-lrow]'); if (lr) return startLegendEdit(lr.dataset.lrow);
@@ -245,6 +250,10 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !editing) { e.preventDefault(); closeMenu(); return openFind(); }
   if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar, #find'))) return;
   if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; cv.classList.add('grab'); } return; }
+  if (readOnly() && !(e.key.startsWith('Arrow') || e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c'))) {
+    if (e.key.length === 1 && !(e.ctrlKey || e.metaKey) || ['Delete', 'Backspace', 'Enter', 'Tab', 'F2'].includes(e.key) || (e.ctrlKey || e.metaKey)) { e.preventDefault(); roToast(); }
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo(); }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {

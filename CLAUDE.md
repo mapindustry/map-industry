@@ -1,4 +1,4 @@
-# Officina Mappe – istruzioni per Claude Code
+# Map Industry (già Officina Mappe) – istruzioni per Claude Code
 
 Editor di **sole mappe mentali**, app web statica in JavaScript "vanilla", senza build e senza dipendenze.
 Interfaccia e testi in **italiano**.
@@ -30,6 +30,16 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   poi le schede (la attiva contiene `#pName`), "+" = nuovo progetto. `switchTo` apre la scheda accanto a quella attiva e
   salva lo stato di quella lasciata in `TABST` (annulla/rifai, vista, selezione; `enterTab` lo riprende). Chiudere una
   scheda (× o tasto centrale) non elimina il progetto; aprire dal menu un progetto già aperto passa alla sua scheda.
+  **Account e mappe online** (`js/config.js` + `js/cloud.js`, Supabase via fetch, nessuna libreria): con `SB_URL`/`SB_KEY`
+  (chiave pubblica) compare "Accedi" nella barra (finestra `#auth`: entra, crea account, password dimenticata, nuova
+  password dal link). `cloudBoot` legge la sessione (`officina-mappe-auth`) o il frammento `#access_token=…` dei link email
+  prima di `load`. Con l'accesso: chiave locale `officina-mappe-cloud:<id utente>` (`storeKey`), mappe = righe di
+  `projects` (owner, id, name, data {root, locked}, updated_at, deleted; regole RLS: ognuno solo le sue), `writeStore` →
+  `cloudSave` (700 ms dopo, in coda), `cloudSync` all'avvio, `cloudReload` aprendo o tornando su una scheda, eliminare =
+  `deleted: true`; la cartella dei progetti resta in pausa. Entrare/uscire ricarica la pagina. Menu Account: carica online
+  le mappe del browser (`uploadLocal`), cambia password, esci. Per provarlo senza Supabase: finto `fetch` nella pagina.
+  **Lucchetto** (`#bLock`, `p.locked` salvato con il progetto): sola lettura; `readOnly()` ferma `mutate`, annulla, editor,
+  tasti e trascinamenti (che spostano la vista); restano selezione, Copia, Cerca, aprire/chiudere rami e gruppi (`S.roOk`).
   Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`. Le vecchie **strutture interne**
   (`n.sub`, tela separata, tolte il 2026-11-10) vengono convertite in rami compressi da `flattenSubs` al caricamento
   e all'apertura di un file .json.
