@@ -208,7 +208,8 @@ function moveSel(key) {
 }
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (editing) endEdit(true); return saveProject(); }
-  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar'))) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !editing) { e.preventDefault(); closeMenu(); return openFind(); }
+  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar, #find'))) return;
   if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; cv.classList.add('grab'); } return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo(); }
@@ -226,6 +227,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (S.esel && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); return deleteEdge(S.esel); }
   if (e.key === 'Escape') {
+    if (FIND) return closeFind();
     if (S.sels.size || S.esel) { clearSel(); return render(); }
     return;
   }

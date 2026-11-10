@@ -312,6 +312,7 @@ function foldPreviewMarkup(n, l, live) {
 // previews = disegna anche gli schemi dei rami compressi con l'anteprima accesa
 function treeMarkup(tree, L, NL, live, previews = live) {
   const single = live && S.sels.size === 1 && !editing, lk = live ? S.link : null;
+  const F = live ? findMarks(tree, L) : null, fcls = id => !F || !F.on ? '' : (F.hit.has(id) ? ' hit' : '') + (F.cur === id ? ' cur' : '') + (F.inside.has(id) ? ' hitin' : '');
   const E = new Map(); let edges = '', notes = '', nodes = '', prevs = '';
   allLinks(tree).forEach(({ key, from, to, e }) => {
     const pl = L.get(from.id), cl = L.get(to.id); if (!pl || !cl) return;
@@ -372,14 +373,14 @@ function treeMarkup(tree, L, NL, live, previews = live) {
       const c = HUB / 2, P = pinsOf(n);
       // tratti dal centro ai pallini: la linea sembra passare dentro lo svincolo
       const spokes = [...P.i, ...P.o, ...P.s].map(q => { const [x, y] = pinXY(l, q); return `M${c},${c} L${x},${y}`; }).join(' ');
-      nodes += `<g class="mn hub${sel ? ' sel' : ''}${lk && lk.over === n.id && !lk.overAnc ? ' drop' : ''}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` +
+      nodes += `<g class="mn hub${sel ? ' sel' : ''}${fcls(n.id)}${lk && lk.over === n.id && !lk.overAnc ? ' drop' : ''}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` +
         (live ? `<title>Svincolo: trascinalo per spostare la tappa · Tasto destro: opzioni</title>` : '') +
         (sel ? `<circle class="ring" cx="${c}" cy="${c}" r="${c + 3}"/>` : '') +
         `<circle class="hubhit" cx="${c}" cy="${c}" r="${c}"/>${spokes ? `<path class="edge hubline" d="${spokes}"/>` : ''}<circle class="hubdot" cx="${c}" cy="${c}" r="5.5"/>` + anchors + fold + `</g>`;
       return;
     }
     if (previews && folded && n.foldPrev) prevs += foldPreviewMarkup(n, l, live);
-    const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${(lk && lk.over === n.id && !lk.overAnc) || (live && S.dropOn === n.id) ? ' drop' : ''}`;
+    const cls = `mn d${dd}${hasColor(n) ? ' cc c' + n.color : ''}${sel ? ' sel' : ''}${(lk && lk.over === n.id && !lk.overAnc) || (live && S.dropOn === n.id) ? ' drop' : ''}${fcls(n.id)}`;
     // testo troncato (troppe righe o riga troppo lunga): al passaggio si legge per intero
     const flat = s => String(s || '').replace(/\s+/g, ' ').trim(), cut = live && n.text && flat(l.lines.join(' ')) !== flat(n.text);
     nodes += `<g class="${cls}"${live ? ` data-id="${n.id}"` : ''} transform="translate(${l.x},${l.y})">` + (cut ? `<title>${esc(n.text)}</title>` : '') +
@@ -396,7 +397,7 @@ function treeMarkup(tree, L, NL, live, previews = live) {
   let cnotes = '';
   (tree.notes || []).forEach(nt => {
     const l = NL.get(nt.id), sel = live && S.sels.has(nt.id), hide = editing && editing.kind === 'note' && editing.id === nt.id;
-    cnotes += `<g class="cnote${sel ? ' sel' : ''}${hide ? ' editing' : ''}"${live ? ` data-note="${nt.id}"` : ''} transform="translate(${l.x},${l.y})">` +
+    cnotes += `<g class="cnote${sel ? ' sel' : ''}${fcls(nt.id)}${hide ? ' editing' : ''}"${live ? ` data-note="${nt.id}"` : ''} transform="translate(${l.x},${l.y})">` +
       (sel ? `<rect class="ring" x="-4" y="-4" width="${l.w + 8}" height="${l.h + 8}" rx="7"/>` : '') +
       `<rect class="nbox" width="${l.w}" height="${l.h}" rx="4"/><rect class="nbar" width="3" height="${l.h}" rx="1.5"/>` +
       l.lines.map((s, i) => `<text x="12" y="${20 + i * 18}">${esc(s)}</text>`).join('') + `</g>`;

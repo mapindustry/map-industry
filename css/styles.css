@@ -10,7 +10,7 @@
   /* pallino di struttura (rombo) */
   --anc-str:#2b9a8f; --anc-str-ring:#ffffff;
   /* bagliore dietro le idee primarie */
-  --glow:#2a9fd0;
+  --glow:#2a9fd0; --find:#e0a21a;
   /* note sulla tela */
   --note-bg:#fff7da; --note-bar:#d9a800; --note-ink:#4a3c00;
   /* note dei collegamenti: etichette chiare a pillola */
@@ -28,7 +28,7 @@
   --node-bg:#19222b; --node-border:#5c6a78; --node-border-strong:#7f8e9b; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --anc-str:#5cc8bb; --anc-str-ring:#0d1318;
-  --glow:#58b8d8;
+  --glow:#58b8d8; --find:#f2c14e;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
   --grp:#93a1ae; --grp-title:#b9c4ce;
@@ -41,7 +41,7 @@
   --node-bg:#19222b; --node-border:#5c6a78; --node-border-strong:#7f8e9b; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --anc-str:#5cc8bb; --anc-str-ring:#0d1318;
-  --glow:#58b8d8;
+  --glow:#58b8d8; --find:#f2c14e;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
   --grp:#93a1ae; --grp-title:#b9c4ce;
@@ -214,6 +214,23 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .mrow .st:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .mrow .val{text-align:center;color:var(--muted);font-variant-numeric:tabular-nums;min-width:44px}
 .mrow input[type=range]{width:100%;accent-color:var(--accent)}
+
+/* ricerca (Ctrl+F): i risultati restano pieni, il resto si attenua; l'attuale ha il bordo più spesso */
+#cv.finding .mn:not(.hit):not(.hitin),#cv.finding .cnote:not(.hit),#cv.finding .eg,#cv.finding .enote{opacity:.3}
+#cv.finding .mn.hit .box,#cv.finding .cnote.hit .nbox{stroke:var(--find);stroke-width:2px}
+#cv.finding .mn.cur .box,#cv.finding .cnote.cur .nbox{stroke-width:3.5px}
+#cv.finding .mn.hub.hit .hubdot{fill:var(--find)}
+#cv.finding .mn.hitin .stack{stroke:var(--find);stroke-dasharray:4 3;stroke-width:1.6}
+.find{position:fixed;top:calc(48px + 10px);right:max(16px,env(safe-area-inset-right,0px));z-index:22;display:flex;align-items:center;gap:4px;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:5px;box-shadow:0 10px 30px rgb(0 0 0 / .18);max-width:calc(100% - 32px)}
+.find input{font:500 13px var(--f-body);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;height:28px;padding:0 8px;width:220px;min-width:0}
+.find input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.find .fcnt{font-size:12px;color:var(--muted);white-space:nowrap;padding:0 4px;font-variant-numeric:tabular-nums}
+.find .fcnt:empty{display:none}
+.find .fcnt.none{color:var(--crit)}
+.find .fb{width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--ink);cursor:pointer;font:600 13px var(--f-body);padding:0}
+.find .fb:hover{background:var(--band)}
+.find .fb:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 
 /* anteprima dei rami compressi (passando su "+N") */
 .preview{position:fixed;z-index:25;background:var(--canvas-inner);border:1px solid var(--line);border-radius:10px;padding:8px;box-shadow:0 10px 30px rgb(0 0 0 / .2);pointer-events:none}

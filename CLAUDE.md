@@ -84,6 +84,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   Tutto ciò che si regola lascia aperto il menu. Barra: Progetti (azioni, recenti, Elimina) ed Esporta; niente pulsante
   Salva (il salvataggio è automatico, Ctrl+S salva subito).
   - la data del progetto cambia solo con una modifica (`dirty`); il bagliore non va nell'esportazione.
+- Cerca (Ctrl+F, `js/find.js`): campo `#find` sotto la barra, solo su richiesta. Trova blocchi (testo, etichetta) e note
+  della tela, senza maiuscole né accenti (`norm`); `FIND = { q, cur }`. `findMarks` dà a `treeMarkup` le classi `hit`/`cur`
+  e `hitin` (blocco compresso che nasconde risultati); `#cv.finding` attenua il resto. Scrivendo va al primo risultato
+  visibile; Invio/Maiusc+Invio scorrono tutti e `revealHit` apre i rami compressi (un passo di annullamento). Esc chiude.
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;
   con `live=false` produce la versione statica per anteprima ed esportazione. Testo utente sempre via `esc()`.
 - Dopo un clic la tela viene ridisegnata: nei gestori di `dblclick`/`contextmenu` usa `document.elementFromPoint`.
