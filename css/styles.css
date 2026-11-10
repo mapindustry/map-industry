@@ -213,6 +213,9 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 body.ro #cv .mn,body.ro #cv .cnote,body.ro #cv .grp .ghead,body.ro #cv .leg{cursor:default}
 body.ro #cv .anc{display:none}
 .ddr .ddm{left:auto;right:0}
+#bAcc{display:flex;align-items:center;gap:7px}
+#bAcc .avatar{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:700 12px var(--f-body)}
+#bAcc .uname{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 /* finestra di accesso */
 .auth{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:color-mix(in srgb,var(--canvas) 70%,transparent);backdrop-filter:blur(2px)}
 .authbox{position:relative;width:min(360px,calc(100vw - 32px));display:grid;gap:12px;padding:24px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px rgb(0 0 0 / .25);font:400 14px var(--f-body)}
@@ -226,6 +229,10 @@ body.ro #cv .anc{display:none}
 .authbox .aerr{margin:0;color:var(--crit);font-size:13px}
 .authbox .alinks{margin:0;font-size:13px;color:var(--muted);text-align:center}
 .authbox a{color:var(--accent)}
+/* accesso obbligatorio: niente barra né tela finché non si entra */
+body.gate .bar,body.gate #cv,body.gate .hint,body.gate .find{visibility:hidden}
+body.gate .auth{background:var(--canvas);backdrop-filter:none}
+.authbox .abrand{font:700 13px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
 .authbox .ax{position:absolute;top:10px;right:10px;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:400 18px/1 var(--f-body);cursor:pointer}
 .authbox .ax:hover{background:var(--band);color:var(--ink)}
 .tadd{flex:none;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:400 18px/1 var(--f-body);cursor:pointer}

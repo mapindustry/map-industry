@@ -22,14 +22,16 @@ bLock.onclick = toggleLock;
 /* ---------- account (se Supabase è configurato in js/config.js) ---------- */
 function renderAccount() {
   $('#accWrap').hidden = !cloudOn();
-  $('#bAcc').textContent = CL.session ? CL.session.user.email.split('@')[0] + ' ▾' : 'Accedi';
+  const n = userName();
+  $('#bAcc').innerHTML = CL.session ? `<span class="avatar" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span><span class="uname">${esc(n)}</span> ▾` : 'Accedi';
   $('#bAcc').title = CL.session ? 'Account: ' + CL.session.user.email : 'Entra o crea un account per avere le mappe online';
 }
 $('#bAcc').onclick = () => {
   if (!CL.session) return openAuth('in');
   toggleDrop('mAcc', () => {
     const n = localProjects().length;
-    return title('Account', esc(CL.session.user.email)) +
+    return title(esc(userName()), esc(CL.session.user.email)) +
+      item('accname', CL.session.user.name ? 'Cambia nome' : 'Scrivi il tuo nome') +
       (n ? item('accup', 'Carica online le mappe di questo browser', '', String(n), 'Le mappe fatte senza accesso entrano nel tuo account') + SEP : '') +
       item('accpw', 'Cambia password') + SEP + item('accout', 'Esci', '', '', 'Le mappe restano nel tuo account');
   });
@@ -38,6 +40,7 @@ $('#mAcc').addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b) return; closeDrops();
   if (b.dataset.a === 'accup') uploadLocal();
   else if (b.dataset.a === 'accpw') openAuth('newpass');
+  else if (b.dataset.a === 'accname') openAuth('name');
   else if (b.dataset.a === 'accout') signOut();
 });
 

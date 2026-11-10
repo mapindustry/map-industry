@@ -36,8 +36,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   prima di `load`. Con l'accesso: chiave locale `officina-mappe-cloud:<id utente>` (`storeKey`), mappe = righe di
   `projects` (owner, id, name, data {root, locked}, updated_at, deleted; regole RLS: ognuno solo le sue), `writeStore` →
   `cloudSave` (700 ms dopo, in coda), `cloudSync` all'avvio, `cloudReload` aprendo o tornando su una scheda, eliminare =
-  `deleted: true`; la cartella dei progetti resta in pausa. Entrare/uscire ricarica la pagina. Menu Account: carica online
-  le mappe del browser (`uploadLocal`), cambia password, esci. Per provarlo senza Supabase: finto `fetch` nella pagina.
+  `deleted: true`; la cartella dei progetti resta in pausa. Entrare/uscire ricarica la pagina. **Accesso obbligatorio**: con Supabase configurato e senza sessione
+  `authGate` mostra solo la finestra di accesso (`body.gate` nasconde barra e tela, niente ×/Esc, tastiera fermata).
+  Nome dell'utente in `user_metadata.name` (chiesto alla registrazione, `setName`), mostrato nella barra con l'iniziale.
+  Menu Account: nome, carica online le mappe del browser (`uploadLocal`), cambia password, esci. Per provarlo senza Supabase: finto `fetch` nella pagina.
   **Lucchetto** (`#bLock`, `p.locked` salvato con il progetto): sola lettura; `readOnly()` ferma `mutate`, annulla, editor,
   tasti e trascinamenti (che spostano la vista); restano selezione, Copia, Cerca, aprire/chiudere rami e gruppi (`S.roOk`).
   Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`. Le vecchie **strutture interne**

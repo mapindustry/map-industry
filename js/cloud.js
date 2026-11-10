@@ -6,8 +6,9 @@
 //   locked }, updated_at, deleted }. Ogni salvataggio scrive anche online (poco dopo l'ultima modifica, in coda).
 //   La copia nel browser resta (chiave separata per utente, così su un PC condiviso non si mescolano), serve anche
 //   senza connessione: al ritorno si riscrive. Eliminare = deleted: true (recuperabile da Supabase).
-// - Entrare o uscire ricarica l'app: con l'accesso si lavora sulle mappe dell'account, senza sulle mappe del browser
-//   (e sulla cartella dei progetti, che con l'accesso resta in pausa).
+// - Entrare o uscire ricarica l'app: con l'accesso si lavora sulle mappe dell'account (la cartella dei progetti resta
+//   in pausa). Con Supabase configurato l'accesso è obbligatorio: senza, l'app mostra solo la finestra di accesso
+//   (body.gate nasconde barra e tela, niente × né Esc). Le mappe restano comunque protette dalle regole del database.
 const CL = { session: null, chain: Promise.resolve(), warned: false, timer: null, pending: null };
 const cloudOn = () => !!(SB_URL && SB_KEY);
 const AUTH = 'officina-mappe-auth';
@@ -16,13 +17,13 @@ const appUrl = () => location.origin + location.pathname;
 /* ---------- sessione ---------- */
 // i dati dell'utente stanno nel token (JWT): id (sub) ed email, senza chiedere al server
 function jwtUser(tok) {
-  try { const j = JSON.parse(decodeURIComponent(escape(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))); return { id: j.sub, email: j.email || '' }; }
+  try { const j = JSON.parse(decodeURIComponent(escape(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))); const m = j.user_metadata || {}; return { id: j.sub, email: j.email || '', name: m.name || m.full_name || '' }; }
   catch (e) { return null; }
 }
 function setSession(s) {
   if (!s || !s.access_token) { CL.session = null; try { localStorage.removeItem(AUTH); } catch (e) {} return; }
-  const user = jwtUser(s.access_token) || s.user;
-  CL.session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (+s.expires_in || 3600), user: { id: user.id, email: user.email } };
+  const user = jwtUser(s.access_token) || s.user, keep = CL.session && CL.session.user.id === user.id ? CL.session.user.name : '';
+  CL.session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (+s.expires_in || 3600), user: { id: user.id, email: user.email, name: user.name || keep || '' } };
   try { localStorage.setItem(AUTH, JSON.stringify(CL.session)); } catch (e) {}
 }
 // all'avvio, prima di caricare le mappe: sessione salvata, oppure arrivata da un link email (#access_token=…)
@@ -83,13 +84,20 @@ async function signIn(email, password) {
   location.reload();
 }
 // con la conferma via email attiva (di serie in Supabase) l'account vale dopo il clic sul link
-async function signUp(email, password) {
-  const j = await sb('/auth/v1/signup?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email, password }, auth: false });
+async function signUp(email, password, name) {
+  const j = await sb('/auth/v1/signup?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email, password, data: { name } }, auth: false });
   if (j && j.access_token) { setSession(j); location.reload(); return 'in'; }
   return 'confirm';
 }
 async function recoverPassword(email) { await sb('/auth/v1/recover?redirect_to=' + encodeURIComponent(appUrl()), { method: 'POST', body: { email }, auth: false }); }
 async function setNewPassword(password) { await sb('/auth/v1/user', { method: 'PUT', body: { password } }); }
+// nome mostrato nella barra: sta nei dati dell'utente su Supabase (user_metadata.name)
+async function setName(name) {
+  await sb('/auth/v1/user', { method: 'PUT', body: { data: { name } } });
+  CL.session.user.name = name; try { localStorage.setItem(AUTH, JSON.stringify(CL.session)); } catch (e) {}
+  renderAccount();
+}
+const userName = () => CL.session ? CL.session.user.name || CL.session.user.email.split('@')[0] : '';
 async function signOut() {
   await cloudFlush();
   try { await sb('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* esce comunque */ }
@@ -176,23 +184,26 @@ async function cloudInit() {
 }
 
 /* ---------- finestra di accesso ---------- */
-// modi: 'in' (entra), 'up' (crea un account), 'forgot' (password dimenticata), 'newpass' (nuova password dal link)
+// modi: 'in' (entra), 'up' (crea un account), 'forgot' (password dimenticata), 'newpass' (nuova password dal link),
+// 'name' (il proprio nome)
 const authEl = $('#auth');
+const gated = () => document.body.classList.contains('gate');
 function openAuth(mode = 'in') {
   closeDrops(); closeMenu();
-  const T = { in: ['Entra in Map Industry', 'Entra'], up: ['Crea un account', 'Crea l’account'], forgot: ['Password dimenticata', 'Mandami il link'], newpass: ['Nuova password', 'Salva la password'] }[mode];
-  authEl.innerHTML = `<form class="authbox" novalidate><button type="button" class="ax" aria-label="Chiudi">×</button><h2>${T[0]}</h2>` +
-    (mode === 'newpass' ? '' : `<label>Email<input name="email" type="email" autocomplete="email" required></label>`) +
-    (mode === 'forgot' ? '<p class="amsg">Ti mandiamo un link per scegliere una password nuova.</p>' :
+  const T = { in: ['Entra in Map Industry', 'Entra'], up: ['Crea un account', 'Crea l’account'], forgot: ['Password dimenticata', 'Mandami il link'], newpass: ['Nuova password', 'Salva la password'], name: ['Il tuo nome', 'Salva'] }[mode];
+  authEl.innerHTML = `<form class="authbox" novalidate>${gated() ? '<div class="abrand">Map Industry</div>' : '<button type="button" class="ax" aria-label="Chiudi">×</button>'}<h2>${T[0]}</h2>` +
+    (mode === 'up' || mode === 'name' ? `<label>Nome<input name="uname" type="text" autocomplete="name" maxlength="60" value="${mode === 'name' && CL.session ? esc(CL.session.user.name || '') : ''}" required></label>` : '') +
+    (mode === 'newpass' || mode === 'name' ? '' : `<label>Email<input name="email" type="email" autocomplete="email" required></label>`) +
+    (mode === 'name' ? '<p class="amsg">Si vede in alto a destra.</p>' : mode === 'forgot' ? '<p class="amsg">Ti mandiamo un link per scegliere una password nuova.</p>' :
       `<label>Password<input name="password" type="password" autocomplete="${mode === 'in' ? 'current-password' : 'new-password'}" minlength="6" required></label>`) +
     (mode === 'up' ? '<p class="amsg">Almeno 6 caratteri. Ti mandiamo un’email per confermare l’indirizzo.</p>' : '') +
     `<p class="aerr" role="alert" hidden></p><button class="ago" type="submit">${T[1]}</button>` +
     (mode === 'in' ? '<p class="alinks"><a href="#" data-m="up">Crea un account</a> · <a href="#" data-m="forgot">Password dimenticata?</a></p>' :
-      mode === 'newpass' ? '' : '<p class="alinks"><a href="#" data-m="in">Hai già un account? Entra</a></p>') + `</form>`;
+      mode === 'newpass' || mode === 'name' ? '' : '<p class="alinks"><a href="#" data-m="in">Hai già un account? Entra</a></p>') + `</form>`;
   authEl.hidden = false; authEl.dataset.mode = mode;
   const f = authEl.querySelector('input'); if (f) f.focus();
 }
-const closeAuth = () => { authEl.hidden = true; authEl.innerHTML = ''; };
+const closeAuth = () => { if (gated()) return; authEl.hidden = true; authEl.innerHTML = ''; }; // con l'accesso obbligatorio non si chiude
 authEl.addEventListener('click', e => {
   if (e.target === authEl || e.target.closest('.ax')) return closeAuth();
   const m = e.target.closest('[data-m]'); if (m) { e.preventDefault(); openAuth(m.dataset.m); }
@@ -201,15 +212,31 @@ authEl.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Es
 authEl.addEventListener('submit', async e => {
   e.preventDefault();
   const fm = e.target, mode = authEl.dataset.mode, err = fm.querySelector('.aerr'), go = fm.querySelector('.ago');
-  const email = fm.email ? fm.email.value.trim() : '', pw = fm.password ? fm.password.value : '';
+  const email = fm.email ? fm.email.value.trim() : '', pw = fm.password ? fm.password.value : '', nm = fm.uname ? fm.uname.value.replace(/\s+/g, ' ').trim() : '';
+  if (fm.uname && !nm) { err.textContent = 'Scrivi il tuo nome'; err.hidden = false; return; }
   const fail = t => { err.textContent = t; err.hidden = false; go.disabled = false; };
   if (fm.email && !/^\S+@\S+\.\S+$/.test(email)) return fail('Scrivi un indirizzo email valido');
   if (fm.password && pw.length < 6) return fail('La password deve avere almeno 6 caratteri');
   go.disabled = true; err.hidden = true;
   try {
     if (mode === 'in') await signIn(email, pw);
-    else if (mode === 'up') { if (await signUp(email, pw) === 'confirm') { fm.innerHTML = `<button type="button" class="ax" aria-label="Chiudi">×</button><h2>Controlla l’email</h2><p class="amsg">Abbiamo mandato un link a <b>${esc(email)}</b>: aprilo per confermare l’account, poi torni qui già dentro.</p>`; } }
-    else if (mode === 'forgot') { await recoverPassword(email); fm.innerHTML = `<button type="button" class="ax" aria-label="Chiudi">×</button><h2>Controlla l’email</h2><p class="amsg">Se esiste un account per <b>${esc(email)}</b>, ti è arrivato un link per scegliere la password nuova.</p>`; }
+    else if (mode === 'name') { await setName(nm); closeAuth(); toast('Nome salvato'); }
+    else if (mode === 'up') { if (await signUp(email, pw, nm) === 'confirm') doneMsg(fm, `Abbiamo mandato un link a <b>${esc(email)}</b>: aprilo per confermare l’account, poi torni qui già dentro.`); }
+    else if (mode === 'forgot') { await recoverPassword(email); doneMsg(fm, `Se esiste un account per <b>${esc(email)}</b>, ti è arrivato un link per scegliere la password nuova.`); }
     else { await setNewPassword(pw); closeAuth(); toast('Password cambiata'); }
   } catch (x) { fail(x.message || 'Connessione non riuscita'); }
 });
+// messaggio finale (email mandata): con l'accesso obbligatorio si torna alla finestra di accesso, altrimenti si chiude
+function doneMsg(fm, html) {
+  fm.innerHTML = (gated() ? '<div class="abrand">Map Industry</div>' : '<button type="button" class="ax" aria-label="Chiudi">×</button>') +
+    `<h2>Controlla l’email</h2><p class="amsg">${html}</p>` + (gated() ? '<p class="alinks"><a href="#" data-m="in">Torna all’accesso</a></p>' : '');
+}
+// accesso obbligatorio: se Supabase è configurato e non c'è sessione, si vede solo la finestra di accesso
+function authGate() {
+  if (!cloudOn() || CL.session) return false;
+  document.body.classList.add('gate'); openAuth('in');
+  if (authReturn && authReturn.startsWith('error:')) { const e = authEl.querySelector('.aerr'); e.textContent = 'Link non valido o scaduto: ' + authReturn.slice(6); e.hidden = false; }
+  return true;
+}
+// dietro la finestra di accesso la tastiera non arriva alla mappa
+addEventListener('keydown', e => { if (gated() && !authEl.contains(e.target)) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
