@@ -6,8 +6,9 @@ function mk(text, children = []) { return { id: uid(), text, children }; }
 /* ---------- alberi ---------- */
 // Ogni livello (mappa principale o struttura interna) è un albero con radice `tree` e, in più:
 //   tree.free  = blocchi liberi (alberi senza collegamento) · tree.notes = note sulla tela
+//   tree.void  = livello senza blocchi: la radice dei dati è solo un contenitore (note), non si disegna
 function walk(n, f, p = null, depth = 0) { f(n, p, depth); n.children.forEach(c => walk(c, f, n, depth + 1)); }
-function walkAll(tree, f) { walk(tree, f); (tree.free || []).forEach(r => walk(r, f, null, 1)); }
+function walkAll(tree, f) { if (!tree.void) walk(tree, f); (tree.free || []).forEach(r => walk(r, f, null, 1)); }
 // { n, p, list }: list = array che contiene il blocco (children del genitore o tree.free), null per la radice
 function findM(tree, id) {
   let r = null;
@@ -22,7 +23,9 @@ function load() {
   try {
     const j = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (j && Array.isArray(j.projects) && j.projects.length) {
-      S.projects = j.projects; S.pid = j.projects.some(p => p.id === j.cur) ? j.cur : j.projects[0].id; S.root = curProject().root; return;
+      S.projects = j.projects; S.pid = j.projects.some(p => p.id === j.cur) ? j.cur : j.projects[0].id; S.root = curProject().root;
+      if (S.projects.map(p => flattenSubs(p.root)).some(Boolean)) saveNow();
+      return;
     }
   } catch (e) {}
   // primo avvio: recupera la mappa della versione precedente (v2, oppure la mappa mentale aperta nella v1)
@@ -34,6 +37,7 @@ function load() {
     const d = minds.find(x => x.id === o.cur) || minds[0]; if (d) root = d.data.root;
   } catch (e) {}
   if (!root) root = mk('Idea primaria', [mk('Ramo 1'), mk('Ramo 2'), mk('Ramo 3')]);
+  flattenSubs(root);
   const p = { id: uid(), name: root.text || 'Mappa', updated: Date.now(), root };
   S.projects = [p]; S.pid = p.id; S.root = root; saveNow();
 }
@@ -46,25 +50,35 @@ let saveT;
 function save() { clearTimeout(saveT); saveT = setTimeout(writeStore, 250); }
 function saveNow() { clearTimeout(saveT); return writeStore(); }
 
-/* ---------- livelli: la mappa principale e le strutture interne dei blocchi ---------- */
-// albero visibile: si scende lungo S.path, ogni blocco tiene la sua struttura interna in n.sub
-function curTree() {
-  let t = S.root;
-  for (let i = 0; i < S.path.length; i++) {
-    const f = findM(t, S.path[i]);
-    if (!f || !f.n.sub) { S.path = S.path.slice(0, i); break; }
-    t = f.n.sub;
-  }
-  return t;
-}
-// cambia la radice dei dati del livello visibile (quando viene collegata sotto un altro blocco o eliminata)
-function setLevelRoot(nr) { const owner = ownerNode(); if (owner) owner.sub = nr; else S.root = nr; }
-// blocco "proprietario" del livello visibile (null nella mappa principale)
-function ownerNode() {
-  if (!S.path.length) return null;
-  let t = S.root, n = null;
-  for (const id of S.path) { n = findM(t, id).n; t = n.sub; }
-  return n;
+/* ---------- la mappa: un solo livello ---------- */
+const curTree = () => S.root;
+// cambia la radice dei dati (quando viene collegata sotto un altro blocco o eliminata)
+function setLevelRoot(nr) { S.root = nr; }
+// Le vecchie strutture interne (n.sub, una mappa su una tela a parte) diventano rami del blocco, compressi:
+// si aprono a ventaglio nella stessa mappa. Le loro posizioni erano di un'altra tela: si tolgono, e
+// ensurePositions li ridispone accanto al blocco (placeNew). Se la radice interna ripeteva il blocco, sparisce
+// e i suoi rami passano al blocco. I blocchi liberi interni diventano rami anche loro. true = convertito.
+function flattenSubs(level) {
+  const owners = []; walkAll(level, n => { if (n.sub) owners.push(n); });
+  owners.forEach(n => {
+    const sub = n.sub; delete n.sub;
+    if (n.subOpen) n.foldPrev = true; delete n.subOpen; // l'anteprima accesa resta accesa
+    flattenSubs(sub); // prima quelle annidate
+    const same = sub.void || !sub.text || sub.text === n.text;
+    let tops;
+    if (same) tops = sub.void ? [] : sub.children;
+    else { const r = { ...sub }; ['free', 'links', 'notes', 'groups', 'void', 'primary'].forEach(k => delete r[k]); tops = [r]; }
+    tops = tops.concat(sub.free || []);
+    tops.forEach(c => { if (c.edge) { ['po', 'pi', 'ps', 'sp'].forEach(k => delete c.edge[k]); if (!Object.keys(c.edge).length) delete c.edge; } });
+    tops.forEach(c => walk(c, d => { delete d.x; delete d.y; delete d.fx; delete d.fy; delete d.dx; delete d.dy; delete d.flip; }));
+    n.children.push(...tops);
+    // collegamenti aggiuntivi: quelli verso la radice interna sparita passano al blocco
+    (sub.links || []).forEach(x => { if (same && x.from === sub.id) x.from = n.id; if (same && x.to === sub.id) x.to = n.id; if (x.from !== x.to) (level.links = level.links || []).push(x); });
+    // note interne: accanto al blocco (i gruppi interni non hanno più una tela su cui stare)
+    (sub.notes || []).forEach((nt, i) => { nt.x = (n.x || 0) + 260; nt.y = (n.y || 0) + i * 50; (level.notes = level.notes || []).push(nt); });
+    if (n.children.length) n.fold = true;
+  });
+  return owners.length > 0;
 }
 
 /* ---------- selezione (blocchi e note della tela) ---------- */
@@ -77,7 +91,7 @@ function toggleSel(id) {
   else { S.sels.add(id); S.sel = id; }
 }
 function pruneSel() {
-  const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id)));
+  const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id) || findGroup(t, id)));
   if (S.sel && !S.sels.has(S.sel)) S.sel = [...S.sels].pop() || null;
   if (S.esel && !edgeData(t, S.esel)) S.esel = null;
 }
@@ -89,4 +103,5 @@ function undo() {
   S.root = JSON.parse(S.undo.pop()); curTree(); pruneSel(); save(); render();
 }
 // ogni modifica passa da qui: snapshot per undo → modifica dell'albero visibile → salva → ridisegna
-function mutate(fn) { snapshot(); fn(curTree()); save(); render(); }
+// su una tela vuota il primo blocco aggiunto (o incollato) diventa la radice dei dati del livello
+function mutate(fn) { snapshot(); fn(curTree()); const t = curTree(); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }

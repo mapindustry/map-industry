@@ -54,7 +54,7 @@ function saveProject() { if (saveNow()) toast('Progetto salvato'); }
 function switchTo(id) {
   if (editing) endEdit(true);
   saveNow(); S.pid = id; S.root = curProject().root;
-  S.path = []; S.undo = []; S.views = {}; clearSel(); render(); fit(); saveNow();
+  S.undo = []; S.views = {}; clearSel(); render(); fit(); saveNow();
 }
 function openProject(id) { if (id !== S.pid) { switchTo(id); toast('Aperto: ' + curProject().name); } }
 function newProject() {
@@ -64,7 +64,7 @@ function newProject() {
 function deleteProject() {
   const i = S.projects.findIndex(p => p.id === S.pid), name = curProject().name;
   S.projects.splice(i, 1); S.pid = S.projects[0].id; S.root = curProject().root;
-  S.path = []; S.undo = []; S.views = {}; clearSel(); render(); fit(); saveNow(); toast('Eliminato: ' + name);
+  S.undo = []; S.views = {}; clearSel(); render(); fit(); saveNow(); toast('Eliminato: ' + name);
 }
 const fileName = () => (curProject().name || 'mappa').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'mappa';
 function downloadBlob(blob, name) {
@@ -84,6 +84,7 @@ $('#fileIn').addEventListener('change', e => {
     // accetta un progetto salvato da qui, oppure una mappa della versione precedente
     const root = j && j.project && j.project.root || j && j.root || j && j.type === 'mind' && j.data && j.data.root;
     if (!root || !Array.isArray(root.children)) return toast('Nel file non c’è una mappa riconosciuta');
+    flattenSubs(root); // file con strutture interne: diventano rami compressi
     const p = { id: uid(), name: (j.project && j.project.name) || j.name || root.text || 'Mappa importata', updated: Date.now(), root };
     S.projects.push(p); switchTo(p.id); toast('Aperto: ' + p.name);
   };

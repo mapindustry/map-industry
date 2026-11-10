@@ -5,12 +5,12 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const FB = '"Instrument Sans", "Segoe UI", system-ui, sans-serif';
 
-// root: albero della mappa principale · path: id dei blocchi in cui si è entrati (struttura interna)
+// root: albero della mappa
 // sels: blocchi selezionati · sel: blocco "principale" (ultimo cliccato, usato da Tab/Invio/F2)
-// views: pan/zoom per livello · L: layout calcolato del livello visibile
+// views: pan/zoom della mappa · L: layout calcolato dei blocchi visibili
 // projects/pid: progetti salvati e quello aperto · link: collegamento che si sta trascinando
 // E: punti medi dei collegamenti (per le note) · NL: layout delle note sulla tela
-const S = { projects: [], pid: null, root: null, path: [], sel: null, sels: new Set(), esel: null, views: {}, undo: [], L: null, E: null, NL: null, link: null, clip: null };
+const S = { projects: [], pid: null, root: null, sel: null, sels: new Set(), esel: null, views: {}, undo: [], L: null, E: null, NL: null, link: null, clip: null, dropOn: null };
 const BAR_H = 48; // altezza della barra dei menu
 const cv = $('#cv'), vp = $('#vp');
 

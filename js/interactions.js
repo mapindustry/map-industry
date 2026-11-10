@@ -1,8 +1,10 @@
 // Mouse/touch e tastiera
 /* ---------- puntatore ---------- */
 // Sfondo: trascina = riquadro di selezione · Spazio + trascina, tasto centrale o un dito su touch = sposta la vista
+// Blocchi selezionati trascinati sopra un altro blocco = si comprimono dentro di lui come suoi rami.
 // Pallini: trascina da un'uscita a un ingresso (o al contrario) per collegare; lungo il bordo per spostarli;
-// ingresso nel vuoto = stacca il collegamento principale.
+// ingresso nel vuoto = stacca il collegamento principale; pallino di struttura su un blocco = collegalo come sua parte.
+// Clic su un pallino (senza trascinare) = menu del pallino: tipo, duplica, elimina.
 // Le posizioni sono fisse: collegare o staccare non sposta nessun blocco.
 let P = null, spaceDown = false;
 const boxEl = $('#box');
@@ -10,26 +12,31 @@ const boxEl = $('#box');
 cv.addEventListener('pointerdown', e => {
   closeMenu(); hidePreview();
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
-  const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
-  if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn)) {
+  const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
+  if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr)) {
     e.preventDefault(); const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y };
   } else if (e.target.closest('.enote[data-edge]')) {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
     const id = e.target.closest('.enote').dataset.edge, ed = edgeData(curTree(), id) || {};
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
-  } else if (e.target.closest('[data-subprev]')) {
-    return openSub(e.target.closest('[data-subprev]').dataset.subprev); // clic sullo schema: si entra
-  } else if (g && e.target.closest('[data-sub]')) {
-    return openSub(g.dataset.id);
+  } else if (e.target.closest('[data-foldprev]')) {
+    return toggleFold(e.target.closest('[data-foldprev]').dataset.foldprev); // clic sullo schema: si aprono i rami
+  } else if (g && e.target.closest('[data-fold]')) {
+    const k = e.target.closest('[data-fold]').dataset.fold; // etichetta "+N": riapre i rami compressi (tutti o di un pallino)
+    hidePreview(); return toggleFold(g.dataset.id, k === 'all' ? null : k);
   } else if (g && e.target.closest('[data-anc]')) {
-    const id = g.dataset.id, a = e.target.closest('[data-anc]'), dot = a.querySelector('.adot'), l = S.L.get(id);
-    S.link = { kind: a.dataset.anc, idx: +a.dataset.idx, id, x1: l.x + +dot.getAttribute('cx'), y1: l.y + +dot.getAttribute('cy'), x2: null, y2: null, over: null, overAnc: null, pinMove: null };
+    const id = g.dataset.id, a = e.target.closest('[data-anc]'), l = S.L.get(id), kind = a.dataset.anc, idx = +a.dataset.idx;
+    const [px, py] = pinXY(l, pinsOf(findM(curTree(), id).n)[PK[kind]][idx]);
+    S.link = { kind, idx, id, x1: l.x + px, y1: l.y + py, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
     P = { ...base, mode: 'link', id }; cv.classList.add('linking');
   } else if (g && e.target.closest('[data-rsz]')) {
     const id = g.dataset.id, l = S.L.get(id);
     P = { ...base, mode: 'resize', id, w0: l.w, h0: l.h };
-  } else if (g || cn) {
-    const id = g ? g.dataset.id : cn.dataset.note;
+  } else if (gr && e.target.closest('[data-rsz]')) {
+    const grp = findGroup(curTree(), gr.dataset.grp);
+    P = { ...base, mode: 'resize', id: grp.id, grp: true, w0: grp.w, h0: grp.h };
+  } else if (g || cn || gr) {
+    const id = g ? g.dataset.id : cn ? cn.dataset.note : gr.dataset.grp;
     if (e.shiftKey || e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
     const wasMulti = S.sels.has(id) && S.sels.size > 1;
     if (!S.sels.has(id)) selectOnly(id); else S.sel = id;
@@ -78,9 +85,21 @@ cv.addEventListener('pointermove', e => {
   }
   if (P.mode === 'drag') {
     P.movers.forEach(m => { m.o.x = Math.round(m.ox + dx / v.k); m.o.y = Math.round(m.oy + dy / v.k); });
+    // sopra un altro blocco: rilasciando, la struttura selezionata si comprime dentro di lui (foldInto)
+    S.dropOn = null;
+    if (!P.alt) {
+      const p = toSvg(e.clientX, e.clientY), t = curTree();
+      S.L.forEach((l, id) => { if (!S.sels.has(id) && p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h) S.dropOn = id; });
+      if (S.dropOn && !canFoldInto(t, S.dropOn)) S.dropOn = null;
+    }
     return render();
   }
   // ridimensiona dall'angolo in basso a destra: l'angolo in alto a sinistra resta fermo
+  if (P.grp) {
+    const grp = findGroup(curTree(), P.id);
+    grp.w = Math.max(GMIN[0], Math.round(P.w0 + dx / v.k)); grp.h = Math.max(GMIN[1], Math.round(P.h0 + dy / v.k));
+    return render();
+  }
   const n = findM(curTree(), P.id).n;
   n.w = clamp(Math.round(P.w0 + dx / v.k), RMIN[0], RMAX[0]); n.h = clamp(Math.round(P.h0 + dy / v.k), RMIN[1], RMAX[1]);
   render();
@@ -91,7 +110,9 @@ function dragBox(e) {
   Object.assign(boxEl.style, { left: x1 + 'px', top: y1 + 'px', width: x2 - x1 + 'px', height: y2 - y1 + 'px' }); boxEl.hidden = false;
   const a = toSvg(x1, y1), b = toSvg(x2, y2);
   const hit = M => [...M].filter(([, l]) => l.x < b.x && l.x + l.w > a.x && l.y < b.y && l.y + l.h > a.y).map(([id]) => id);
-  const hits = hit(S.L).concat(hit(S.NL));
+  // i gruppi solo se il riquadro li contiene per intero (si può selezionare anche dentro un gruppo)
+  const gh = (curTree().groups || []).filter(g => g.x >= a.x && g.y >= a.y && g.x + g.w <= b.x && g.y + g.h <= b.y).map(g => g.id);
+  const hits = hit(S.L).concat(hit(S.NL), gh);
   S.sels = new Set(P.add ? [...P.prev, ...hits] : hits);
   S.sel = hits.length ? hits[hits.length - 1] : [...S.sels].pop() || null;
   render();
@@ -101,9 +122,12 @@ function endPointer(e) {
   if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true;
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
-    if (!moved) { selectOnly(lk.id); return render(); }
+    if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
     if (lk.pinMove) return setPin(lk.id, lk.kind, lk.idx, lk.pinMove); // pallino spostato lungo il bordo
     if (lk.over) {
+      // struttura: il blocco d'arrivo diventa una parte, ovunque lo si lasci (anche su un suo pallino)
+      if (lk.kind === 'str') return link(lk.id, null, lk.over, null, lk.idx);
+      if (lk.overAnc && lk.overAnc.kind === 'str') return lk.kind === 'in' ? link(lk.over, null, lk.id, null, lk.overAnc.idx) : link(lk.id, lk.idx, lk.over, 0);
       const oa = lk.overAnc, t = curTree();
       // un'uscita va su un ingresso e viceversa; sul corpo del blocco vale il pallino più vicino del tipo giusto
       if (oa && oa.kind === lk.kind) { render(); return toast(lk.kind === 'out' ? 'Un’uscita va collegata a un ingresso' : 'Un ingresso va collegato a un’uscita'); }
@@ -116,7 +140,7 @@ function endPointer(e) {
       const f = findM(curTree(), lk.id); if (f && f.p) return detach(lk.id);
       render(); return toast('Questo blocco non ha un collegamento da staccare');
     }
-    render(); return toast('Rilascia sull’ingresso di un blocco per collegarlo');
+    render(); return toast(lk.kind === 'str' ? 'Rilascia su un blocco per collegarlo come sua parte' : 'Rilascia sull’ingresso di un blocco per collegarlo');
   }
   if (!P.moved) {
     const had = S.sels.size, hadE = S.esel;
@@ -124,6 +148,8 @@ function endPointer(e) {
     else if (P.mode === 'box' && !P.add) clearSel();
     if (P.mode === 'drag' && P.wasMulti) selectOnly(P.id);
     if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel) render();
+  } else if (P.mode === 'drag' && S.dropOn) {
+    const id = S.dropOn; S.dropOn = null; foldInto(id, P.movers);
   } else if (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote') {
     save(); if (P.alt && P.mode === 'drag') toast(S.sels.size > 1 ? `${S.sels.size} copie create` : 'Copia creata');
   }
@@ -136,7 +162,10 @@ cv.addEventListener('dblclick', e => {
   const el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
   const edge = el.closest('[data-edge]'); if (edge) return startEdgeNote(edge.dataset.edge);
   const cn = el.closest('[data-note]'); if (cn) return startNoteEdit(cn.dataset.note);
-  const g = el.closest('.mn[data-id]'); if (g && !el.closest('[data-anc]')) startEdit(g.dataset.id, true);
+  const g = el.closest('.mn[data-id]');
+  if (g && el.closest('[data-tag]')) return startTagEdit(g.dataset.id);
+  if (g && !el.closest('[data-anc]')) return startEdit(g.dataset.id, true);
+  const gr = el.closest('[data-grp]'); if (gr && !el.closest('[data-rsz]')) startGroupEdit(gr.dataset.grp);
 });
 cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 cv.addEventListener('wheel', e => {
@@ -145,12 +174,12 @@ cv.addEventListener('wheel', e => {
   else { const v = view(); v.x -= e.deltaX; v.y -= e.deltaY; v.fresh = false; applyView(); }
   placeEditor();
 }, { passive: false });
-// anteprima della struttura interna passando sull'icona
+// anteprima dei rami compressi passando sull'etichetta "+N"
 cv.addEventListener('pointerover', e => {
-  const s = e.target.closest('[data-sub]'); if (!s || P) return;
-  showPreview(s.closest('.mn').dataset.id, s.getBoundingClientRect());
+  const s = e.target.closest('[data-fold]'); if (!s || P) return;
+  showPreview(s.closest('.mn').dataset.id, s.getBoundingClientRect(), s.dataset.fold === 'all' ? null : s.dataset.fold);
 });
-cv.addEventListener('pointerout', e => { if (e.target.closest('[data-sub]')) hidePreview(); });
+cv.addEventListener('pointerout', e => { if (e.target.closest('[data-fold]')) hidePreview(); });
 
 /* ---------- tastiera ---------- */
 document.addEventListener('keydown', e => {
@@ -162,6 +191,7 @@ document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     if (k === 'c') { e.preventDefault(); return copySelected(); }
     if (k === 'd') { e.preventDefault(); return duplicateSelected(); }
+    if (k === 'g') { e.preventDefault(); return groupSelected(); }
     if (k === 'v') {
       e.preventDefault();
       const m = lastMouse && lastMouse.y > BAR_H ? lastMouse : { x: innerWidth / 2, y: (innerHeight + BAR_H) / 2 };
@@ -172,12 +202,12 @@ document.addEventListener('keydown', e => {
   if (S.esel && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); return deleteEdge(S.esel); }
   if (e.key === 'Escape') {
     if (S.sels.size || S.esel) { clearSel(); return render(); }
-    if (S.path.length) return goToLevel(S.path.length - 1);
     return;
   }
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return removeSelected(); }
   const t = curTree();
-  if (!S.sel) { if (e.key === 'Tab') { e.preventDefault(); selectOnly(t.id); render(); } return; }
+  if (!S.sel) { if (e.key === 'Tab') { e.preventDefault(); if (!t.void) { selectOnly(t.id); render(); } } return; }
+  if (findGroup(t, S.sel)) { if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); startGroupEdit(S.sel); } return; }
   if (findNote(t, S.sel)) { if (e.key === 'F2' || e.key === 'Enter') { e.preventDefault(); startNoteEdit(S.sel); } return; }
   if (e.key === 'Tab') { e.preventDefault(); return addChild(S.sel); }
   if (e.key === 'Enter') { e.preventDefault(); return addSibling(S.sel); }

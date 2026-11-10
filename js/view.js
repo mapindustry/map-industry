@@ -1,5 +1,5 @@
-// Pan e zoom della tela SVG (una vista per ogni livello)
-function view() { const k = S.path.join('/') || '_'; return S.views[k] || (S.views[k] = { x: innerWidth / 2, y: innerHeight / 2, k: 1, fresh: true }); }
+// Pan e zoom della tela SVG
+function view() { return S.views._ || (S.views._ = { x: innerWidth / 2, y: innerHeight / 2, k: 1, fresh: true }); }
 function applyView() { const v = view(); vp.setAttribute('transform', `translate(${v.x} ${v.y}) scale(${v.k})`); }
 function toSvg(cx, cy) { const v = view(); return { x: (cx - v.x) / v.k, y: (cy - v.y) / v.k }; }
 function zoomAt(cx, cy, f) {

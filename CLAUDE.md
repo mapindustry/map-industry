@@ -14,14 +14,22 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   condividono le dichiarazioni di primo livello. Così l'app funziona anche da `file://` (il collegamento sul
   desktop apre `file:///…/index.html` con `msedge --app`). Se aggiungi un file, inseriscilo nell'ordine giusto.
   Evita nomi globali duplicati e classi CSS uguali tra elementi HTML e SVG (è già successo con `.box`).
-- Stato unico in `S` (`core.js`): `projects`/`pid` (progetti), `root` (radice del progetto aperto), `path`
-  (strutture interne aperte), `sels` (Set dei selezionati: blocchi e note), `sel` (principale), `views`
-  (pan/zoom per livello), `undo`, `L`/`NL`/`E` (layout di blocchi, note, punti medi dei collegamenti), `link`.
+- Stato unico in `S` (`core.js`): `projects`/`pid` (progetti), `root` (radice del progetto aperto),
+  `sels` (Set dei selezionati: blocchi e note), `sel` (principale), `views` (pan/zoom), `undo`,
+  `L`/`NL`/`E` (layout di blocchi visibili, note, punti medi dei collegamenti), `link`, `dropOn` (blocco su cui
+  si sta lasciando una struttura trascinata).
 - Salvataggio: `localStorage['officina-mappe-v3'] = { projects: [{id,name,updated,root}], cur }`.
-  Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`.
-- **Livello** = un albero: la radice dei dati fa anche da contenitore per `free`, `links` (blocchi liberi, alberi
-  senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text}`). `curTree()` restituisce il livello
-  visibile; `setLevelRoot()` lo sostituisce quando la radice cambia (vedi `promoteRoot`).
+  Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`. Le vecchie **strutture interne**
+  (`n.sub`, tela separata, tolte il 2026-11-10) vengono convertite in rami compressi da `flattenSubs` al caricamento
+  e all'apertura di un file .json.
+- **Mappa** = un solo albero (non ci sono più livelli): la radice dei dati fa anche da contenitore per `free`,
+  `links` (blocchi liberi, alberi senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text}`).
+  `curTree()` = `S.root`; `setLevelRoot()` la sostituisce quando la radice cambia (vedi `promoteRoot`).
+  La tela può restare vuota: eliminando l'ultimo blocco la radice diventa `{ void: true }` (contenitore invisibile
+  che tiene le note, saltato da `walkAll`/`sizeMap`); `mutate` promuove a radice il primo blocco aggiunto.
+- Gruppi (`tree.groups`, `{ id, x, y, w, h, text }`): riquadri con titolo disegnati sotto a tutto. Nessun elenco di
+  membri: contiene ciò che vi sta tutto dentro (`within`), e `dragMovers` lo porta con sé. Si prendono dal titolo o
+  dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro.
 - Blocco: il modello completo è descritto in testa a `js/mind.js`. In breve:
   - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco; trascinare
     sposta solo i selezionati (i figli restano). Posizioni mancanti: `ensurePositions` (`placeNew` per i nuovi,
@@ -31,16 +39,29 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - `pin = { i: [[lato, pos]], o: [[lato, pos]] }` pallini sul bordo (lati l/r/t/b, pos 0–1); senza `pin` valgono
     `defaultPins` (primaria: ingresso in alto, uscite l/r; altri: ingresso l e uscita r, scambiati con `flip`).
     Un pallino si trascina lungo il bordo (`nearestBorder`, entro 16 px) o verso un altro blocco per collegare.
+    Terzo tipo `s` = **struttura** (rombo `--anc-str`): collega il blocco alle sue parti, non a un passo di processo.
+    Ogni tipo può avere zero pallini (blocco con solo ingressi, solo uscite, nessuno); senza pallino la linea arriva
+    sul lato rivolto all'altro blocco (`facePin`). Clic su un pallino = menu: tipo, duplica, elimina (`editPin`, che
+    riassegna gli indici dei collegamenti attaccati).
+  - Rami compressi: `fold` (tutti i rami) o `foldOut` (`['o:1','s:0']`, solo i rami che partono da quei pallini,
+    dal menu del pallino). `mindLayout` toglie da `L` i discendenti (`foldedSet`/`isFoldedChild`), quindi non si
+    disegnano né loro né i loro collegamenti; "+N" (sull'angolo, o accanto al pallino) per riaprirli, al passaggio
+    anteprima (`showPreview`); `foldPrev` = schema in piccolo sotto il blocco. Trascinando il blocco i rami nascosti
+    lo seguono. Una selezione trascinata e lasciata sopra un blocco vi entra compressa (`foldInto`).
+    I rami nuovi o riaperti senza posizione vanno oltre la colonna dei fratelli del genitore (`placeNew`).
+  - `tag` = etichetta (sigla o nota breve) su una linguetta sopra il bordo (`tagLeft` evita i pallini in alto);
+    doppio clic per scriverla. Le idee primarie hanno un bagliore dietro (`.glow`, `--glow`).
   - collegamenti: quello principale è il legame padre→figlio dell'albero (`edge` sul figlio: `po`, `pi`, `note`,
-    `dash`, `nx`, `ny`); i **collegamenti aggiuntivi** (più ingressi per blocco) stanno in `tree.links`
+    `dash`, `shape: 'sq'` = squadrato, `nx`, `ny`; `str` + `sp` per un collegamento di struttura, a puntini);
+    i **collegamenti aggiuntivi** (più ingressi per blocco) stanno in `tree.links`
     `{ id, from, to, po, pi, ... }`. `allLinks(tree)` li elenca tutti con una chiave: id del figlio o `'x:' + id`;
     `edgeData(tree, chiave)` restituisce i dati modificabili. `link()` crea il legame d'albero se il blocco d'arrivo
     è senza genitore, altrimenti un collegamento aggiuntivo; vieta sé stesso, doppioni e doppio senso.
-  - `w/h`, `color`, `fs`, `bw`, `op`, `sub`, `subOpen` come prima.
+  - `w/h`, `color`, `fs`, `bw`, `op` come prima.
 - Selezione di un collegamento: `S.esel` = chiave. Eliminare il principale = `detach` (il blocco resta libero, stessa
   posizione); un aggiuntivo si toglie da `tree.links`. Appunti: `S.clip` (`cloneFresh` rinomina id e collegamenti).
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.
-- Ogni modifica passa da `mutate(fn)` (snapshot per undo → modifica del livello visibile → salva → `render()`).
+- Ogni modifica passa da `mutate(fn)` (snapshot per undo → modifica della mappa → salva → `render()`).
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;
   con `live=false` produce la versione statica per anteprima ed esportazione. Testo utente sempre via `esc()`.
 - Dopo un clic la tela viene ridisegnata: nei gestori di `dblclick`/`contextmenu` usa `document.elementFromPoint`.
@@ -52,7 +73,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Note dei collegamenti: pillole chiare in corsivo (`--enote-*`), ben diverse dai blocchi e dalle note gialle della tela.
 - Collegamenti sempre neutri (`--edge`), mai del colore del blocco. Pallini sempre visibili: ingresso `--anc-in`
   (bianco), uscita `--anc-out` (grigio scuro con bordo chiaro), area di presa più grande del pallino.
-- Dentro una struttura interna lo sfondo usa `--canvas-inner`. Font: Instrument Sans. Logo: cerchi collegati.
+- `--canvas-inner` = sfondo delle anteprime dei rami compressi. Font: Instrument Sans. Logo: cerchi collegati.
 
 ## Verifica
 Nessun test automatico: `python -m http.server 8765`, prova le funzioni toccate, ricarica per il salvataggio,

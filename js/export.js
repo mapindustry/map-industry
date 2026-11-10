@@ -81,7 +81,7 @@ async function buildSvg() {
   return x;
 }
 async function exportImage(fmt) {
-  const x = await buildSvg(), lvl = ownerNode(), name = fileName() + (lvl ? ' - ' + (lvl.text || 'struttura') : '');
+  const x = await buildSvg(), name = fileName();
   if (fmt === 'svg') {
     downloadBlob(new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + x.str], { type: 'image/svg+xml' }), name.replace(/[\\/:*?"<>|]+/g, '-') + '.svg');
     return x;
