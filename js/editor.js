@@ -89,7 +89,7 @@ function endEdit(commit) {
     if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
     else if (kind === 'legrow' || kind === 'legtitle') commitLegendEdit(kind, id, v);
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
-    else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v || 'Gruppo'; g.w = Math.max(g.w, Math.ceil(tw(g.text, gFont(g))) + 28); save(); } } // il riquadro si allarga per il titolo
+    else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v; if (v) g.w = Math.max(g.w, Math.ceil(tw(v, gFont(g))) + 28); save(); } } // titolo vuoto = gruppo senza nome; il riquadro si allarga per il titolo
     else if (kind === 'note') {
       const nt = findNote(t, id);
       if (nt) { snapshot(); if (v) nt.text = v; else { t.notes.splice(t.notes.indexOf(nt), 1); clearSel(); } save(); }

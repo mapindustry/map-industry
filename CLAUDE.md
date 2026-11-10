@@ -19,6 +19,17 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   `L`/`NL`/`E` (layout di blocchi visibili, note, punti medi dei collegamenti), `link`, `dropOn` (blocco su cui
   si sta lasciando una struttura trascinata).
 - Salvataggio: `localStorage['officina-mappe-v3'] = { projects: [{id,name,updated,root}], cur }`.
+  **Cartella dei progetti** (`js/files.js`, File System Access API: Edge/Chrome, anche da file://): dal menu Progetti si
+  sceglie una cartella; ogni progetto diventa un file `.json` (`p.file`, formato di "Scarica come file .json") e
+  `writeStore` lo riscrive a ogni salvataggio (`fsSave`, scritture in coda). Il riferimento alla cartella sta in IndexedDB
+  (`officina-mappe-fs`); all'avvio `fsInit` lo riprende e, se il permesso va riconfermato, lo chiede al primo clic o tasto.
+  `fsSync` fa coincidere i progetti con i file (il file vince, tranne modifiche locali più recenti); aprire un progetto
+  rilegge il file (`fsReload`); rinominare rinomina il file; eliminare lo sposta in `Eliminati/`. localStorage resta la
+  copia di riserva. Per le prove si può passare a `useFolder` una cartella di `navigator.storage.getDirectory()`.
+  **Schede** (`js/menubar.js`): `S.tabs` = progetti aperti (salvati come `tabs` in localStorage). Barra: Progetti, Esporta,
+  poi le schede (la attiva contiene `#pName`), "+" = nuovo progetto. `switchTo` apre la scheda accanto a quella attiva e
+  salva lo stato di quella lasciata in `TABST` (annulla/rifai, vista, selezione; `enterTab` lo riprende). Chiudere una
+  scheda (× o tasto centrale) non elimina il progetto; aprire dal menu un progetto già aperto passa alla sua scheda.
   Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`. Le vecchie **strutture interne**
   (`n.sub`, tela separata, tolte il 2026-11-10) vengono convertite in rami compressi da `flattenSubs` al caricamento
   e all'apertura di un file .json.
@@ -45,7 +56,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   `promoteRoot`/`emptyLevel` la portano con sé.
 - Gruppi (`tree.groups`, `{ id, x, y, w, h, text }`): riquadri con titolo disegnati sotto a tutto. Nessun elenco di
   membri: contiene ciò che vi sta tutto dentro (`within`), e `dragMovers` lo porta con sé. Si prendono dal titolo o
-  dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro.
+  dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro. Il titolo può essere vuoto
+  (gruppo senza nome; `gTitle`: senza il campo `text` vale "Gruppo").
   - contenuto: `groupItems(t, g)` (usa `S.L.full`/`S.NL.full`, cioè anche gli elementi nascosti dai gruppi compressi);
   - stile (`groupMenuHtml`, `setGroupStyle`, valori di serie in `GDEF` tolti dai dati): `color`, `line` (`GLINE`), `bw`,
     `fo` (opacità dello sfondo), `tfs`/`tfw`/`ti` (titolo, `ti` = corsivo; la barra `gHead` cresce con lui), `ta: 'c'`; copia/incolla stile;

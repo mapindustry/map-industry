@@ -437,7 +437,7 @@ function treeMarkup(tree, L, NL, live) {
     grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
       `<rect class="gbox" width="${r.w}" height="${r.h}" rx="12" style="${boxSt}"/>` +
       (live ? `<rect class="ghit" width="${r.w}" height="${r.h}" rx="12"/><rect class="ghead" width="${r.w}" height="${hd}" rx="12"><title>${g.lock ? 'Gruppo bloccato' : 'Trascina per spostare il gruppo con il suo contenuto'} · Doppio clic: rinomina</title></rect>` : '') +
-      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${esc(ell(g.text || 'Gruppo', tmax, gFont(g)))}</text>` +
+      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${esc(ell(gTitle(g), tmax, gFont(g)))}</text>` +
       badge + lock +
       (sel ? `<rect class="ring" x="-5" y="-5" width="${r.w + 10}" height="${r.h + 10}" rx="15"/>` : '') +
       (sel && single && !g.fold && !g.lock ? `<rect class="rsz" data-rsz="1" x="${r.w - 4}" y="${r.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
@@ -864,12 +864,14 @@ function arrangeSelected(op) {
 
 /* ---------- gruppi ---------- */
 const findGroup = (tree, id) => (tree.groups || []).find(g => g.id === id);
+// titolo del gruppo: può essere vuoto (gruppo senza nome); i gruppi vecchi senza il campo si chiamano "Gruppo"
+const gTitle = g => g.text == null ? 'Gruppo' : g.text;
 const GLINE = { solid: 'none', dash: '6 4', dot: '0.1 4.5' };
 const glineOf = g => g.line || 'dash', gbwOf = g => g.bw ?? 1.2, gfoOf = g => g.fo ?? 0.08;
 const gfsOf = g => g.tfs || 13, gfwOf = g => g.tfw || 600, gFont = g => `${g.ti ? 'italic ' : ''}${gfwOf(g)} ${gfsOf(g)}px ${FB}`; // ti = titolo in corsivo
 const gHead = g => Math.max(GHEAD, Math.round(gfsOf(g) + 15)); // la barra del titolo cresce con il titolo
 // riquadro visibile: compresso = solo la barra, larga almeno quanto titolo, "+N" e lucchetto
-const gRect = g => g.fold ? { x: g.x, y: g.y, w: Math.max(g.w, Math.ceil(tw(g.text || 'Gruppo', gFont(g))) + 80 + (g.lock ? 24 : 0)), h: gHead(g) } : g;
+const gRect = g => g.fold ? { x: g.x, y: g.y, w: Math.max(g.w, Math.ceil(tw(gTitle(g), gFont(g))) + 80 + (g.lock ? 24 : 0)), h: gHead(g) } : g;
 // id nascosti dai gruppi compressi (blocchi, note, gruppi)
 function groupHidden(tree) { const H = new Set(); (tree.groups || []).forEach(g => { if (g.fold) (g.hide || []).forEach(id => H.add(id)); }); return H; }
 // contenuto di un gruppo: ciò che vi sta tutto dentro (contando anche gli elementi nascosti) oppure, se è compresso,
@@ -911,7 +913,7 @@ function fitGroup(id) {
   mutate(tt => {
     const h = findGroup(tt, id);
     h.x = Math.round(x1 - GPAD); h.y = Math.round(y1 - GPAD - hd);
-    h.w = Math.max(GMIN[0], Math.round(x2 - x1 + GPAD * 2), Math.ceil(tw(h.text || 'Gruppo', gFont(h))) + 28);
+    h.w = Math.max(GMIN[0], Math.round(x2 - x1 + GPAD * 2), Math.ceil(tw(gTitle(h), gFont(h))) + 28);
     h.h = Math.max(GMIN[1], Math.round(y2 - y1 + GPAD * 2 + hd));
   });
 }

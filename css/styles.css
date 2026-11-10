@@ -177,7 +177,19 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
   background:var(--surface);border-bottom:1px solid var(--line)}
 .brand{font-weight:700;font-size:15px;letter-spacing:-.01em;margin-right:6px;white-space:nowrap;display:flex;align-items:center;gap:8px}
 .brand svg{flex:none}
-#pName{font:600 14px var(--f-body);color:var(--ink);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 8px;min-width:0;width:240px}
+#pName{font:600 14px var(--f-body);color:var(--ink);background:transparent;border:1px solid transparent;border-radius:6px;padding:4px 7px;min-width:0;width:160px}
+/* schede dei progetti aperti: dopo Progetti ed Esporta; quella attiva contiene il campo del nome */
+.tabs{display:flex;align-items:center;gap:2px;min-width:0;flex:0 1 auto;overflow-x:auto;scrollbar-width:none;margin-left:8px;padding-left:8px;border-left:1px solid var(--line)}
+.tabs::-webkit-scrollbar{display:none}
+.tab{display:flex;align-items:center;flex:0 1 auto;min-width:72px;max-width:250px;height:34px;padding:0 3px 0 1px;border-radius:7px;cursor:pointer;color:var(--muted);font:500 13px var(--f-body)}
+.tab:hover{background:var(--band);color:var(--ink)}
+.tab.on{background:var(--band);color:var(--ink);cursor:default}
+.tab .tname{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab .tx{flex:none;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--muted);font:400 15px/1 var(--f-body);cursor:pointer;opacity:0}
+.tab:hover .tx,.tab.on .tx,.tab .tx:focus-visible{opacity:1}
+.tab .tx:hover{background:var(--line);color:var(--ink)}
+.tadd{flex:none;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:400 18px/1 var(--f-body);cursor:pointer}
+.tadd:hover{background:var(--band);color:var(--ink)}
 #pName:hover{border-color:var(--line)}
 #pName:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
 .bb{font:500 13px var(--f-body);color:var(--ink);background:transparent;border:1px solid transparent;border-radius:6px;padding:6px 10px;cursor:pointer;white-space:nowrap}

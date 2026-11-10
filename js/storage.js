@@ -1,5 +1,6 @@
 // Progetti in localStorage, undo, livelli e selezione
-// localStorage['officina-mappe-v3'] = { projects: [{ id, name, updated, root }], cur }
+// localStorage['officina-mappe-v3'] = { projects: [{ id, name, updated, root, file? }], cur, tabs: [id…] (schede aperte) }
+// Con una cartella dei progetti (js/files.js) ogni progetto è anche un file .json lì: localStorage resta la riserva.
 const KEY = 'officina-mappe-v3', V2 = 'officina-mappe-v2', V1 = 'officina-mappe-v1';
 function mk(text, children = []) { return { id: uid(), text, children }; }
 
@@ -24,6 +25,7 @@ function load() {
     const j = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (j && Array.isArray(j.projects) && j.projects.length) {
       S.projects = j.projects; S.pid = j.projects.some(p => p.id === j.cur) ? j.cur : j.projects[0].id; S.root = curProject().root;
+      S.tabs = (j.tabs || []).filter(id => j.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
       if (S.projects.map(p => flattenSubs(p.root)).some(Boolean)) saveNow();
       return;
     }
@@ -39,13 +41,14 @@ function load() {
   if (!root) root = mk('Idea primaria', [mk('Ramo 1'), mk('Ramo 2'), mk('Ramo 3')]);
   flattenSubs(root);
   const p = { id: uid(), name: root.text || 'Mappa', updated: Date.now(), root };
-  S.projects = [p]; S.pid = p.id; S.root = root; saveNow();
+  S.projects = [p]; S.pid = p.id; S.tabs = [p.id]; S.root = root; saveNow();
 }
 function writeStore() {
   // la data cambia solo se c'è stata una modifica, non aprendo o lasciando il progetto
   const p = curProject(); p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; }
-  try { localStorage.setItem(KEY, JSON.stringify({ projects: S.projects, cur: S.pid })); return true; }
-  catch (e) { toast('Salvataggio non disponibile in questo browser'); return false; }
+  fsSave(p); // anche nel file della cartella, se c'è
+  try { localStorage.setItem(KEY, JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
+  catch (e) { if (FS.ok) return true; toast('Salvataggio non disponibile in questo browser'); return false; }
 }
 let saveT, dirty = false;
 function save() { dirty = true; clearTimeout(saveT); saveT = setTimeout(writeStore, 250); }
