@@ -40,7 +40,13 @@ function snapshotSvg() {
   const tmp = document.createElementNS(SVGNS, 'svg'); tmp.setAttribute('class', 'exp');
   tmp.innerHTML = `<g>${treeMarkup(t, L, NL, false)}</g>`; document.body.appendChild(tmp);
   try {
-    const g = tmp.firstChild, bb = g.getBBox(); if (!bb.width) return null;
+    const g = tmp.firstChild; let bb = g.getBBox(); if (!bb.width) return null;
+    // legenda: accanto alla mappa, dalla parte dell'angolo scelto (a destra o a sinistra, in alto o in basso)
+    const lo = t.legend && legendLayout(t);
+    if (lo) {
+      const c = t.legend.corner || 'br', at = { x: c[1] === 'l' ? bb.x - lo.w - 40 : bb.x + bb.width + 40, y: c[0] === 't' ? bb.y : bb.y + bb.height - lo.h };
+      g.insertAdjacentHTML('beforeend', legendMarkup(t, false, at)); bb = g.getBBox();
+    }
     const x = Math.floor(bb.x - XPAD), y = Math.floor(bb.y - XPAD), w = Math.ceil(bb.width + XPAD * 2), h = Math.ceil(bb.height + XPAD * 2);
     const svg = document.createElementNS(SVGNS, 'svg');
     svg.setAttribute('xmlns', SVGNS); svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`); svg.setAttribute('width', w); svg.setAttribute('height', h);

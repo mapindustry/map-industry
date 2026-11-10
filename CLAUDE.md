@@ -35,6 +35,14 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Disponi (menu del blocco con più blocchi o note selezionati): allinea in colonna (sinistra/centro/destra) o in riga
   (alto/centro/basso) sul riquadro della selezione; con tre o più, stessa distanza in orizzontale/verticale (spazio vuoto
   uguale, minimo 24 px). `arrangeSelected(op)`, un passo di annullamento; i rami compressi seguono il blocco.
+- Legenda (`js/legend.js`, `tree.legend = { corner, text, items: [{ id, kind, s, text }] }`): riquadro fermo in un angolo
+  dello schermo (`corner` tl/tr/bl/br, di serie br; `<g id="lg">` fuori da #vp, non segue pan e zoom; `legendPos`,
+  trascinata si aggancia all'angolo più vicino, o Angolo nel menu). Nell'esportazione va accanto alla mappa. Una riga
+  per stile (campione disegnato da `legendSample` + descrizione). "Inserisci in legenda" nei menu di blocco, collegamento,
+  gruppo e nota (`addToLegend`: copia dello stile al momento, niente doppioni, apre subito la descrizione; Esc la toglie).
+  Selezione con id `LEG`; doppio clic su riga = descrizione, altrove = titolo (editor
+  `legrow`/`legtitle`); tasto destro = sposta su/giù, togli, rinomina, elimina; Canc la elimina. Va nell'esportazione;
+  `promoteRoot`/`emptyLevel` la portano con sé.
 - Gruppi (`tree.groups`, `{ id, x, y, w, h, text }`): riquadri con titolo disegnati sotto a tutto. Nessun elenco di
   membri: contiene ciò che vi sta tutto dentro (`within`), e `dragMovers` lo porta con sé. Si prendono dal titolo o
   dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro.

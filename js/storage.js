@@ -92,7 +92,7 @@ function toggleSel(id) {
   else { S.sels.add(id); S.sel = id; }
 }
 function pruneSel() {
-  const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id) || findGroup(t, id)));
+  const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id) || findGroup(t, id) || (id === LEG && t.legend)));
   if (S.sel && !S.sels.has(S.sel)) S.sel = [...S.sels].pop() || null;
   if (S.esel && !edgeData(t, S.esel)) S.esel = null;
 }

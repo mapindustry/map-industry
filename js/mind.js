@@ -451,7 +451,7 @@ function treeMarkup(tree, L, NL, live) {
 
 function render() {
   const tree = curTree(), L = mindLayout(tree), NL = notesLayout(tree); S.L = L; S.NL = NL;
-  vp.innerHTML = treeMarkup(tree, L, NL, true);
+  vp.innerHTML = treeMarkup(tree, L, NL, true); renderLegend();
   applyView(); renderBar();
 }
 
@@ -507,6 +507,7 @@ function removeSelected() {
     if (delRoot) { (tt.free = tt.free || []).push(...tt.children.map(c => { delete c.edge; return c; })); tt.children = []; }
     ids.forEach(id => {
       if (id === tt.id) return;
+      if (id === LEG) { delete tt.legend; return; }
       const f = findM(tt, id); if (f && f.list) { bridge(f.n, f.p, f.list); return; }
       const nt = findNote(tt, id); if (nt) tt.notes.splice(tt.notes.indexOf(nt), 1);
       const g = findGroup(tt, id); if (g) { tt.groups.splice(tt.groups.indexOf(g), 1); if (!tt.groups.length) delete tt.groups; } // solo il riquadro
@@ -520,15 +521,15 @@ function removeSelected() {
 // il blocco libero `nr` diventa la radice dei dati del livello: prende con sé blocchi liberi, collegamenti aggiuntivi e note.
 // Nessun blocco si sposta e nessuno cambia aspetto (l'attributo "primaria" resta quello che era).
 function promoteRoot(t, nr) {
-  nr.free = (t.free || []).filter(r => r !== nr); nr.notes = t.notes || []; nr.links = t.links || []; nr.groups = t.groups || [];
+  nr.free = (t.free || []).filter(r => r !== nr); nr.notes = t.notes || []; nr.links = t.links || []; nr.groups = t.groups || []; if (t.legend) nr.legend = t.legend;
   ['free', 'notes', 'links', 'groups'].forEach(k => { if (!nr[k].length) delete nr[k]; });
-  delete t.free; delete t.notes; delete t.links; delete t.groups; delete nr.edge;
+  delete t.free; delete t.notes; delete t.links; delete t.groups; delete t.legend; delete nr.edge;
   if (nr.primary === undefined) nr.primary = false;
   setLevelRoot(nr);
 }
 // livello senza blocchi: resta un contenitore invisibile che tiene le note
 function emptyLevel(t) {
-  const v = { id: uid(), text: t.text, children: [], void: true }; if (t.notes && t.notes.length) v.notes = t.notes; if (t.groups && t.groups.length) v.groups = t.groups;
+  const v = { id: uid(), text: t.text, children: [], void: true }; if (t.notes && t.notes.length) v.notes = t.notes; if (t.groups && t.groups.length) v.groups = t.groups; if (t.legend) v.legend = t.legend;
   setLevelRoot(v);
 }
 // collega l'uscita `po` di `fromId` all'ingresso `pi` di `toId`. Nessun blocco si sposta: cambia solo la linea.
@@ -966,7 +967,7 @@ function showPreview(id, rect, key) {
   const f = findM(curTree(), id); if (!f || !(key ? countPin(f.n, key) : f.n.fold && f.n.children.length)) return;
   const t = JSON.parse(JSON.stringify(curTree())), n = findM(t, id).n;
   if (key) { n.foldOut = (n.foldOut || []).filter(k => k !== key); if (!n.foldOut.length) delete n.foldOut; } else delete n.fold;
-  delete t.notes; delete t.groups;
+  delete t.notes; delete t.groups; delete t.legend;
   const SZ = sizeMap(t), hid = foldedSet(t), GL = new Map();
   const add = d => { if (!hid.has(d.id) && hasPos(d) && SZ.get(d.id)) GL.set(d.id, { ...SZ.get(d.id), x: d.x, y: d.y }); };
   walkAll(t, d => { if (!(S.L.full || S.L).has(d.id)) add(d); });
@@ -989,7 +990,7 @@ function showGroupPreview(id) {
   ids.forEach(i => { const l = LF.get(i); if (l) GL.set(i, l); const n = NF.get(i); if (n) NLh.set(i, n); });
   // blocchi fuori dal gruppo collegati a quelli nascosti: disegnati sotto ai veri, servono per le linee
   allLinks(t).forEach(({ from, to }) => [[from.id, to.id], [to.id, from.id]].forEach(([a, b]) => { if (ids.has(a) && !GL.has(b)) { const l = LF.get(b); if (l) GL.set(b, l); } }));
-  const c = JSON.parse(JSON.stringify(t));
+  const c = JSON.parse(JSON.stringify(t)); delete c.legend;
   c.notes = (c.notes || []).filter(nt => NLh.has(nt.id));
   c.groups = (c.groups || []).filter(h => h.id === id || ids.has(h.id)).map(h => { delete h.fold; delete h.hide; delete h.lock; return h; });
   ghostLayer(treeMarkup(c, GL, NLh, false));

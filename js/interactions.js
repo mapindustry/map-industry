@@ -13,8 +13,8 @@ const boxEl = $('#box');
 cv.addEventListener('pointerdown', e => {
   closeMenu(); hidePreview();
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
-  const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
-  if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr)) {
+  const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), lg = e.target.closest('[data-leg]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
+  if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr && !lg)) {
     e.preventDefault(); const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y };
   } else if (e.target.closest('.enote[data-edge]')) {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
@@ -38,6 +38,10 @@ cv.addEventListener('pointerdown', e => {
   } else if (gr && e.target.closest('[data-rsz]')) {
     const grp = findGroup(curTree(), gr.dataset.grp);
     P = { ...base, mode: 'resize', id: grp.id, grp: true, w0: grp.w, h0: grp.h };
+  } else if (lg) {
+    // legenda: ferma in un angolo dello schermo; trascinata si aggancia all'angolo più vicino
+    const lo = legendLayout(curTree()), p = legendPos(lo, curTree().legend.corner);
+    selectOnly(LEG); render(); P = { ...base, mode: 'legend', ox: p.x, oy: p.y };
   } else if (g || cn || gr) {
     const id = g ? g.dataset.id : cn ? cn.dataset.note : gr.dataset.grp;
     if (e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
@@ -70,6 +74,7 @@ cv.addEventListener('pointermove', e => {
   const v = view();
   if (P.mode === 'pan') { cv.classList.add('panning'); v.x = P.vx + dx; v.y = P.vy + dy; v.fresh = false; applyView(); return; }
   if (P.mode === 'box') return dragBox(e);
+  if (P.mode === 'legend') { S.legDrag = { x: P.ox + dx, y: P.oy + dy }; return renderLegend(); }
   if (P.mode === 'enote') {
     const ed = edgeData(curTree(), P.id, true);
     ed.nx = Math.round(P.ox + dx / v.k); ed.ny = Math.round(P.oy + dy / v.k);
@@ -142,6 +147,11 @@ function dragBox(e) {
 function endPointer(e) {
   if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true; clearTimeout(P.dropT);
   if (S.rail) { S.rail = null; render(); }
+  if (P.mode === 'legend') {
+    const d = S.legDrag; S.legDrag = null; P = null;
+    if (d) return setLegendCorner(nearestCorner(d.x, d.y, legendLayout(curTree())));
+    return;
+  }
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
     if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
@@ -183,6 +193,9 @@ cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('dblclick', e => {
   // il primo clic ridisegna la tela: si guarda cosa c'è sotto il puntatore adesso, non e.target
   const el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
+  // legenda: doppio clic su una riga = descrizione, altrove = titolo
+  const lr = el.closest('[data-lrow]'); if (lr) return startLegendEdit(lr.dataset.lrow);
+  if (el.closest('[data-leg]')) return startLegendTitle();
   const edge = el.closest('[data-edge]'); if (edge) return startEdgeNote(edge.dataset.edge);
   const cn = el.closest('[data-note]'); if (cn) return startNoteEdit(cn.dataset.note);
   const g = el.closest('.mn[data-id]');

@@ -47,7 +47,7 @@ function groupMenuHtml(g) {
     item('gedit', 'Rinomina', '', 'F2') +
     item('gfold', g.fold ? 'Espandi il gruppo' : 'Comprimi il gruppo', '', plural(cnt, '1 elemento', 'elementi'), g.fold ? '' : 'Resta solo la barra del titolo') +
     (g.fold ? '' : item('gsel', 'Seleziona il contenuto')) + item('gfit', 'Adatta al contenuto') +
-    item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') + SEP +
+    item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
     item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + SEP +
     head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'group' ? item('stpaste', gs > 1 ? `Incolla stile su ${gs} gruppi` : 'Incolla stile') : '') +
     seg('Bordo', [['gl-solid', 'Continuo', ln === 'solid', box('')], ['gl-dash', 'Tratteggiato', ln === 'dash', box('4 3')],
@@ -81,7 +81,7 @@ function nodeMenuHtml() {
   }
   h += item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') +
     (S.clip && one ? item('paste', 'Incolla dentro', '', 'Ctrl+V') : '') +
-    item('group', 'Raggruppa', '', 'Ctrl+G') + SEP +
+    item('group', 'Raggruppa', '', 'Ctrl+G') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
     (one && findM(t, one.id).p ? item('detach', 'Stacca dal collegamento') : '') +
     item('del', nodes.length > 1 ? `Elimina ${nodes.length} blocchi` : 'Elimina', ' dng', 'Canc');
   // più blocchi (o note) selezionati: allinea e spazia, il menu resta aperto per provarne più d'uno
@@ -180,7 +180,11 @@ cv.addEventListener('contextmenu', e => {
   hidePreview();
   const el = document.elementFromPoint(e.clientX, e.clientY) || e.target;
   const g = el.closest('.mn[data-id]'), edge = el.closest('[data-edge]'), cn = el.closest('[data-note]'), gr = el.closest('[data-grp]');
-  const an = g && el.closest('[data-anc]');
+  const an = g && el.closest('[data-anc]'), lg = el.closest('[data-leg]');
+  if (lg) { // legenda: opzioni della riga sotto il puntatore e della legenda
+    const row = el.closest('[data-lrow]'); selectOnly(LEG); render();
+    return showMenu(e.clientX, e.clientY, legendMenuHtml(row && row.dataset.lrow), { kind: 'legend', id: LEG, row: row && row.dataset.lrow });
+  }
   if (an) { selectOnly(g.dataset.id); render(); return showPinMenu(e.clientX, e.clientY, g.dataset.id, an.dataset.anc, +an.dataset.idx); }
   if (g) {
     if (!S.sels.has(g.dataset.id)) selectOnly(g.dataset.id); else S.sel = g.dataset.id;
@@ -195,6 +199,7 @@ cv.addEventListener('contextmenu', e => {
       item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota', '', 'Doppio clic') + (ed.note ? item('enotedel', 'Togli la nota') : '') +
       (ed.nx || ed.ny ? item('enotepos', 'Riporta la nota sulla linea') : '') +
       (isStr(ed) ? '' : SEP + item('einsert', 'Inserisci un blocco intermedio') + item('ehub', 'Inserisci uno svincolo')) + SEP +
+      item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
       item('edel', 'Elimina collegamento', ' dng', 'Canc') + SEP + head('Stile') + styleItems('edge', 1) +
       seg('Forma', [['curve', 'Morbida', sh === 'curve', ico('M3 11C13 11 15 3 25 3')], ['straight', 'Dritta', sh === 'st', ico('M3 11L25 3')],
         ['square', 'Squadrata', sh === 'sq', ico('M3 11H14V3H25')]]) +
@@ -208,7 +213,7 @@ cv.addEventListener('contextmenu', e => {
   if (cn) {
     selectOnly(cn.dataset.note); render();
     return showMenu(e.clientX, e.clientY, title('Nota') + item('nedit', 'Modifica', '', 'F2') + SEP +
-      item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') + item('group', 'Raggruppa', '', 'Ctrl+G') + SEP +
+      item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') + item('group', 'Raggruppa', '', 'Ctrl+G') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
       item('del', 'Elimina nota', ' dng', 'Canc'), { kind: 'note', id: cn.dataset.note });
   }
   if (gr) {
@@ -272,6 +277,11 @@ menuEl.addEventListener('click', e => {
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     return;
   }
+  if (a.startsWith('lc-')) { // angolo della legenda: il menu resta aperto
+    setLegendCorner(a.slice(3));
+    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+    return;
+  }
   if (a.startsWith('gl-') || a.startsWith('gta-') || a.startsWith('gti-')) {
     setGroupStyle(a.startsWith('gl-') ? { line: a.slice(3) } : a.startsWith('gti-') ? { ti: a === 'gti-on' } : { ta: a.slice(4) }, menuGroups());
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
@@ -310,6 +320,12 @@ menuEl.addEventListener('click', e => {
   else if (a === 'group') groupSelected();
   else if (a === 'gedit') startGroupEdit(id);
   else if (a === 'ungroup') ungroup(id);
+  else if (a === 'legadd') addToLegend();
+  else if (a === 'lredit') startLegendEdit(M.row);
+  else if (a === 'lrup' || a === 'lrdown') moveLegendRow(M.row, a === 'lrup' ? -1 : 1);
+  else if (a === 'lrdel') removeLegendRow(M.row);
+  else if (a === 'ltitle') startLegendTitle();
+  else if (a === 'ldel') deleteLegend();
   else if (a === 'gfold') toggleGroupFold(id);
   else if (a === 'gsel') selectGroupContents(id);
   else if (a === 'gfit') fitGroup(id);

@@ -1,6 +1,6 @@
 // Modifica del testo sul posto (textarea sovrapposta): blocchi, etichette, note dei collegamenti, note della tela
 const ed = $('#ed');
-let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group', id, orig }
+let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle', id, orig }
 
 function editorBox() {
   const v = view(), k = v.k, sx = x => v.x + x * k, sy = y => v.y + y * k, id = editing.id;
@@ -17,6 +17,7 @@ function editorBox() {
     const m = S.E.get(id); if (!m) return null;
     return { x: sx(m.x) - 90 * k, y: sy(m.y) - 12 * k, w: 180 * k, h: 24 * k, font: NOTE_FONT, fs: 11.5, lh: 14, minW: 180 };
   }
+  if (editing.kind === 'legrow' || editing.kind === 'legtitle') return legendEditorBox();
   if (editing.kind === 'group') {
     const g = findGroup(curTree(), id); if (!g) return null;
     const fs = gfsOf(g), hd = gHead(g);
@@ -28,8 +29,9 @@ function editorBox() {
 function placeEditor() {
   if (!editing) return;
   const b = editorBox(); if (!b) return;
-  const k = view().k;
-  ed.style.font = `${b.font.replace(/[\d.]+px.*$/, '')}${b.fs * k}px ${FB}`; // stile e peso (es. "italic 600 ") + dimensione ed.style.lineHeight = b.lh * k + 'px';
+  const k = b.k || view().k; // la legenda non segue lo zoom (k = 1)
+  // stile e peso (es. "italic 600 ") presi dal carattere dell'elemento, più la dimensione alla scala della vista
+  ed.style.font = `${b.font.replace(/[\d.]+px.*$/, '')}${b.fs * k}px ${FB}`; ed.style.lineHeight = b.lh * k + 'px';
   const w = Math.max(b.w, b.minW * k);
   ed.style.width = w + 'px'; ed.style.left = (b.left ? b.x : b.x + (b.w - w) / 2) + 'px';
   ed.style.paddingTop = '0'; ed.style.height = 'auto';
@@ -85,6 +87,7 @@ function endEdit(commit) {
   }
   if (commit && v !== orig) {
     if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
+    else if (kind === 'legrow' || kind === 'legtitle') commitLegendEdit(kind, id, v);
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
     else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v || 'Gruppo'; g.w = Math.max(g.w, Math.ceil(tw(g.text, gFont(g))) + 28); save(); } } // il riquadro si allarga per il titolo
     else if (kind === 'note') {
