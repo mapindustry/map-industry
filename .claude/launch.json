@@ -6,6 +6,13 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8765"],
       "port": 8765
+    },
+    {
+      "name": "officina-mappe-prova",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8770"],
+      "port": 8770,
+      "autoPort": false
     }
   ]
 }

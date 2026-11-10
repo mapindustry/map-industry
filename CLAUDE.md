@@ -77,6 +77,12 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - frecce = selezione al blocco vicino (`moveSel`); Ctrl+V sul blocco appena copiato incolla libero, non dentro
     (`S.clip.src`); "Seleziona il ramo" e "Adatta alla vista" nei menu; forma e tratto lasciano aperto il menu;
   - menu del blocco: colore, azioni, Elimina, poi Stile e Pallini in fondo; la riga di aiuto sparisce alla prima modifica;
+- Menu (riordinati il 2026-11-10): ogni menu del tasto destro apre con il titolo dell'oggetto (`title()` → `.mtitle`),
+  poi le azioni con la scorciatoia a destra (`item(a, etichetta, classe, scorciatoia, spiegazione)` → `<kbd>`/`<small>`),
+  Elimina, e in fondo le sezioni di stile (`head()` → `.mhead`). Le scelte attive hanno la spunta (`.on`).
+  Pallini = contatori −/+ (`pinsHtml`, `data-st="pin"`); forma e tratto del collegamento = pulsanti con disegno (`seg`).
+  Tutto ciò che si regola lascia aperto il menu. Barra: Progetti (azioni, recenti, Elimina) ed Esporta; niente pulsante
+  Salva (il salvataggio è automatico, Ctrl+S salva subito).
   - la data del progetto cambia solo con una modifica (`dirty`); il bagliore non va nell'esportazione.
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;
   con `live=false` produce la versione statica per anteprima ed esportazione. Testo utente sempre via `esc()`.

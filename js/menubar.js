@@ -1,4 +1,4 @@
-// Barra dei menu: nome del progetto, Progetti, Salva, Esporta
+// Barra dei menu: nome del progetto, Progetti, Esporta (il salvataggio è automatico; Ctrl+S salva subito)
 const pName = $('#pName');
 const fmtDate = t => new Date(t).toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -21,17 +21,18 @@ document.addEventListener('pointerdown', e => { if (!(e.target.closest && e.targ
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.ddm:not([hidden])')) { closeDrops(); e.stopImmediatePropagation(); } }, true);
 
 $('#bProj').onclick = () => toggleDrop('mProj', () => {
+  // azioni prima, poi i progetti dal più recente (l'elenco può essere lungo), Elimina in fondo
   const list = [...S.projects].sort((a, b) => b.updated - a.updated);
-  return `<div class="mhead">Apri un progetto</div>` + list.map(p =>
-    `<button class="it${p.id === S.pid ? ' on' : ''}" data-open="${p.id}"><b>${esc(p.name || 'Senza nome')}</b><span>${fmtDate(p.updated)}</span></button>`).join('') +
-    SEP + item('pnew', 'Nuovo progetto') + item('pfile', 'Apri file .json…') + item('pdown', 'Salva come file .json') +
-    (S.projects.length > 1 ? SEP + item('pdel', 'Elimina questo progetto', ' dng') : '');
+  return item('pnew', 'Nuovo progetto') + item('pfile', 'Apri file .json…') + item('pdown', 'Scarica come file .json') + SEP +
+    head('Progetti recenti') + list.map(p =>
+      `<button class="it${p.id === S.pid ? ' on' : ''}" data-open="${p.id}" role="menuitem"><span class="l">${esc(p.name || 'Senza nome')}</span><small>${fmtDate(p.updated)}</small></button>`).join('') +
+    (S.projects.length > 1 ? SEP + item('pdel', 'Elimina il progetto aperto', ' dng') : '');
 });
 $('#mProj').addEventListener('click', e => {
   const o = e.target.closest('[data-open]'); if (o) { closeDrops(); return openProject(o.dataset.open); }
   const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
   if (a === 'pdel') { // due clic per confermare
-    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Clic di nuovo per eliminare (non si può annullare)'; return; }
+    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.querySelector('.l').textContent = 'Clic di nuovo per eliminare (non si può annullare)'; return; }
     closeDrops(); return deleteProject();
   }
   closeDrops();
@@ -39,10 +40,9 @@ $('#mProj').addEventListener('click', e => {
   else if (a === 'pfile') $('#fileIn').click();
   else if (a === 'pdown') downloadProject();
 });
-$('#bSave').onclick = () => saveProject();
-$('#bExp').onclick = () => toggleDrop('mExp', () => `<div class="mhead">Esporta il livello visibile</div>` +
-  `<button class="it" data-x="svg"><b>Immagine SVG</b><span>Vettoriale, si apre ovunque</span></button>` +
-  `<button class="it" data-x="pdf"><b>PDF</b><span>Dalla finestra di stampa: “Salva come PDF”</span></button>`);
+$('#bExp').onclick = () => toggleDrop('mExp', () => head('Esporta la mappa') +
+  `<button class="it" data-x="svg" role="menuitem"><span class="l">Immagine SVG</span><small>Vettoriale, si apre ovunque</small></button>` +
+  `<button class="it" data-x="pdf" role="menuitem"><span class="l">PDF</span><small>Dalla finestra di stampa: “Salva come PDF”</small></button>`);
 $('#mExp').addEventListener('click', async e => {
   const b = e.target.closest('[data-x]'); if (!b) return; closeDrops();
   try { const r = await exportImage(b.dataset.x); if (!r.fonts) toast('Font non incorporato (sei offline?): il testo userà un carattere di sistema'); else if (b.dataset.x === 'svg') toast('SVG scaricato'); }
