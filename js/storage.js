@@ -20,9 +20,11 @@ const findNote = (tree, id) => (tree.notes || []).find(x => x.id === id);
 
 /* ---------- progetti ---------- */
 const curProject = () => S.projects.find(p => p.id === S.pid);
+// dove sta la copia delle mappe: localStorage, oppure sessionStorage per un accesso non ricordato (js/cloud.js)
+const mapStore = () => CL.session ? authStore() : localStorage;
 function load() {
   try {
-    const j = JSON.parse(localStorage.getItem(storeKey()) || 'null');
+    const j = JSON.parse(mapStore().getItem(storeKey()) || 'null');
     if (j && Array.isArray(j.projects) && j.projects.length) {
       S.projects = j.projects; S.pid = j.projects.some(p => p.id === j.cur) ? j.cur : j.projects[0].id; S.root = curProject().root;
       S.tabs = (j.tabs || []).filter(id => j.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
@@ -49,7 +51,7 @@ function writeStore() {
   // la data cambia solo se c'è stata una modifica, non aprendo o lasciando il progetto
   const p = curProject(); p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; }
   if (CL.session) cloudSave(p); else fsSave(p); // anche online (con l'accesso) o nel file della cartella
-  try { localStorage.setItem(storeKey(), JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
+  try { mapStore().setItem(storeKey(), JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
   catch (e) { if (FS.ok) return true; toast('Salvataggio non disponibile in questo browser'); return false; }
 }
 let saveT, dirty = false;

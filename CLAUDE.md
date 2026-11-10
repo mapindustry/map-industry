@@ -39,6 +39,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   `deleted: true`; la cartella dei progetti resta in pausa. Entrare/uscire ricarica la pagina. **Accesso obbligatorio**: con Supabase configurato e senza sessione
   `authGate` mostra solo la finestra di accesso (`body.gate` nasconde barra e tela, niente ×/Esc, tastiera fermata).
   Nome dell'utente in `user_metadata.name` (chiesto alla registrazione, `setName`), mostrato nella barra con l'iniziale.
+  "Ricordami su questo dispositivo" (di serie): sessione e copia delle mappe in localStorage; senza, in sessionStorage
+  (`authStore`/`mapStore`), e l'accesso finisce chiudendo il browser.
   Menu Account: nome, carica online le mappe del browser (`uploadLocal`), cambia password, esci. Per provarlo senza Supabase: finto `fetch` nella pagina.
   **Lucchetto** (`#bLock`, `p.locked` salvato con il progetto): sola lettura; `readOnly()` ferma `mutate`, annulla, editor,
   tasti e trascinamenti (che spostano la vista); restano selezione, Copia, Cerca, aprire/chiudere rami e gruppi (`S.roOk`).
@@ -149,7 +151,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   visibile; Invio/Maiusc+Invio scorrono tutti e `revealHit` apre i rami compressi (un passo di annullamento). Esc chiude.
 - La tela è un unico `<svg id="cv">` ridisegnato per intero dentro `<g id="vp">` da `treeMarkup(tree, L, NL, live)`;
   con `live=false` produce la versione statica per anteprima ed esportazione. Testo utente sempre via `esc()`.
-- Dopo un clic la tela viene ridisegnata: nei gestori di `dblclick`/`contextmenu` usa `document.elementFromPoint`.
+- Dopo un clic la tela viene ridisegnata: l'elemento premuto sparisce prima del rilascio, quindi i browser recenti non
+  mandano `click`/`dblclick` sulla tela. Il doppio clic lo riconosce `endPointer` (due rilasci senza trascinamento entro
+  450 ms e 8 px → `onDouble`); lì e in `contextmenu` usa `document.elementFromPoint`, e per le celle `cellAt` (posizione).
+- Anteprima dei link (WhatsApp ecc.): `og.png` 1200×630 e tag `og:` in `index.html` con indirizzi completi.
 
 ## Stile
 - Colori solo tramite token CSS in `:root` di `css/styles.css`, con varianti per tema scuro

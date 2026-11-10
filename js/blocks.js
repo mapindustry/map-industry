@@ -104,6 +104,14 @@ function deleteTableLine(id, r, c, what) {
     if (what === 'col' && Math.max(...rows.map(x => x.length)) > 1) rows.forEach(x => x.splice(c, 1));
   });
 }
+// cella sotto il punto p (coordinate della tela) di un blocco tabella: [riga, colonna], o null (titolo, fuori)
+function cellAt(id, p) {
+  const l = S.L.get(id); if (!l || !l.tb) return null;
+  const T = l.tb, y = p.y - l.y - T.titleH, x = p.x - l.x; if (y < 0 || x < 0 || x > l.w) return null;
+  const r = Math.floor(y / T.rowH); if (r >= T.rows.length) return null;
+  let c = T.colX.findIndex((cx, i) => x >= cx && x < cx + T.colW[i]); if (c < 0) c = T.nc - 1;
+  return [r, c];
+}
 // modifica di una cella: editing.id = "idBlocco|riga|colonna"
 const cellRef = s => { const [id, r, c] = s.split('|'); return { id, r: +r, c: +c }; };
 function startCellEdit(id, r, c) {

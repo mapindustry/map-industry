@@ -149,7 +149,19 @@ function dragBox(e) {
   render();
 }
 
+// Doppio clic riconosciuto qui: la tela si ridisegna a ogni clic, quindi l'elemento premuto sparisce prima del
+// rilascio e i browser recenti non mandano più né click né dblclick. Due rilasci senza trascinamento, entro 450 ms
+// e 8 px, valgono un doppio clic (onDouble, dopo il ridisegno: si guarda cosa c'è sotto il puntatore adesso).
+let lastTap = null;
 function endPointer(e) {
+  const tap = P && !P.moved && e.type === 'pointerup' && P.mode !== 'link' && (e.pointerType !== 'mouse' || e.button === 0);
+  endPointerCore(e);
+  if (!tap) { lastTap = null; return; }
+  const now = performance.now();
+  if (lastTap && now - lastTap.t < 450 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 8) { lastTap = null; onDouble(e); }
+  else lastTap = { t: now, x: e.clientX, y: e.clientY };
+}
+function endPointerCore(e) {
   if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true; clearTimeout(P.dropT);
   if (S.rail) { S.rail = null; render(); }
   if (P.mode === 'legend') {
@@ -196,7 +208,7 @@ function endPointer(e) {
 }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
-cv.addEventListener('dblclick', e => {
+function onDouble(e) {
   // il primo clic ridisegna la tela: si guarda cosa c'è sotto il puntatore adesso, non e.target
   if (readOnly()) return roToast();
   const el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
@@ -207,10 +219,10 @@ cv.addEventListener('dblclick', e => {
   const cn = el.closest('[data-note]'); if (cn) return startNoteEdit(cn.dataset.note);
   const g = el.closest('.mn[data-id]');
   if (g && el.closest('[data-tag]')) return startTagEdit(g.dataset.id);
-  const cell = g && el.closest('[data-cell]'); if (cell) { const [r, c] = cell.dataset.cell.split(':').map(Number); return startCellEdit(g.dataset.id, r, c); }
+  const cell = g && cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); if (cell) return startCellEdit(g.dataset.id, cell[0], cell[1]); // anche sul testo della cella
   if (g && !el.closest('[data-anc]')) return startEdit(g.dataset.id, true);
   const gr = el.closest('[data-grp]'); if (gr && !el.closest('[data-rsz]')) startGroupEdit(gr.dataset.grp);
-});
+}
 cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 cv.addEventListener('wheel', e => {
   e.preventDefault(); closeMenu(); hidePreview();

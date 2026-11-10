@@ -1,6 +1,7 @@
 // Account e mappe online (Supabase, chiamato con fetch: nessuna libreria). Configurazione in js/config.js.
-// - Accesso: email e password (crea un account, entra, password dimenticata, esci). La sessione sta in localStorage
-//   ('officina-mappe-auth') e si rinnova da sola. I link delle email (conferma, nuova password) tornano all'app con i
+// - Accesso: email e password (crea un account, entra, password dimenticata, esci). La sessione ('officina-mappe-auth')
+//   si rinnova da sola. "Ricordami su questo dispositivo" (di serie): sta in localStorage e resta tra un'apertura e
+//   l'altra; senza, sta in sessionStorage (anche la copia delle mappe) e finisce chiudendo il browser. I link delle email (conferma, nuova password) tornano all'app con i
 //   dati nel frammento #access_token=…, letti all'avvio.
 // - Con l'accesso le mappe sono le righe della tabella `projects` dell'utente: { owner, id, name, data: { root,
 //   locked }, updated_at, deleted }. Ogni salvataggio scrive anche online (poco dopo l'ultima modifica, in coda).
@@ -20,11 +21,15 @@ function jwtUser(tok) {
   try { const j = JSON.parse(decodeURIComponent(escape(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))); const m = j.user_metadata || {}; return { id: j.sub, email: j.email || '', name: m.name || m.full_name || '' }; }
   catch (e) { return null; }
 }
-function setSession(s) {
-  if (!s || !s.access_token) { CL.session = null; try { localStorage.removeItem(AUTH); } catch (e) {} return; }
+// dove sta la sessione (e la copia delle mappe dell'account): ricordata = localStorage, altrimenti sessionStorage
+const authStore = () => CL.session && CL.session.remember === false ? sessionStorage : localStorage;
+function keepSession() { try { authStore().setItem(AUTH, JSON.stringify(CL.session)); } catch (e) {} }
+function setSession(s, remember) {
+  if (!s || !s.access_token) { CL.session = null; try { localStorage.removeItem(AUTH); sessionStorage.removeItem(AUTH); } catch (e) {} return; }
+  if (remember === undefined) remember = !CL.session || CL.session.remember !== false; // rinnovo: resta com'era
   const user = jwtUser(s.access_token) || s.user, keep = CL.session && CL.session.user.id === user.id ? CL.session.user.name : '';
-  CL.session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (+s.expires_in || 3600), user: { id: user.id, email: user.email, name: user.name || keep || '' } };
-  try { localStorage.setItem(AUTH, JSON.stringify(CL.session)); } catch (e) {}
+  CL.session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (+s.expires_in || 3600), user: { id: user.id, email: user.email, name: user.name || keep || '' }, remember };
+  keepSession();
 }
 // all'avvio, prima di caricare le mappe: sessione salvata, oppure arrivata da un link email (#access_token=…)
 let authReturn = null; // 'signup' | 'recovery' | 'magiclink' …: per dire all'utente cosa è successo
@@ -39,7 +44,7 @@ function cloudBoot() {
     authReturn = 'error:' + h.get('error_description').replace(/\+/g, ' ');
     history.replaceState(null, '', appUrl());
   } else {
-    try { const s = JSON.parse(localStorage.getItem(AUTH) || 'null'); if (s && s.access_token && s.user) CL.session = s; } catch (e) {}
+    try { const s = JSON.parse(sessionStorage.getItem(AUTH) || localStorage.getItem(AUTH) || 'null'); if (s && s.access_token && s.user) CL.session = s; } catch (e) {}
   }
 }
 // chiave di localStorage: le mappe del browser, oppure la copia locale delle mappe dell'account
@@ -79,8 +84,8 @@ function authMsg(j, status) {
 }
 
 /* ---------- account ---------- */
-async function signIn(email, password) {
-  setSession(await sb('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password }, auth: false }));
+async function signIn(email, password, remember = true) {
+  setSession(await sb('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password }, auth: false }), remember);
   location.reload();
 }
 // con la conferma via email attiva (di serie in Supabase) l'account vale dopo il clic sul link
@@ -94,13 +99,14 @@ async function setNewPassword(password) { await sb('/auth/v1/user', { method: 'P
 // nome mostrato nella barra: sta nei dati dell'utente su Supabase (user_metadata.name)
 async function setName(name) {
   await sb('/auth/v1/user', { method: 'PUT', body: { data: { name } } });
-  CL.session.user.name = name; try { localStorage.setItem(AUTH, JSON.stringify(CL.session)); } catch (e) {}
+  CL.session.user.name = name; keepSession();
   renderAccount();
 }
 const userName = () => CL.session ? CL.session.user.name || CL.session.user.email.split('@')[0] : '';
 async function signOut() {
   await cloudFlush();
   try { await sb('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* esce comunque */ }
+  try { sessionStorage.removeItem(storeKey()); } catch (e) {} // copia delle mappe di un accesso non ricordato
   setSession(null); location.reload();
 }
 
@@ -197,6 +203,7 @@ function openAuth(mode = 'in') {
     (mode === 'name' ? '<p class="amsg">Si vede in alto a destra.</p>' : mode === 'forgot' ? '<p class="amsg">Ti mandiamo un link per scegliere una password nuova.</p>' :
       `<label>Password<input name="password" type="password" autocomplete="${mode === 'in' ? 'current-password' : 'new-password'}" minlength="6" required></label>`) +
     (mode === 'up' ? '<p class="amsg">Almeno 6 caratteri. Ti mandiamo un’email per confermare l’indirizzo.</p>' : '') +
+    (mode === 'in' ? '<label class="arem"><input name="remember" type="checkbox" checked> Ricordami su questo dispositivo</label>' : '') +
     `<p class="aerr" role="alert" hidden></p><button class="ago" type="submit">${T[1]}</button>` +
     (mode === 'in' ? '<p class="alinks"><a href="#" data-m="up">Crea un account</a> · <a href="#" data-m="forgot">Password dimenticata?</a></p>' :
       mode === 'newpass' || mode === 'name' ? '' : '<p class="alinks"><a href="#" data-m="in">Hai già un account? Entra</a></p>') + `</form>`;
@@ -219,7 +226,7 @@ authEl.addEventListener('submit', async e => {
   if (fm.password && pw.length < 6) return fail('La password deve avere almeno 6 caratteri');
   go.disabled = true; err.hidden = true;
   try {
-    if (mode === 'in') await signIn(email, pw);
+    if (mode === 'in') await signIn(email, pw, fm.remember.checked);
     else if (mode === 'name') { await setName(nm); closeAuth(); toast('Nome salvato'); }
     else if (mode === 'up') { if (await signUp(email, pw, nm) === 'confirm') doneMsg(fm, `Abbiamo mandato un link a <b>${esc(email)}</b>: aprilo per confermare l’account, poi torni qui già dentro.`); }
     else if (mode === 'forgot') { await recoverPassword(email); doneMsg(fm, `Se esiste un account per <b>${esc(email)}</b>, ti è arrivato un link per scegliere la password nuova.`); }

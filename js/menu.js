@@ -209,7 +209,7 @@ cv.addEventListener('contextmenu', e => {
   }
   if (an) { selectOnly(g.dataset.id); render(); return showPinMenu(e.clientX, e.clientY, g.dataset.id, an.dataset.anc, +an.dataset.idx); }
   if (g) {
-    const cl = el.closest('[data-cell]'); MENU_CELL = cl ? cl.dataset.cell.split(':').map(Number) : null;
+    MENU_CELL = cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); // cella della tabella sotto il puntatore (anche sul testo)
     if (!S.sels.has(g.dataset.id)) selectOnly(g.dataset.id); else S.sel = g.dataset.id;
     render(); return showMenu(e.clientX, e.clientY, nodeMenuHtml(), { kind: 'node' });
   }
