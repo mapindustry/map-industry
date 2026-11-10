@@ -46,7 +46,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - Rami compressi: `fold` (tutti i rami) o `foldOut` (`['o:1','s:0']`, solo i rami che partono da quei pallini,
     dal menu del pallino). `mindLayout` toglie da `L` i discendenti (`foldedSet`/`isFoldedChild`), quindi non si
     disegnano né loro né i loro collegamenti; "+N" (sull'angolo, o accanto al pallino) per riaprirli, al passaggio
-    anteprima (`showPreview`); `foldPrev` = schema in piccolo sotto il blocco. Trascinando il blocco i rami nascosti
+    anteprima in trasparenza sulla tela, dove starebbero da aperti (`showPreview` → `<g id="ghost">` sotto ai blocchi); `foldPrev` = schema in piccolo sotto il blocco. Trascinando il blocco i rami nascosti
     lo seguono. Una selezione trascinata e lasciata sopra un blocco vi entra compressa (`foldInto`).
     I rami nuovi o riaperti senza posizione vanno oltre la colonna dei fratelli del genitore (`placeNew`).
   - `tag` = etichetta (sigla o nota breve) su una linguetta sopra il bordo (`tagLeft` evita i pallini in alto);

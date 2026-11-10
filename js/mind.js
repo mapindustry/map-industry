@@ -809,18 +809,24 @@ function levelBounds(L, NL, G = []) {
   if (x1 === Infinity) return { x: 0, y: 0, w: 120, h: 40 }; // livello vuoto
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
-// anteprima dei rami compressi (passando sull'etichetta "+N"), senza aprirli
-const prevEl = $('#preview');
+// anteprima dei rami compressi (passando sull'etichetta "+N"), senza aprirli: i blocchi nascosti compaiono in
+// trasparenza dove starebbero da aperti. Si disegna su una copia della mappa con quel ramo aperto, sotto ai blocchi
+// veri (così il blocco di partenza, ridisegnato per i collegamenti, resta coperto) e senza toccare i dati.
 function showPreview(id, rect, key) {
+  hidePreview();
   const f = findM(curTree(), id); if (!f || !(key ? countPin(f.n, key) : f.n.fold && f.n.children.length)) return;
-  const { t, L, b } = foldMini(f.n, key);
-  const pad = 16, w = b.w + pad * 2, h = b.h + pad * 2, k = Math.min(1, 340 / w, 220 / h);
-  prevEl.innerHTML = `<div class="ptitle">Rami compressi · ${key ? countPin(f.n, key) : countDesc(f.n)} blocchi · clic per aprirli</div>` +
-    `<svg viewBox="${b.x - pad} ${b.y - pad} ${w} ${h}" width="${Math.round(w * k)}" height="${Math.round(h * k)}">${treeMarkup(t, L, new Map(), false)}</svg>`;
-  prevEl.hidden = false;
-  const r = prevEl.getBoundingClientRect();
-  let left = rect.right + 10; if (left + r.width > innerWidth - 8) left = rect.left - r.width - 10;
-  prevEl.style.left = clamp(left, 8, innerWidth - r.width - 8) + 'px';
-  prevEl.style.top = clamp(rect.top - 10, BAR_H + 8, innerHeight - r.height - 8) + 'px';
+  const t = JSON.parse(JSON.stringify(curTree())), n = findM(t, id).n;
+  if (key) { n.foldOut = (n.foldOut || []).filter(k => k !== key); if (!n.foldOut.length) delete n.foldOut; } else delete n.fold;
+  delete t.notes; delete t.groups;
+  const SZ = sizeMap(t), hid = foldedSet(t), GL = new Map();
+  const add = d => { if (!hid.has(d.id) && hasPos(d) && SZ.get(d.id)) GL.set(d.id, { ...SZ.get(d.id), x: d.x, y: d.y }); };
+  walkAll(t, d => { if (!S.L.has(d.id)) add(d); });
+  if (!GL.size) return;
+  add(n); // il blocco di partenza (coperto da quello vero), per disegnare i collegamenti verso i rami
+  // altri blocchi visibili collegati ai rami (collegamenti aggiuntivi), sempre coperti da quelli veri
+  (t.links || []).forEach(x => [[x.from, x.to], [x.to, x.from]].forEach(([a, b]) => { if (GL.has(a) && !GL.has(b)) { const g = findM(t, b); if (g) add(g.n); } }));
+  const g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', 'ghost'); g.id = 'ghost';
+  g.innerHTML = treeMarkup(t, GL, new Map(), false, false);
+  vp.insertBefore(g, vp.children[3] || null); // dopo gruppi, schemi e collegamenti; prima dei blocchi
 }
-function hidePreview() { prevEl.hidden = true; }
+function hidePreview() { const g = $('#ghost'); if (g) g.remove(); }
