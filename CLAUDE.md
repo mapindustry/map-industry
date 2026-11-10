@@ -123,6 +123,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     o clic fuori per finire). Tabella: doppio clic su una cella (editor `cell`, id `blocco|riga|colonna`), Tab = cella
     successiva (dall'ultima aggiunge una riga); Righe/Colonne nel menu, tasto destro su una cella = elimina riga/colonna;
     niente maniglia di ridimensionamento. Cerca trova anche il testo delle celle.
+    `exp` = espandibile: titolo (`text`) con freccina (`data-xtog`, `toggleExp`, anche in sola lettura), aperto (`open`)
+    mostra il testo `body` più piccolo (`expSize`/`expMarkup`); doppio clic sotto il titolo = editor `body` (Invio a capo).
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.

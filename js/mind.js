@@ -60,6 +60,7 @@ function sizeMap(tree) {
     // elenchi e tabelle hanno misure proprie (js/blocks.js)
     if (n.type === 'table') { M.set(n.id, { ...tableSize(n, lv, fs, font, lh), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
     if (isList(n)) { M.set(n.id, { ...listSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
+    if (n.type === 'exp') { M.set(n.id, { ...expSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
     const lines = wrap(n.text || 'Senza titolo', maxW, font, maxL);
     const w = n.w || Math.max(Math.max(...lines.map(l => tw(l, font))) + padX, lv === 0 ? 120 : 48);
     M.set(n.id, { lines, lh, w, h: n.h || lines.length * lh + padY, depth: lv });
@@ -356,7 +357,7 @@ function treeMarkup(tree, L, NL, live) {
     const sel = live && S.sels.has(n.id), dd = Math.min(l.depth, 2), pad = (l.h - l.lines.length * l.lh) / 2;
     const fsSt = n.fs || n.fw || n.it ? ` style="${n.fs ? `font-size:${n.fs}px;` : ''}${n.fw ? `font-weight:${n.fw};` : ''}${n.it ? 'font-style:italic' : ''}"` : '';
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
-    const txt = n.type === 'table' && l.tb ? tableMarkup(n, l, live, fsSt) : isList(n) && l.rows ? listMarkup(n, l, live, fsSt)
+    const txt = n.type === 'table' && l.tb ? tableMarkup(n, l, live, fsSt) : isList(n) && l.rows ? listMarkup(n, l, live, fsSt) : n.type === 'exp' && l.ex ? expMarkup(n, l, live, fsSt)
       : l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
     // ramo compresso: etichetta "+N" sull'angolo in alto a sinistra; con un clic si riapre, passandoci sopra l'anteprima
     const folded = n.fold && n.children.length;

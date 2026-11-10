@@ -6,6 +6,9 @@
 // - Tabella: n.table = { rows: [[cella, …], …] }, la prima riga è l'intestazione; n.text è il titolo sopra la
 //   tabella (vuoto = niente titolo). Doppio clic su una cella per scriverla, Tab passa alla successiva (dall'ultima
 //   aggiunge una riga). Righe e colonne dal menu. La tabella si misura da sola (niente maniglia di ridimensionamento).
+// - Espandibile ('exp'): titolo (n.text) con una freccina; aperto (n.open) mostra sotto il testo (n.body) più piccolo.
+//   Clic sulla freccina = apre/chiude (anche in sola lettura); doppio clic sul testo per scriverlo (Invio = a capo,
+//   Ctrl+Invio o clic fuori per finire).
 const LISTS = { ul: 1, ol: 1, todo: 1 };
 const isList = n => !!(n && LISTS[n.type]);
 const listItems = n => { const it = String(n.text || '').split('\n').filter(s => s.trim()); return it.length ? it : ['']; };
@@ -79,6 +82,7 @@ function setBlockType(type, ids = [...S.sels]) {
     const f = findM(t, id); if (!f || f.n.hub) return; const n = f.n;
     if (type === 'text') delete n.type; else n.type = type;
     if (type === 'table' && !n.table) n.table = { rows: [['Colonna 1', 'Colonna 2'], ['', '']] };
+    if (type === 'exp' && n.body === undefined) n.open = true; // la prima volta aperto, pronto per scrivere il testo
   }));
 }
 function toggleCheck(id, k) {
@@ -138,4 +142,45 @@ function nextCell(ref) {
   if (c + 1 < nc) return startCellEdit(id, r, c + 1);
   if (r + 1 >= rows.length) resizeTable(id, 1, 0);
   startCellEdit(id, r + 1, 0);
+}
+
+/* ---------- blocco espandibile ---------- */
+const EXP_CH = 20; // spazio della freccina a sinistra del titolo
+const bodyFont = (n, bfs) => `${n.it ? 'italic ' : ''}400 ${bfs}px ${FB}`;
+function expSize(n, lv, fs, font, lh, padX, padY) {
+  const maxW = Math.max(60, (n.w ? n.w - padX : 260) - EXP_CH);
+  const lines = wrap(n.text || 'Senza titolo', maxW, font, 2), titleH = lines.length * lh + padY;
+  const bfs = Math.max(10, Math.round(fs * 0.85)), blh = Math.round(bfs * 1.38), bf = bodyFont(n, bfs);
+  const body = n.open ? wrap(n.body || 'Doppio clic per scrivere il testo', maxW + EXP_CH, bf, n.h ? Math.max(1, Math.floor((n.h - titleH - 14) / blh)) : 30) : [];
+  const w = n.w || Math.max(Math.max(...lines.map(t => tw(t, font))) + EXP_CH + padX, ...body.map(t => tw(t, bf) + padX), 120);
+  return { lines, lh, w, h: n.open ? (n.h || titleH + 10 + body.length * blh + 10) : titleH, padX, ex: { titleH, body, bfs, blh, open: !!n.open, empty: !n.body } };
+}
+function expMarkup(n, l, live, fsSt) {
+  const E = l.ex, x0 = l.padX / 2, fs = fsOf(n, l.depth), ty = (E.titleH - l.lines.length * l.lh) / 2, cy = E.titleH / 2;
+  // freccina: verso destra chiusa, verso il basso aperta
+  const ch = E.open ? `M${x0 + 2},${cy - 3} L${x0 + 7},${cy + 3} L${x0 + 12},${cy - 3}` : `M${x0 + 4},${cy - 5} L${x0 + 10},${cy} L${x0 + 4},${cy + 5}`;
+  let s = `<g class="xchev"${live ? ` data-xtog="1"` : ''}>${live ? `<title>${E.open ? 'Chiudi' : 'Apri'} il testo</title><rect class="xhit" x="${x0 - 6}" y="0" width="${EXP_CH + 6}" height="${E.titleH}"/>` : ''}<path d="${ch}"/></g>`;
+  s += l.lines.map((t, i) => `<text class="litem" x="${x0 + EXP_CH}" y="${ty + (i + 0.76) * l.lh}"${fsSt}>${esc(t)}</text>`).join('');
+  if (E.open) {
+    s += `<path class="xsep" d="M${x0},${E.titleH} H${l.w - x0}"/>`;
+    if (!(E.empty && !live)) s += E.body.map((t, i) => `<text class="xbody${E.empty ? ' xempty' : ''}" x="${x0}" y="${E.titleH + 10 + (i + 0.78) * E.blh}" style="font-size:${E.bfs}px${n.it ? ';font-style:italic' : ''}">${esc(t)}</text>`).join('');
+  }
+  return s;
+}
+// apre/chiude il testo (resta possibile in sola lettura: è un modo di guardare la mappa)
+function toggleExp(id) {
+  if (readOnly()) { S.roOk = true; try { return toggleExp(id); } finally { S.roOk = false; } }
+  mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.open) delete f.n.open; else f.n.open = true; });
+}
+// doppio clic sotto il titolo di un blocco espandibile aperto: si scrive il testo
+const inExpBody = (id, p) => { const l = S.L.get(id); return !!(l && l.ex && l.ex.open && p.y - l.y > l.ex.titleH); };
+function startBodyEdit(id) {
+  const f = findM(curTree(), id); if (!f) return;
+  selectOnly(id); beginEdit('body', id, f.n.body || '', false);
+}
+function bodyEditorBox(sx, sy, k) {
+  const l = S.L.get(editing.id), f = findM(curTree(), editing.id); if (!l || !l.ex || !f) return null;
+  const E = l.ex;
+  return { x: sx(l.x + l.padX / 2 - 3), y: sy(l.y + E.titleH + 6), w: (l.w - l.padX + 6) * k, h: (l.h - E.titleH - 10) * k,
+    font: bodyFont(f.n, E.bfs), fs: E.bfs, lh: E.blh, minW: 180, left: true };
 }

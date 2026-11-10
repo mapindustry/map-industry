@@ -1,6 +1,6 @@
 // Modifica del testo sul posto (textarea sovrapposta): blocchi, etichette, note dei collegamenti, note della tela
 const ed = $('#ed');
-let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle' | 'cell', id, orig }
+let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle' | 'cell' | 'body', id, orig }
 
 function editorBox() {
   const v = view(), k = v.k, sx = x => v.x + x * k, sy = y => v.y + y * k, id = editing.id;
@@ -19,6 +19,7 @@ function editorBox() {
   }
   if (editing.kind === 'legrow' || editing.kind === 'legtitle') return legendEditorBox();
   if (editing.kind === 'cell') return cellEditorBox(sx, sy, k);
+  if (editing.kind === 'body') return bodyEditorBox(sx, sy, k);
   if (editing.kind === 'group') {
     const g = findGroup(curTree(), id); if (!g) return null;
     const fs = gfsOf(g), hd = gHead(g);
@@ -51,7 +52,7 @@ function beginEdit(kind, id, text, selectAll) {
     if (g) { g.classList.add('editing'); const box = g.querySelector('.box'); if (box) ed.style.background = getComputedStyle(box).fill; }
   }
   // elenchi: testo allineato a sinistra e Invio = nuova voce (Ctrl+Invio o un clic fuori per finire)
-  const lst = kind === 'node' && isList((findM(curTree(), id) || {}).n);
+  const lst = kind === 'body' || (kind === 'node' && isList((findM(curTree(), id) || {}).n)); // anche il testo dell'espandibile
   if (editing) editing.list = lst;
   ed.className = kind + (lst ? ' list' : ''); ed.value = text; ed.hidden = false; placeEditor();
   ed.focus(); if (selectAll) ed.select(); else ed.setSelectionRange(ed.value.length, ed.value.length);
@@ -82,7 +83,7 @@ function endEdit(commit) {
   if (!editing) return;
   const { kind, id, orig, fresh, back } = editing; editing = null; ed.hidden = true;
   // blocchi e note della tela tengono gli a capo (Maiusc+Invio); gli altri testi stanno su una riga
-  const multi = kind === 'node' || kind === 'note', one = s => s.replace(/\s+/g, ' ').trim();
+  const multi = kind === 'node' || kind === 'note' || kind === 'body', one = s => s.replace(/\s+/g, ' ').trim();
   const v = multi ? ed.value.split('\n').map(one).filter(Boolean).join('\n') : one(ed.value), t = curTree();
   if (!commit && fresh) {
     undo(); S.redo.pop();
@@ -93,6 +94,7 @@ function endEdit(commit) {
     if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
     else if (kind === 'legrow' || kind === 'legtitle') commitLegendEdit(kind, id, v);
     else if (kind === 'cell') commitCell(id, v);
+    else if (kind === 'body') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.body = v; else delete f.n.body; save(); } }
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
     else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v; if (v) g.w = Math.max(g.w, Math.ceil(tw(v, gFont(g))) + 28); save(); } } // titolo vuoto = gruppo senza nome; il riquadro si allarga per il titolo
     else if (kind === 'note') {

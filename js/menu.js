@@ -34,7 +34,8 @@ const BTYPES = [
   ['ul', 'Elenco puntato', ico('M5.5 4h0.1M5.5 10h0.1M10 4H23M10 10H23'), 'Elenco puntato'],
   ['ol', 'Elenco numerato', '<span class="sgt">1.</span>', 'Elenco numerato'],
   ['todo', 'Lista di controllo', ico('M4 3.5h6v6H4zM5.6 6.6l1.3 1.3 2-2.6M13 6.5H24'), 'Lista di controllo'],
-  ['table', 'Tabella', ico('M4 2.5H24V11.5H4ZM4 5.5H24M11 2.5V11.5M17.5 2.5V11.5'), 'Tabella']];
+  ['table', 'Tabella', ico('M4 2.5H24V11.5H4ZM4 5.5H24M11 2.5V11.5M17.5 2.5V11.5'), 'Tabella'],
+  ['exp', 'Espandibile', ico('M4 3l3 2.5L4 8M10 5.5H24M10 10H20'), 'Blocco espandibile']];
 let MENU_CELL = null; // cella della tabella su cui si è aperto il menu: [riga, colonna]
 const plural = (n, one, many) => n === 1 ? one : `${n} ${many}`;
 // corsivo del testo (blocchi) o del titolo (gruppi): Normale | Corsivo, il menu resta aperto

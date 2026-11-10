@@ -14,7 +14,7 @@ cv.addEventListener('pointerdown', e => {
   closeMenu(); hidePreview();
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
   const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), lg = e.target.closest('[data-leg]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
-  if (readOnly() && !e.target.closest('[data-fold], [data-gfold]')) {
+  if (readOnly() && !e.target.closest('[data-fold], [data-gfold], [data-xtog]')) {
     // sola lettura: trascinando si sposta la vista, con un clic si seleziona (per guardare, cercare, copiare)
     const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y, pick: g ? g.dataset.id : cn ? cn.dataset.note : gr ? gr.dataset.grp : null, ro: true };
   } else if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr && !lg)) {
@@ -23,6 +23,8 @@ cv.addEventListener('pointerdown', e => {
     // nota di un collegamento: trascinandola si sposta, con un clic si seleziona il collegamento
     const id = e.target.closest('.enote').dataset.edge, ed = edgeData(curTree(), id) || {};
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
+  } else if (g && e.target.closest('[data-xtog]')) {
+    return toggleExp(g.dataset.id); // blocco espandibile: apre o chiude il testo
   } else if (g && e.target.closest('[data-chk]')) {
     return toggleCheck(g.dataset.id, +e.target.closest('[data-chk]').dataset.chk); // lista di controllo: spunta
   } else if (gr && e.target.closest('[data-gfold]')) {
@@ -220,7 +222,8 @@ function onDouble(e) {
   const g = el.closest('.mn[data-id]');
   if (g && el.closest('[data-tag]')) return startTagEdit(g.dataset.id);
   const cell = g && cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); if (cell) return startCellEdit(g.dataset.id, cell[0], cell[1]); // anche sul testo della cella
-  if (g && !el.closest('[data-anc]')) return startEdit(g.dataset.id, true);
+  if (g && !el.closest('[data-anc], [data-xtog]') && inExpBody(g.dataset.id, toSvg(e.clientX, e.clientY))) return startBodyEdit(g.dataset.id);
+  if (g && !el.closest('[data-anc], [data-xtog]')) return startEdit(g.dataset.id, true);
   const gr = el.closest('[data-grp]'); if (gr && !el.closest('[data-rsz]')) startGroupEdit(gr.dataset.grp);
 }
 cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
