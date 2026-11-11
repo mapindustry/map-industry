@@ -11,8 +11,8 @@ function editorBox() {
   }
   if (editing.kind === 'tag') {
     const l = S.L.get(id), f = findM(curTree(), id); if (!l || !f) return null;
-    const w0 = Math.max(80, tw(ed.value || '', TAG_FONT) + 16), x0 = tagLeft(f.n, l, w0);
-    return { x: sx(l.x + x0), y: sy(l.y - 18), w: w0 * k, h: 18 * k, font: TAG_FONT, fs: 10.5, lh: 14, minW: 80, left: true };
+    const tb = tagBox(ed.value || ' ', f.n, l), w0 = Math.max(80, tb.w + 4); // va a capo come la linguetta, cresce verso l'alto
+    return { x: sx(l.x + tb.x), y: sy(l.y - 18), w: w0 * k, h: 18 * k, font: TAG_FONT, fs: 10.5, lh: TAG_LH, minW: 80, left: true, up: true };
   }
   if (editing.kind === 'edge') {
     const m = S.E.get(id); if (!m) return null;
@@ -40,7 +40,7 @@ function placeEditor() {
   ed.style.width = w + 'px'; ed.style.left = (b.left ? b.x : b.x + (b.w - w) / 2) + 'px';
   ed.style.paddingTop = '0'; ed.style.height = 'auto';
   const h = Math.max(b.h, ed.scrollHeight);
-  ed.style.top = b.y + (b.h - h) / 2 + 'px'; ed.style.height = h + 'px';
+  ed.style.top = (b.up ? b.y + b.h - h : b.y + (b.h - h) / 2) + 'px'; ed.style.height = h + 'px';
   ed.style.paddingTop = Math.max(0, (h - ed.scrollHeight) / 2) + 'px';
 }
 function beginEdit(kind, id, text, selectAll) {

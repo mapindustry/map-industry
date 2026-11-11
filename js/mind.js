@@ -42,6 +42,14 @@ function tagLeft(n, l, w) {
     .forEach(px => { if (px > x - 8 && px < x + w + 8) x = px + 10; });
   return x;
 }
+// misura dell'etichetta: righe larghe al massimo quanto il blocco (almeno 170 px, mai meno della parola più lunga)
+const TAG_LH = 13;
+function tagBox(text, n, l) {
+  const word = Math.max(0, ...String(text || '').split(/\s+/).map(x => tw(x, TAG_FONT)));
+  const lines = wrap(text, Math.ceil(Math.max(170, l.w - 20, word)), TAG_FONT, 999);
+  const w = Math.ceil(Math.max(0, ...lines.map(s => tw(s, TAG_FONT)))) + 12, h = lines.length * TAG_LH + 4;
+  return { lines, w, h, x: tagLeft(n, l, w) };
+}
 const NOTE_FONT = `500 11.5px ${FB}`, GFONT = `600 13px ${FB}`;
 const GHEAD = 28, GPAD = 22, GMIN = [120, 70];
 
@@ -441,10 +449,11 @@ function treeMarkup(tree, L, NL, live) {
       fold += badge(key, bx, by, k, 'Clic: apri i blocchi collegati a questo pallino');
     });
     // etichetta del blocco: linguetta sopra il bordo in alto a sinistra (sigla o nota breve); doppio clic per scriverla
-    const tagW = n.tag ? Math.min(tw(n.tag, TAG_FONT), 170) + 12 : 0, tagX = n.tag ? tagLeft(n, l, tagW) : 0;
-    const tag = n.tag && !(editing && editing.kind === 'tag' && editing.id === n.id)
-      ? `<g class="tag"${live ? ' data-tag="1"' : ''}>${live ? '<title>Doppio clic: modifica l’etichetta</title>' : ''}<rect x="${tagX}" y="-17" width="${tagW}" height="17" rx="5"/>` +
-        `<text x="${tagX + tagW / 2}" y="-5" text-anchor="middle">${esc(ell(n.tag, 170, TAG_FONT))}</text></g>` : '';
+    // tutto il testo: va a capo e la linguetta cresce verso l'alto
+    const tb = n.tag ? tagBox(n.tag, n, l) : null;
+    const tag = tb && !(editing && editing.kind === 'tag' && editing.id === n.id)
+      ? `<g class="tag"${live ? ' data-tag="1"' : ''}>${live ? '<title>Doppio clic: modifica l’etichetta</title>' : ''}<rect x="${tb.x}" y="${-tb.h}" width="${tb.w}" height="${tb.h}" rx="5"/>` +
+        tb.lines.map((s, i) => `<text x="${tb.x + tb.w / 2}" y="${-tb.h + 12 + i * TAG_LH}" text-anchor="middle">${esc(s)}</text>`).join('') + '</g>' : '';
     let anchors = '';
     if (live) {
       const P = pinsOf(n);

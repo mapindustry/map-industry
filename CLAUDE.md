@@ -124,7 +124,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     lo seguono. Una selezione trascinata e lasciata sopra un blocco vi entra compressa (`foldInto`).
     I rami nuovi o riaperti senza posizione vanno oltre la colonna dei fratelli del genitore (`placeNew`).
   - `tag` = etichetta (sigla o nota breve) su una linguetta sopra il bordo (`tagLeft` evita i pallini in alto);
-    doppio clic per scriverla. Le idee primarie hanno un bagliore dietro (`.glow`, `--glow`).
+    doppio clic per scriverla. Mostra sempre tutto il testo (`tagBox`): va a capo alla larghezza del blocco (almeno 170 px)
+    e la linguetta cresce verso l'alto, anche l'editor. Le idee primarie hanno un bagliore dietro (`.glow`, `--glow`).
   - collegamenti: quello principale è il legame padre→figlio dell'albero (`edge` sul figlio: `po`, `pi`, `note`,
     `shape` (vuoto = morbida, `'st'` dritta, `'sq'` squadrata), `line` (`solid`/`dash`/`dot`, vedi `lineOf`: di serie
     puntini per la struttura e continuo per il resto; `dash: true` è il formato vecchio), `lw` (spessore, `lwOf`),
