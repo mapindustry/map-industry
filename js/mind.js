@@ -368,17 +368,32 @@ function linkGeom(pn, pl, cn, cl, e) {
   const [ax0, ay0] = pinXY(pl, a), [bx0, by0] = pinXY(cl, b);
   const ax = pl.x + ax0, ay = pl.y + ay0, bx = cl.x + bx0, by = cl.y + by0;
   const ta = SIDES[a[0]], tb = SIDES[b[0]];
-  if (e && e.shape === 'st') return { d: `M${ax},${ay} L${bx},${by}`, mx: (ax + bx) / 2, my: (ay + by) / 2 }; // dritta
+  if (e && e.shape === 'st') return { d: `M${ax},${ay} L${bx},${by}`, mx: (ax + bx) / 2, my: (ay + by) / 2, pts: [[ax, ay], [bx, by]] }; // dritta
   if (e && e.shape === 'sq') {
     // squadrato: esce dritto dal pallino, gira ad angolo retto a metà strada, entra dritto nell'altro pallino
     const s = 18, a1x = ax + ta[0] * s, a1y = ay + ta[1] * s, b1x = bx + tb[0] * s, b1y = by + tb[1] * s;
     const pts = ta[0] ? [[(a1x + b1x) / 2, a1y], [(a1x + b1x) / 2, b1y]] : [[a1x, (a1y + b1y) / 2], [b1x, (a1y + b1y) / 2]];
     const d = `M${ax},${ay} L${a1x},${a1y} L${pts[0][0]},${pts[0][1]} L${pts[1][0]},${pts[1][1]} L${b1x},${b1y} L${bx},${by}`;
-    return { d, mx: (pts[0][0] + pts[1][0]) / 2, my: (pts[0][1] + pts[1][1]) / 2 };
+    return { d, mx: (pts[0][0] + pts[1][0]) / 2, my: (pts[0][1] + pts[1][1]) / 2, pts: [[ax, ay], [a1x, a1y], ...pts, [b1x, b1y], [bx, by]] };
   }
   const k = clamp(Math.hypot(bx - ax, by - ay) / 2, 30, 160);
   const c1x = ax + ta[0] * k, c1y = ay + ta[1] * k, c2x = bx + tb[0] * k, c2y = by + tb[1] * k;
-  return { d: `M${ax},${ay} C${c1x},${c1y} ${c2x},${c2y} ${bx},${by}`, mx: (ax + 3 * c1x + 3 * c2x + bx) / 8, my: (ay + 3 * c1y + 3 * c2y + by) / 8 };
+  const bz = (t, a, c, d, b) => (1 - t) ** 3 * a + 3 * (1 - t) ** 2 * t * c + 3 * (1 - t) * t * t * d + t ** 3 * b;
+  const pts = Array.from({ length: 25 }, (_, i) => [bz(i / 24, ax, c1x, c2x, bx), bz(i / 24, ay, c1y, c2y, by)]);
+  return { d: `M${ax},${ay} C${c1x},${c1y} ${c2x},${c2y} ${bx},${by}`, mx: (ax + 3 * c1x + 3 * c2x + bx) / 8, my: (ay + 3 * c1y + 3 * c2y + by) / 8, pts };
+}
+// freccia del verso (uscita → ingresso): piccolo triangolo pieno sulla linea, a metà; se a metà c'è la nota, subito
+// dopo la nota (skip = px da saltare oltre la metà), e niente freccia se non c'è posto. pts = la linea come spezzata
+function edgeArrow(pts, skip, w, op) {
+  const seg = pts.slice(1).map((q, i) => Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1])), tot = seg.reduce((a, b) => a + b, 0);
+  const a = 4 + w * 1.4, b = 2.6 + w; // a = metà lunghezza, b = metà larghezza
+  let r = tot / 2 + (skip ? skip + a + 4 : 0), i = 0;
+  if (tot < 40 || r > tot - a - 10) return ''; // troppo corto: la freccia coprirebbe i pallini
+  while (i < seg.length - 1 && (r > seg[i] || !seg[i])) { r -= seg[i]; i++; }
+  const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], L = seg[i] || 1, ux = (x1 - x0) / L, uy = (y1 - y0) / L;
+  const cx = x0 + ux * r, cy = y0 + uy * r;
+  const P = (dx, dy) => `${(cx + ux * dx - uy * dy).toFixed(1)},${(cy + uy * dx + ux * dy).toFixed(1)}`;
+  return `<path class="earr"${op ? ` style="fill-opacity:${op}"` : ''} d="M${P(a, 0)} L${P(-a, b)} L${P(-a * .45, 0)} L${P(-a, -b)} Z"/>`;
 }
 // tutti i collegamenti di un livello: { key, from, to, e (dati: stile, nota, pallini), extra }
 function allLinks(tree) {
@@ -418,7 +433,12 @@ function treeMarkup(tree, L, NL, live) {
     E.set(key, { x: nx, y: ny });
     const esel = live && (S.esel === key || S.esels.has(key));
     const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (hasColor(e) ? ' cc c' + e.color : '') + (esel ? ' sel' : '');
-    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="${edgeStyle(e, lwOf(e, pl.depth) + (esel ? 1 : 0))}" d="${g.d}"/>` +
+    const ew = lwOf(e, pl.depth) + (esel ? 1 : 0);
+    // nota al suo posto (non spostata): la freccia va oltre la pillola (metà della sua diagonale, per le linee oblique)
+    const nl = e.note && !e.nx && !e.ny ? wrap(e.note, 170, NOTE_FONT, 3) : null;
+    const skip = nl ? Math.hypot(Math.max(...nl.map(s => tw(s, NOTE_FONT))) + 16, nl.length * 14 + 8) / 2 : 0;
+    const arr = isStr(e) ? '' : edgeArrow(g.pts, skip, Math.min(ew, 4), e.op);
+    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="${edgeStyle(e, ew)}" d="${g.d}"/>` + arr +
       (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
     if (e.note && !(editing && editing.kind === 'edge' && editing.id === key)) {
       const lines = wrap(e.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;

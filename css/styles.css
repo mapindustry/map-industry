@@ -132,6 +132,10 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .ehit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
 .eg.cc .edge{stroke:var(--cc)} /* colore scelto dall'utente; di serie neutro */
 .eg:hover .edge{stroke:var(--accent)}
+.earr{fill:var(--edge);pointer-events:none} /* freccia del verso, del colore della linea */
+.eg.cc .earr{fill:var(--cc)}
+.eg:hover .earr,.eg.sel .earr{fill:var(--accent)}
+.eg.lifted .earr{opacity:.25}
 .eg.sel .edge{stroke:var(--accent)} /* spessore: +1 px, in linea (treeMarkup) */
 .enote{cursor:move}
 .enote rect{fill:var(--enote-bg);stroke:var(--enote-border);stroke-width:1}

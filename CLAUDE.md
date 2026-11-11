@@ -234,6 +234,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   (`prefers-color-scheme` e `[data-theme]`). Niente colori letterali nei componenti (eccezione: i file d'icona).
 - Blocchi: sfondo scuro con bordo un po' più chiaro in entrambi i temi; il colore scelto tinge sfondo e bordo.
 - Note dei collegamenti: pillole chiare in corsivo (`--enote-*`), ben diverse dai blocchi e dalle note gialle della tela.
+- Freccia del verso (uscita → ingresso) sui collegamenti di processo, non su quelli di struttura: `edgeArrow` (triangolo
+  `.earr` a metà linea, dopo la nota se c'è; `linkGeom` dà la linea come spezzata `pts`), colore e opacità della linea.
 - Collegamenti di serie neutri (`--edge`), mai del colore del blocco; l'utente può sceglierne uno (`e.color` 0–5, stessi
   colori dei blocchi, classe `cc cN` su `.eg`; fila dei colori in cima al menu, anche per più collegamenti, menu aperto). Pallini sempre visibili: ingresso `--anc-in`
   (bianco), uscita `--anc-out` (grigio scuro con bordo chiaro), area di presa più grande del pallino.
