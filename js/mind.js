@@ -648,6 +648,26 @@ function link(fromId, po, toId, pi, sp = null, ts = 0) {
   });
   selectOnly(toId); render(); toast('Collegati');
 }
+// Ctrl + trascina da un blocco a un altro: pallini scelti da soli. Uscita del primo più vicina al secondo blocco,
+// ingresso del secondo più vicino a quell'uscita (di solito quelli di serie); senza pallini ne aggiunge ensurePins.
+// Poi si possono cambiare come sempre, trascinando i pallini o dal loro menu.
+function nearestPin(list, l, x, y) {
+  let best = -1, bd = Infinity;
+  list.forEach((q, i) => { const [qx, qy] = pinXY(l, q), d = Math.hypot(l.x + qx - x, l.y + qy - y); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+// punto da cui parte la linea mentre si trascina: l'uscita più vicina al puntatore, o il centro del blocco
+function autoOutPoint(id, x, y) {
+  const f = findM(curTree(), id), l = S.L.get(id), P = pinsOf(f.n).o, i = nearestPin(P, l, x, y);
+  if (i < 0) return { x: l.x + l.w / 2, y: l.y + l.h / 2 };
+  const [px, py] = pinXY(l, P[i]); return { x: l.x + px, y: l.y + py };
+}
+function autoLink(fromId, toId) {
+  const t = curTree(), a = findM(t, fromId), b = findM(t, toId), bl = S.L.get(toId); if (!a || !b || !bl) return render();
+  const po = Math.max(0, nearestPin(pinsOf(a.n).o, S.L.get(fromId), bl.x + bl.w / 2, bl.y + bl.h / 2));
+  const s = autoOutPoint(fromId, bl.x + bl.w / 2, bl.y + bl.h / 2);
+  link(fromId, po, toId, Math.max(0, nearestPin(pinsOf(b.n).i, bl, s.x, s.y)));
+}
 // eliminare un collegamento: quello aggiuntivo sparisce; quello principale stacca il blocco, che resta dov'è
 function deleteEdge(key) {
   if (key.startsWith('x:')) { mutate(t => { t.links = (t.links || []).filter(x => x.id !== key.slice(2)); if (!t.links.length) delete t.links; }); clearSel(); render(); return toast('Collegamento eliminato'); }

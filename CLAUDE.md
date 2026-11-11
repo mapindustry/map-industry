@@ -158,6 +158,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   uno di loro = menu "N collegamenti" con il solo stile, che vale per tutti (`edgeTargets`/`setEdgeStyle`/`setEdges`);
   Incolla stile di un collegamento va su tutti. Attenzione: con la barra dei componenti aperta `<body>` ha la classe
   `side`, quindi per la barra si usa `#side` (con `.side` i tasti della mappa si fermavano tutti).
+- **Ctrl + trascina da un blocco a un altro = collegamento** (richiesto il 2026-11-11): `P.mode = 'clink'` al clic, diventa
+  `link` con `S.link.auto` appena il mouse si muove (niente scorrimento del pallino, niente `overAnc`). Al rilascio
+  `autoLink`: uscita del primo più vicina al secondo blocco, ingresso del secondo più vicino a quell'uscita (`nearestPin`;
+  senza pallini li aggiunge `ensurePins`). Ctrl + clic senza trascinare resta la selezione (deciso al rilascio).
 - Maiusc/Ctrl + clic aggiunge o toglie anche i collegamenti (`toggleEdgeSel`; `keepEdge` porta `S.esel` in `S.esels`), e
   Maiusc + riquadro aggiunge. Canc = `removeSelected`: blocchi, note, gruppi e collegamenti selezionati (`selEdges`,
   `cutEdges`) in un solo passo; un solo collegamento → `deleteEdge`.

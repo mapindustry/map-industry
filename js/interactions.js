@@ -88,7 +88,11 @@ cv.addEventListener('pointerdown', e => {
   } else if (g || cn || gr) {
     const id = g ? g.dataset.id : cn ? cn.dataset.note : gr.dataset.grp;
     if (e.ctrlKey || e.metaKey || e.shiftKey) keepEdge();
-    if (e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl + trascina da un blocco: collegamento con i pallini scelti da soli; Ctrl + clic: selezione (al rilascio)
+      if (g && !readOnly()) { P = { ...base, mode: 'clink', id }; cv.setPointerCapture(e.pointerId); return; }
+      toggleSel(id); render(); return;
+    }
     // Maiusc: con un clic aggiunge o toglie dalla selezione; trascinando, la selezione scorre su un binario
     const wasSel = S.sels.has(id), wasMulti = !e.shiftKey && wasSel && S.sels.size > 1;
     if (e.shiftKey) { if (!wasSel) toggleSel(id); else S.sel = id; render(); }
@@ -114,6 +118,11 @@ cv.addEventListener('pointermove', e => {
   const dx = e.clientX - P.sx, dy = e.clientY - P.sy;
   if (!P.moved && Math.hypot(dx, dy) < 4) return;
   if (P.mode === 'drag' && P.locked) { if (!P.warned) { P.warned = true; toast('Gruppo bloccato: sbloccalo dal menu per spostarlo'); } return; }
+  if (P.mode === 'clink') { // Ctrl tenuto e il mouse si è mosso: parte un collegamento dal blocco
+    const l = S.L.get(P.id); if (!l) { P = null; return; }
+    S.link = { kind: 'out', idx: null, id: P.id, auto: true, x1: l.x + l.w / 2, y1: l.y + l.h / 2, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
+    P.mode = 'link'; cv.classList.add('linking');
+  }
   if (!P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) {
     snapshot();
     if (P.mode === 'drag' && P.alt) P.movers = altCopies(curTree()); // Alt + trascina: si sposta la copia
@@ -133,7 +142,8 @@ cv.addEventListener('pointermove', e => {
     const p = toSvg(e.clientX, e.clientY), lk = S.link;
     // vicino al bordo del proprio blocco il pallino scorre lungo il bordo; lontano si disegna un collegamento
     const nb = nearestBorder(S.L.get(lk.id), p);
-    lk.pinMove = nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
+    lk.pinMove = !lk.auto && nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
+    if (lk.auto) { const sp = autoOutPoint(lk.id, p.x, p.y); lk.x1 = sp.x; lk.y1 = sp.y; } // dal pallino d'uscita più vicino
     lk.x2 = p.x; lk.y2 = p.y; lk.over = null; lk.overAnc = null;
     if (!lk.pinMove) {
       lk.pinMove = null; render(); // il disegno va aggiornato prima di cercare cosa c'è sotto il puntatore
@@ -141,7 +151,7 @@ cv.addEventListener('pointermove', e => {
       const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
       lk.over = ok ? g.dataset.id : null;
       // sul pallino più vicino al puntatore (preferendo quello compatibile), non su quello disegnato sopra
-      lk.overAnc = ok ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
+      lk.overAnc = ok && !lk.auto ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
         || (a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null) : null;
     }
     return render();
@@ -219,7 +229,7 @@ function endPointer(e) {
   // fine dello zoom con due dita: il dito rimasto non fa nulla finché non si alza
   if (P && P.mode === 'pinch') { P = TP.size ? { mode: 'pinchEnd', moved: true } : null; lastTap = null; return; }
   if (P && P.mode === 'pinchEnd') { if (!TP.size) P = null; return; }
-  const tap = P && !P.moved && e.type === 'pointerup' && P.mode !== 'link' && (e.pointerType !== 'mouse' || e.button === 0);
+  const tap = P && !P.moved && e.type === 'pointerup' && P.mode !== 'link' && P.mode !== 'clink' && (e.pointerType !== 'mouse' || e.button === 0);
   endPointerCore(e);
   if (!tap) { lastTap = null; return; }
   const now = performance.now();
@@ -234,8 +244,10 @@ function endPointerCore(e) {
     if (d) return setLegendCorner(nearestCorner(d.x, d.y, legendLayout(curTree())));
     return;
   }
+  if (P.mode === 'clink') { const id = P.id; P = null; toggleSel(id); return render(); } // Ctrl + clic senza trascinare
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
+    if (lk.auto) { if (lk.over) return autoLink(lk.id, lk.over); render(); return toast('Rilascia su un altro blocco per collegarli'); }
     if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
     if (lk.pinMove) return setPin(lk.id, lk.kind, lk.idx, lk.pinMove); // pallino spostato lungo il bordo
     if (lk.over) {
