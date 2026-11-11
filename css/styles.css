@@ -10,13 +10,15 @@
   /* pallino di struttura (rombo) */
   --anc-str:#2b9a8f; --anc-str-ring:#ffffff;
   /* bagliore dietro le idee primarie */
-  --glow:#2a9fd0; --find:#e0a21a;
+  --glow:#2a9fd0; --find:#e0a21a; --win:#2f8f5b;
   /* note sulla tela */
   --note-bg:#fff7da; --note-bar:#d9a800; --note-ink:#4a3c00;
   /* note dei collegamenti: etichette chiare a pillola */
   --enote-bg:#e4e9ee; --enote-border:#9aa5b0; --enote-ink:#26323d;
   /* gruppi: riquadro tenue con titolo */
   --grp:#5d6b79; --grp-title:#3d4a56;
+  /* sola lettura: righe diagonali sullo sfondo della tela */
+  --ro-stripe:#dfe4ea;
   /* colori a scelta per i blocchi */
   --c0:#1f77a8; --c1:#c2571a; --c2:#2e8b57; --c3:#8a4fbf; --c4:#b8336a; --c5:#a07800;
   --f-body:"Instrument Sans", "Segoe UI", system-ui, sans-serif;
@@ -28,10 +30,11 @@
   --node-bg:#19222b; --node-border:#5c6a78; --node-border-strong:#7f8e9b; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --anc-str:#5cc8bb; --anc-str-ring:#0d1318;
-  --glow:#58b8d8; --find:#f2c14e;
+  --glow:#58b8d8; --find:#f2c14e; --win:#5cc98a;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
   --grp:#93a1ae; --grp-title:#b9c4ce;
+  --ro-stripe:#1c252d;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; } }
 :root[data-theme="dark"]{
@@ -41,10 +44,11 @@
   --node-bg:#19222b; --node-border:#5c6a78; --node-border-strong:#7f8e9b; --on-node:#e6ecf1;
   --edge:#7f8b96; --anc-in:#ffffff; --anc-in-ring:#0d1318; --anc-out:#56626d; --anc-out-ring:#c9d1d8;
   --anc-str:#5cc8bb; --anc-str-ring:#0d1318;
-  --glow:#58b8d8; --find:#f2c14e;
+  --glow:#58b8d8; --find:#f2c14e; --win:#5cc98a;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
   --grp:#93a1ae; --grp-title:#b9c4ce;
+  --ro-stripe:#1c252d;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; }
 
@@ -188,7 +192,8 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 #ed.legrow,#ed.legtitle{background:var(--surface);color:var(--ink);text-align:left;padding-left:4px;border-radius:4px}
 
 /* riquadro di selezione */
-.marquee{position:fixed;z-index:5;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);pointer-events:none}
+.marquee{position:fixed;z-index:5;border:1px dashed var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);pointer-events:none}
+.marquee.win{border:1px solid var(--win);background:color-mix(in srgb,var(--win) 12%,transparent)} /* verso destra: solo ciò che sta tutto dentro */
 
 /* editor di testo sovrapposto */
 #ed{position:fixed;z-index:10;margin:0;padding:0;border:0;outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;
@@ -215,7 +220,7 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .tab .tx{flex:none;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--muted);font:400 15px/1 var(--f-body);cursor:pointer;opacity:0}
 .tab:hover .tx,.tab.on .tx,.tab .tx:focus-visible{opacity:1}
 .tab .tx:hover{background:var(--line);color:var(--ink)}
-.lockb{display:flex;align-items:center;gap:6px;margin-left:auto}
+.lockb{display:flex;align-items:center;gap:6px}
 .lockb svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
 .lockb:not(.on) .shackle{transform:translate(2.4px,-1.2px) rotate(18deg);transform-origin:11px 7px}
 .lockb.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
@@ -352,3 +357,39 @@ body.sdrag,body.sdrag *{cursor:grabbing!important}
   background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 8px 22px rgb(0 0 0 / .2);font-weight:500;font-size:13px}
 .sghost.no{opacity:.5}
 @media (max-width:640px){ .side{box-shadow:-10px 0 30px rgb(0 0 0 / .18)} body.side .find{right:16px} }
+
+/* Salva: in evidenza a destra nella barra (il salvataggio è anche automatico) */
+.bsave{display:flex;align-items:center;gap:6px;margin-left:auto;font:600 13px var(--f-body);color:var(--on-accent);background:var(--accent);border:0;border-radius:7px;padding:7px 13px;cursor:pointer;white-space:nowrap}
+.bsave:hover{filter:brightness(1.08)}
+.bsave:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bsave svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
+/* menu Carica progetto: ogni progetto con il cestino a destra (primo clic: "Elimina?", secondo: elimina) */
+.menu .prow{display:flex;align-items:stretch;gap:2px}
+.menu .prow .it{flex:1;min-width:0}
+.menu .prow .it .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu .pdel{flex:none;display:flex;align-items:center;gap:5px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--muted);font:600 12px var(--f-body);cursor:pointer}
+.menu .pdel svg{fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.menu .pdel span{display:none}
+.menu .pdel:hover:not(:disabled){background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)}
+.menu .pdel.armed,.menu .pdel.armed:hover{background:var(--crit);color:var(--surface)}
+.menu .pdel.armed span{display:inline}
+.menu .pdel:disabled{opacity:.35;cursor:not-allowed}
+.menu .pdel:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* nessuna scheda aperta: pagina vuota con "Crea nuovo progetto" */
+body.empty #cv,body.empty .side,body.empty .sopen,body.empty .hint,body.empty .find,body.empty #bLock,body.empty #bSave,body.empty #bExp{display:none!important}
+body.empty #accWrap{margin-left:auto}
+.empty{position:fixed;inset:48px 0 0;display:grid;place-items:center;z-index:5}
+.ebox{display:grid;justify-items:center;gap:10px;text-align:center;padding:32px;max-width:calc(100vw - 32px)}
+.ebox h2{margin:0;font:700 20px var(--f-body)}
+.ebox p{margin:0 0 8px;color:var(--muted)}
+.ego{font:600 15px var(--f-body);color:var(--on-accent);background:var(--accent);border:0;border-radius:9px;padding:12px 22px;cursor:pointer}
+.ego:hover{filter:brightness(1.08)}
+.ego:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* sola lettura: lo sfondo della tela passa dai puntini a righe diagonali */
+body.ro{background-image:repeating-linear-gradient(135deg,var(--ro-stripe) 0 2px,transparent 2px 14px);background-size:auto}
+@media (max-width:640px){ .bsave{padding:7px 10px} }
+/* Progetti → Carica progetto: l'elenco si apre dentro il menu, rientrato */
+.menu .pload kbd{font-weight:600}
+.menu .pload.open{background:var(--band)}
+.menu .plist{display:grid;gap:1px;margin:2px 0 4px 10px;padding-left:6px;border-left:2px solid var(--line);max-height:min(50vh,360px);overflow:auto}
+.menu .pnone{margin:0;padding:6px 10px;color:var(--muted);font-size:12px}

@@ -19,6 +19,15 @@ function findM(tree, id) {
 const findNote = (tree, id) => (tree.notes || []).find(x => x.id === id);
 
 /* ---------- progetti ---------- */
+// schede: toglie quelle di progetti spariti; se ne restava almeno una, quella del progetto attivo c'è sempre.
+// Nessuna scheda = pagina vuota con "Crea nuovo progetto" (noTab); S.pid resta su un progetto, che però non si vede.
+function fixTabs() {
+  const had = S.tabs.length; S.tabs = S.tabs.filter(id => S.projects.some(p => p.id === id));
+  if (had && !S.tabs.includes(S.pid)) S.tabs.push(S.pid);
+}
+const noTab = () => !S.tabs.length;
+// nessun progetto (eliminato anche l'ultimo): pagina vuota, la radice è un contenitore vuoto che non si usa
+function noProjects() { S.projects = []; S.pid = null; S.tabs = []; S.root = { id: uid(), text: '', children: [], void: true }; S.undo = []; S.redo = []; clearSel(); }
 const curProject = () => S.projects.find(p => p.id === S.pid);
 // dove sta la copia delle mappe: localStorage, oppure sessionStorage per un accesso non ricordato (js/cloud.js)
 const mapStore = () => CL.session ? authStore() : localStorage;
@@ -27,10 +36,11 @@ function load() {
     const j = JSON.parse(mapStore().getItem(storeKey()) || 'null');
     if (j && Array.isArray(j.projects) && j.projects.length) {
       S.projects = j.projects; S.pid = j.projects.some(p => p.id === j.cur) ? j.cur : j.projects[0].id; S.root = curProject().root;
-      S.tabs = (j.tabs || []).filter(id => j.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
+      S.tabs = j.tabs || [S.pid]; fixTabs();
       if (S.projects.map(p => flattenSubs(p.root)).some(Boolean)) saveNow();
       return;
     }
+    if (j && Array.isArray(j.projects)) return noProjects(); // tutti i progetti eliminati: resta la pagina vuota
   } catch (e) {}
   // con l'accesso e senza copia nel browser: un segnaposto, sostituito dalle mappe dell'account (cloudSync)
   if (CL.session) { const p = { id: uid(), name: 'Caricamento…', updated: 0, root: mk('Idea primaria'), cloud: true }; S.projects = [p]; S.pid = p.id; S.tabs = [p.id]; S.root = p.root; return; }
@@ -49,8 +59,9 @@ function load() {
 }
 function writeStore() {
   // la data cambia solo se c'è stata una modifica, non aprendo o lasciando il progetto
-  const p = curProject(); p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; }
-  if (CL.session) cloudSave(p); else fsSave(p); // anche online (con l'accesso) o nel file della cartella
+  const p = curProject(); dirty = dirty && !!p;
+  if (p) { p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; } }
+  if (p) { if (CL.session) cloudSave(p); else fsSave(p); } // anche online (con l'accesso) o nel file della cartella
   try { mapStore().setItem(storeKey(), JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
   catch (e) { if (FS.ok) return true; toast('Salvataggio non disponibile in questo browser'); return false; }
 }
@@ -90,10 +101,13 @@ function flattenSubs(level) {
 }
 
 /* ---------- selezione (blocchi e note della tela) ---------- */
-function selectOnly(id) { S.sels = new Set(id ? [id] : []); S.sel = id || null; S.esel = null; }
+function selectOnly(id) { S.sels = new Set(id ? [id] : []); S.sel = id || null; S.esel = null; S.esels = new Set(); }
 // collegamento selezionato: si indica con l'id del blocco in cui entra
 function selectEdge(id) { selectOnly(null); S.esel = id; }
 function clearSel() { selectOnly(null); }
+// Maiusc/Ctrl: il collegamento cliccato da solo entra nell'insieme, così resta selezionato aggiungendo altro
+function keepEdge() { if (S.esel) { S.esels.add(S.esel); S.esel = null; } }
+function toggleEdgeSel(key) { keepEdge(); if (S.esels.has(key)) S.esels.delete(key); else S.esels.add(key); }
 function toggleSel(id) {
   if (S.sels.has(id)) { S.sels.delete(id); if (S.sel === id) S.sel = [...S.sels].pop() || null; }
   else { S.sels.add(id); S.sel = id; }
@@ -102,6 +116,7 @@ function pruneSel() {
   const t = curTree(); S.sels = new Set([...S.sels].filter(id => findM(t, id) || findNote(t, id) || findGroup(t, id) || (id === LEG && t.legend)));
   if (S.sel && !S.sels.has(S.sel)) S.sel = [...S.sels].pop() || null;
   if (S.esel && !edgeData(t, S.esel)) S.esel = null;
+  S.esels = new Set([...S.esels].filter(k => edgeData(t, k)));
 }
 
 /* ---------- undo ---------- */
@@ -124,4 +139,4 @@ function redo() {
 // sola lettura (lucchetto nella barra): il progetto aperto ha locked; si può guardare, cercare, copiare, aprire i rami
 const readOnly = () => !!(curProject() && curProject().locked) && !S.roOk;
 function mutate(fn) {
-  if (readOnly()) { roToast(); return render(); } $('#hint').hidden = true; snapshot(); fn(curTree()); const t = curTree(); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }
+  if (readOnly()) { roToast(); return render(); } $('#hint').hidden = true; snapshot(); const lv = styleLevels(curTree()); fn(curTree()); const t = curTree(); keepLook(t, lv); if (t.void && t.free && t.free.length) promoteRoot(t, t.free[0]); save(); render(); }

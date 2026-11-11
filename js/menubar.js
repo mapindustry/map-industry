@@ -1,8 +1,15 @@
-// Barra dei menu: Progetti, Esporta, poi le schede dei progetti aperti (il salvataggio è automatico; Ctrl+S salva subito)
+// Barra dei menu: Progetti (Nuovo, Carica, Apri), Esporta (anche il file .json), poi le schede dei progetti aperti; a destra Salva (il salvataggio è anche
+// automatico; Salva e Ctrl+S scrivono subito). Chiuse tutte le schede resta la pagina vuota con "Crea nuovo progetto".
 const pName = $('#pName');
 const fmtDate = t => new Date(t).toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-function renderBar() { if (curProject()) { renderTabs(); renderLock(); } }
+function renderBar() {
+  const empty = noTab(); document.body.classList.toggle('empty', empty); $('#empty').hidden = !empty;
+  if (empty) { tabsEl.innerHTML = ''; tabsSig = ''; document.body.classList.remove('ro'); return; }
+  if (curProject()) { renderTabs(); renderLock(); }
+}
+$('#eNew').onclick = () => newProject();
+$('#bSave').onclick = () => { if (editing) endEdit(true); saveProject(); };
 // lucchetto: la mappa aperta diventa di sola lettura (p.locked, salvato con il progetto e uguale in ogni scheda)
 const bLock = $('#bLock');
 function renderLock() {
@@ -61,7 +68,7 @@ function renderTabs() {
     const on = id === S.pid, n = esc(name(id));
     return `<div class="tab${on ? ' on' : ''}" data-tab="${id}" role="tab" aria-selected="${on}" title="${n}">` +
       (on ? '<span class="tslot"></span>' : `<span class="tname">${n}</span>`) +
-      (S.tabs.length > 1 ? `<button class="tx" data-tclose="${id}" aria-label="Chiudi la scheda ${n}" title="Chiudi la scheda (il progetto resta salvato)">×</button>` : '') + `</div>`;
+      `<button class="tx" data-tclose="${id}" aria-label="Chiudi la scheda ${n}" title="Chiudi la scheda (il progetto resta salvato)">×</button></div>`;
   }).join('');
   tabsEl.querySelector('.tslot').replaceWith(pName);
   const act = tabsEl.querySelector('.tab.on'); if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -72,10 +79,16 @@ tabsEl.addEventListener('click', e => {
 });
 tabsEl.addEventListener('auxclick', e => { const t = e.target.closest('[data-tab]'); if (e.button === 1 && t) { e.preventDefault(); closeTab(t.dataset.tab); } }); // tasto centrale
 $('#tAdd').onclick = () => newProject();
-// chiudere una scheda non elimina niente: il progetto resta nel menu Progetti
+// chiudere una scheda non elimina niente: il progetto resta nel menu Carica progetto. Chiusa l'ultima, pagina vuota
+// (lo stato della scheda resta in TABST: riaprendo il progetto si ritrovano annulla/rifai e vista)
 function closeTab(id) {
-  if (S.tabs.length < 2 || !S.tabs.includes(id)) return;
+  if (!S.tabs.includes(id)) return;
   if (editing) endEdit(true);
+  closeMenu(); closeDrops(); if (FIND) closeFind();
+  if (S.tabs.length === 1) {
+    saveNow(); TABST.set(S.pid, { undo: S.undo, redo: S.redo, views: S.views, sels: S.sels, sel: S.sel });
+    S.tabs = []; clearSel(); saveNow(); return render();
+  }
   if (id === S.pid) { const i = S.tabs.indexOf(id); switchTo(S.tabs[i + 1] || S.tabs[i - 1]); }
   S.tabs = S.tabs.filter(x => x !== id); TABST.delete(id); saveNow(); renderTabs();
 }
@@ -93,44 +106,54 @@ function closeDrops() { document.querySelectorAll('.ddm').forEach(m => { m.hidde
 document.addEventListener('pointerdown', e => { if (!(e.target.closest && e.target.closest('.dd'))) closeDrops(); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.ddm:not([hidden])')) { closeDrops(); e.stopImmediatePropagation(); } }, true);
 
-$('#bProj').onclick = () => toggleDrop('mProj', () => {
-  // azioni prima, poi i progetti dal più recente (l'elenco può essere lungo), Elimina in fondo
-  const list = [...S.projects].sort((a, b) => b.updated - a.updated);
+// Progetti: Nuovo, Carica (apre qui sotto l'elenco dei progetti, ognuno con il cestino), Apri file .json; poi la cartella
+let projOpen = false;
+function projMenuHtml() {
+  const list = [...S.projects].sort((a, b) => b.updated - a.updated), cur = id => id === S.pid && !noTab();
   // cartella dei progetti: da scegliere, da riconnettere (permesso da riconfermare) o in uso
   const dirItems = !fsSupported || CL.session ? '' : !FS.dir ? item('pdir', 'Salva i progetti in una cartella…', '', '', 'Ogni progetto diventa un file .json, salvato da solo')
     : !FS.ok ? item('pdirok', `Riconnetti la cartella «${esc(FS.dir.name)}»`, '', '', 'Il browser chiede di confermare il permesso')
     : item('pdir', 'Cambia cartella…', '', '', `Ora: «${esc(FS.dir.name)}»`);
-  return item('pnew', 'Nuovo progetto') + item('pfile', 'Apri file .json…') + item('pdown', 'Scarica come file .json') +
-    (dirItems ? SEP + dirItems : '') + SEP +
-    head(CL.session ? 'Le tue mappe online' : FS.ok ? `Progetti in «${esc(FS.dir.name)}»` : 'Progetti recenti') + list.map(p =>
-      `<button class="it${p.id === S.pid ? ' on' : ''}" data-open="${p.id}" role="menuitem"><span class="l">${esc(p.name || 'Senza nome')}</span><small>${fmtDate(p.updated)}${S.tabs.includes(p.id) && p.id !== S.pid ? ' · aperto in una scheda' : ''}</small></button>`).join('') +
-    (S.projects.length > 1 ? SEP + item('pdel', 'Elimina il progetto aperto', ' dng', '', FS.ok ? `Il file va nella sottocartella «${TRASH}»` : '') : '');
-});
+  const where = CL.session ? 'Le tue mappe online' : FS.ok ? `Progetti in «${esc(FS.dir.name)}»` : 'Progetti salvati in questo browser';
+  const rows = !list.length ? `<p class="pnone">Nessun progetto salvato</p>` : list.map(p =>
+    `<div class="prow"><button class="it${cur(p.id) ? ' on' : ''}" data-open="${p.id}" role="menuitem"><span class="l">${esc(p.name || 'Senza nome')}</span><small>${fmtDate(p.updated)}${S.tabs.includes(p.id) && !cur(p.id) ? ' · aperto in una scheda' : ''}</small></button>` +
+    `<button class="pdel" data-del="${p.id}" title="${FS.ok ? `Elimina (il file va in «${TRASH}»)` : 'Elimina il progetto'}" aria-label="Elimina ${esc(p.name || 'Senza nome')}">` +
+    `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5H13.5M6 4.5V3H10V4.5M4 4.5 4.7 13.5H11.3L12 4.5M6.7 7V11.2M9.3 7V11.2"/></svg><span>Elimina?</span></button></div>`).join('');
+  return item('pnew', 'Nuovo progetto') +
+    `<button class="it pload${projOpen ? ' open' : ''}" data-a="pload" role="menuitem" aria-expanded="${projOpen}"><span class="l">Carica progetto</span><kbd>${S.projects.length} ${projOpen ? '▴' : '▾'}</kbd><small>${where}</small></button>` +
+    (projOpen ? `<div class="plist">${rows}</div>` : '') +
+    item('pfile', 'Apri file .json…', '', '', 'Da un file scaricato o ricevuto') +
+    (dirItems ? SEP + dirItems : '');
+}
+$('#bProj').onclick = () => { projOpen = false; toggleDrop('mProj', projMenuHtml); };
 $('#mProj').addEventListener('click', e => {
+  const d = e.target.closest('[data-del]');
+  if (d) { // cestino: il primo clic chiede conferma ("Elimina?"), il secondo elimina
+    if (!d.classList.contains('armed')) { $('#mProj').querySelectorAll('.pdel.armed').forEach(x => x.classList.remove('armed')); d.classList.add('armed'); return; }
+    closeDrops(); return deleteProject(d.dataset.del);
+  }
   const o = e.target.closest('[data-open]'); if (o) { closeDrops(); return openProject(o.dataset.open); }
   const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
-  if (a === 'pdel') { // due clic per confermare
-    if (!b.classList.contains('armed')) { b.classList.add('armed'); b.querySelector('.l').textContent = FS.ok ? 'Clic di nuovo per eliminare' : 'Clic di nuovo per eliminare (non si può annullare)'; return; }
-    closeDrops(); return deleteProject();
-  }
+  if (a === 'pload') { projOpen = !projOpen; $('#mProj').innerHTML = projMenuHtml(); return $('#mProj [data-a="pload"]').focus(); } // il menu resta aperto
   closeDrops();
   if (a === 'pnew') newProject();
   else if (a === 'pfile') $('#fileIn').click();
-  else if (a === 'pdown') downloadProject();
   else if (a === 'pdir') chooseFolder();
   else if (a === 'pdirok') reconnectFolder();
 });
 $('#bExp').onclick = () => toggleDrop('mExp', () => head('Esporta la mappa') +
+  `<button class="it" data-x="json" role="menuitem"><span class="l">File .json del progetto</span><small>Si riapre con Progetti → Apri file .json</small></button>` +
   `<button class="it" data-x="svg" role="menuitem"><span class="l">Immagine SVG</span><small>Vettoriale, si apre ovunque</small></button>` +
   `<button class="it" data-x="pdf" role="menuitem"><span class="l">PDF</span><small>Dalla finestra di stampa: “Salva come PDF”</small></button>`);
 $('#mExp').addEventListener('click', async e => {
   const b = e.target.closest('[data-x]'); if (!b) return; closeDrops();
+  if (b.dataset.x === 'json') return downloadProject();
   try { const r = await exportImage(b.dataset.x); if (!r.fonts) toast('Font non incorporato (sei offline?): il testo userà un carattere di sistema'); else if (b.dataset.x === 'svg') toast('SVG scaricato'); }
   catch (err) { toast(err && err.message === 'vuota' ? 'Niente da esportare' : 'Esportazione non riuscita'); }
 });
 
 /* ---------- progetti ---------- */
-function saveProject() { if (saveNow()) toast(FS.ok ? `Progetto salvato in «${FS.dir.name}»` : 'Progetto salvato'); }
+function saveProject() { if (noTab()) return; if (saveNow()) toast(FS.ok ? `Progetto salvato in «${FS.dir.name}»` : 'Progetto salvato'); }
 // passa a un progetto: se non è aperto gli si apre una scheda accanto a quella attiva
 function switchTo(id) {
   if (editing) endEdit(true);
@@ -152,7 +175,7 @@ function enterTab(id) {
 // online si rilegge anche una scheda già aperta (un altro dispositivo può averla cambiata): se è cambiata,
 // il suo annulla/rifai non vale più
 async function openProject(id, quiet) {
-  if (id === S.pid) return;
+  if (id === S.pid && !noTab()) return;
   const p = S.projects.find(x => x.id === id); if (!p) return;
   if (!S.tabs.includes(id)) await fsReload(p);
   if (await cloudReload(p)) TABST.delete(id);
@@ -162,12 +185,20 @@ function newProject() {
   const p = { id: uid(), name: 'Nuovo progetto', updated: Date.now(), root: mk('Idea primaria') };
   S.projects.push(p); switchTo(p.id); pName.focus(); pName.select();
 }
-function deleteProject() {
-  const id = S.pid, i = S.projects.findIndex(p => p.id === id), name = curProject().name, ti = S.tabs.indexOf(id);
+// elimina un progetto qualsiasi (dal cestino del menu), anche l'ultimo: allora resta la pagina vuota
+function deleteProject(id = S.pid) {
+  const i = S.projects.findIndex(p => p.id === id); if (i < 0) return;
+  if (editing) endEdit(true);
+  const name = S.projects[i].name, ti = S.tabs.indexOf(id), was = id === S.pid, empty = noTab();
   const gone = S.projects.splice(i, 1)[0]; if (CL.session) cloudDelete(gone); else fsTrash(gone); // online: segnata come eliminata; cartella: il file va in "Eliminati"
   S.tabs = S.tabs.filter(x => x !== id); TABST.delete(id);
+  if (!S.projects.length) { TABST.clear(); noProjects(); saveNow(); render(); return toast('Eliminato: ' + name); }
+  if (!was) { saveNow(); render(); return toast('Eliminato: ' + name); }
+  const recent = [...S.projects].sort((a, b) => b.updated - a.updated)[0].id;
+  // dalla pagina vuota: si resta lì (il progetto nascosto diventa il più recente)
+  if (empty) { S.pid = recent; S.root = curProject().root; S.undo = []; S.redo = []; clearSel(); saveNow(); render(); return toast('Eliminato: ' + name); }
   // si passa alla scheda vicina o, se non ce ne sono, al progetto più recente (la sua mappa, non quella eliminata)
-  const next = S.tabs[Math.min(Math.max(ti, 0), S.tabs.length - 1)] || [...S.projects].sort((a, b) => b.updated - a.updated)[0].id;
+  const next = S.tabs[Math.min(Math.max(ti, 0), S.tabs.length - 1)] || recent;
   if (!S.tabs.includes(next)) S.tabs.push(next);
   enterTab(next); toast('Eliminato: ' + name);
 }

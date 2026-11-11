@@ -85,8 +85,9 @@ async function fsSync(migrate) {
   });
   byFile.forEach(x => keep.push({ id: x.id && !keep.some(k => k.id === x.id) ? x.id : uid(), name: x.name, updated: x.time, root: x.root, file: x.file, ...(x.locked ? { locked: true } : {}) }));
   S.projects = keep;
-  if (!S.projects.some(p => p.id === S.pid)) { S.pid = [...S.projects].sort((a, b) => b.updated - a.updated)[0].id; S.root = curProject().root; S.undo = []; S.redo = []; }
-  S.tabs = S.tabs.filter(id => S.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
+  if (!S.projects.length) noProjects();
+  else if (!S.projects.some(p => p.id === S.pid)) { S.pid = [...S.projects].sort((a, b) => b.updated - a.updated)[0].id; S.root = curProject().root; S.undo = []; S.redo = []; }
+  fixTabs();
   for (const p of S.projects) if (!p.file || p.newer) { delete p.newer; await writeFileNow(p); }
   saveNow(); render();
 }

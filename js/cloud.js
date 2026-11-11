@@ -160,7 +160,7 @@ async function cloudSync() {
   if (!keep.length) keep.push({ id: uid(), name: 'Prima mappa', updated: Date.now(), root: mk('Idea primaria') });
   S.projects = keep;
   if (!S.projects.some(p => p.id === S.pid)) { S.pid = S.projects[0].id; S.root = curProject().root; S.undo = []; S.redo = []; }
-  S.tabs = S.tabs.filter(id => S.projects.some(p => p.id === id)); if (!S.tabs.includes(S.pid)) S.tabs.push(S.pid);
+  fixTabs();
   if (push.length) await cloudUpsert(push);
   S.projects.forEach(p => { p.cloud = true; });
   saveNow(); render();

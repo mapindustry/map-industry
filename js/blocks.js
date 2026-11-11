@@ -24,7 +24,7 @@ function listSize(n, lv, fs, font, lh, padX, padY) {
   const maxR = n.h ? Math.max(1, Math.floor((n.h - padY + 4) / lh)) : 40;
   if (rows.length > maxR) { rows = rows.slice(0, maxR); rows[maxR - 1].t = ell(rows[maxR - 1].t + '…', maxW, font); }
   const w = n.w || Math.max(Math.max(...rows.map(r => tw(r.t, font))) + mw + padX, 100);
-  return { lines: rows.map(r => r.t), rows, items, mw, lh, w, h: n.h || rows.length * lh + padY, padX };
+  return { lines: rows.map(r => r.t), rows, items, mw, lh, w, h: n.h || rows.length * lh + padY, padX, padY };
 }
 const tableRows = n => (n.table && n.table.rows && n.table.rows.length ? n.table.rows : [['Colonna 1', 'Colonna 2'], ['', '']]);
 const cellFont = (n, fs, head) => `${n.it ? 'italic ' : ''}${head ? 600 : 400} ${fs}px ${FB}`;
@@ -41,7 +41,7 @@ function tableSize(n, lv, fs, font, lh) {
 
 /* ---------- disegno ---------- */
 function listMarkup(n, l, live, fsSt) {
-  const fs = fsOf(n, l.depth), x0 = l.padX / 2, pad = (l.h - l.rows.length * l.lh) / 2;
+  const fs = fsOf(n, l.depth), x0 = l.padX / 2, pad = Math.min(l.padY / 2, (l.h - l.rows.length * l.lh) / 2); // voci dall'alto, anche in un blocco più alto
   return l.rows.map((r, i) => {
     const y = pad + (i + 0.76) * l.lh, item = l.items[r.k], done = n.type === 'todo' && isDone(n, item);
     let mark = '';

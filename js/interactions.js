@@ -81,6 +81,7 @@ cv.addEventListener('pointerdown', e => {
     selectOnly(LEG); render(); P = { ...base, mode: 'legend', ox: p.x, oy: p.y };
   } else if (g || cn || gr) {
     const id = g ? g.dataset.id : cn ? cn.dataset.note : gr.dataset.grp;
+    if (e.ctrlKey || e.metaKey || e.shiftKey) keepEdge();
     if (e.ctrlKey || e.metaKey) { toggleSel(id); render(); return; }
     // Maiusc: con un clic aggiunge o toglie dalla selezione; trascinando, la selezione scorre su un binario
     const wasSel = S.sels.has(id), wasMulti = !e.shiftKey && wasSel && S.sels.size > 1;
@@ -90,8 +91,9 @@ cv.addEventListener('pointerdown', e => {
     const lockS = lockedSet(curTree()); P.locked = P.movers.some(m => lockS.has(m.o)); // gruppo bloccato: non si sposta
   } else {
     // sfondo o collegamento: trascinando si disegna il riquadro, con un clic su un collegamento lo si seleziona
-    const edge = e.target.closest('[data-edge]');
-    P = { ...base, mode: 'box', add: e.shiftKey || e.ctrlKey || e.metaKey, prev: new Set(S.sels), edge: edge && edge.dataset.edge };
+    const edge = e.target.closest('[data-edge]'), add = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (add) keepEdge();
+    P = { ...base, mode: 'box', add: e.shiftKey || e.ctrlKey || e.metaKey, prev: new Set(S.sels), prevE: new Set(S.esels), edge: edge && edge.dataset.edge };
   }
   cv.setPointerCapture(e.pointerId);
 });
@@ -133,7 +135,7 @@ cv.addEventListener('pointermove', e => {
       const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
       lk.over = ok ? g.dataset.id : null;
       // sul pallino più vicino al puntatore (preferendo quello compatibile), non su quello disegnato sopra
-      lk.overAnc = ok ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out' }[lk.kind])
+      lk.overAnc = ok ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
         || (a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null) : null;
     }
     return render();
@@ -170,17 +172,35 @@ cv.addEventListener('pointermove', e => {
   render();
 });
 
+// Riquadro di selezione, come nei programmi di disegno: trascinato verso destra (finestra, altro colore) prende solo ciò
+// che vi sta tutto dentro; verso sinistra basta toccarlo. I collegamenti contano per ogni punto della linea.
+function edgePoints() { // punti lungo ogni collegamento disegnato (coordinate della mappa), presi una volta per riquadro
+  const pts = new Map();
+  cv.querySelectorAll('#vp g[data-edge] > path.edge').forEach(p => {
+    const len = p.getTotalLength(), n = Math.max(2, Math.ceil(len / 4)), a = [];
+    for (let i = 0; i <= n; i++) { const q = p.getPointAtLength(len * i / n); a.push([q.x, q.y]); }
+    pts.set(p.parentNode.dataset.edge, a);
+  });
+  return pts;
+}
 function dragBox(e) {
   const x1 = Math.min(P.sx, e.clientX), y1 = Math.min(P.sy, e.clientY), x2 = Math.max(P.sx, e.clientX), y2 = Math.max(P.sy, e.clientY);
+  const win = e.clientX >= P.sx; boxEl.classList.toggle('win', win);
   Object.assign(boxEl.style, { left: x1 + 'px', top: y1 + 'px', width: x2 - x1 + 'px', height: y2 - y1 + 'px' }); boxEl.hidden = false;
   const a = toSvg(x1, y1), b = toSvg(x2, y2);
-  const hit = M => [...M].filter(([, l]) => l.x < b.x && l.x + l.w > a.x && l.y < b.y && l.y + l.h > a.y).map(([id]) => id);
+  const hit = M => [...M].filter(([, l]) => win ? l.x >= a.x && l.x + l.w <= b.x && l.y >= a.y && l.y + l.h <= b.y
+    : l.x < b.x && l.x + l.w > a.x && l.y < b.y && l.y + l.h > a.y).map(([id]) => id);
   // i gruppi solo se il riquadro li contiene per intero (si può selezionare anche dentro un gruppo)
   const GH = groupHidden(curTree());
   const gh = (curTree().groups || []).filter(g => { const r = gRect(g); return !GH.has(g.id) && r.x >= a.x && r.y >= a.y && r.x + r.w <= b.x && r.y + r.h <= b.y; }).map(g => g.id);
   const hits = hit(S.L).concat(hit(S.NL), gh);
   S.sels = new Set(P.add ? [...P.prev, ...hits] : hits);
   S.sel = hits.length ? hits[hits.length - 1] : [...S.sels].pop() || null;
+  // collegamenti (per dar loro lo stesso stile): finestra = tutta la linea dentro, altrimenti basta un punto
+  if (!P.epts) P.epts = edgePoints();
+  const inside = ([x, y]) => x >= a.x && x <= b.x && y >= a.y && y <= b.y;
+  const eh = [...P.epts].filter(([, q]) => win ? q.every(inside) : q.some(inside)).map(([k]) => k);
+  S.esels = new Set(P.add ? [...P.prevE, ...eh] : eh); S.esel = null;
   render();
 }
 
@@ -213,15 +233,17 @@ function endPointerCore(e) {
     if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
     if (lk.pinMove) return setPin(lk.id, lk.kind, lk.idx, lk.pinMove); // pallino spostato lungo il bordo
     if (lk.over) {
-      // struttura: il blocco d'arrivo diventa una parte, ovunque lo si lasci (anche su un suo pallino)
-      if (lk.kind === 'str') return link(lk.id, null, lk.over, null, lk.idx);
-      if (lk.overAnc && lk.overAnc.kind === 'str') return lk.kind === 'in' ? link(lk.over, null, lk.id, null, lk.overAnc.idx) : link(lk.id, lk.idx, lk.over, 0);
-      const oa = lk.overAnc, t = curTree();
-      // un'uscita va su un ingresso e viceversa; sul corpo del blocco vale il pallino più vicino del tipo giusto
-      if (oa && oa.kind === lk.kind) { render(); return toast(lk.kind === 'out' ? 'Un’uscita va collegata a un ingresso' : 'Un ingresso va collegato a un’uscita'); }
-      const target = findM(t, lk.over).n, tl = S.L.get(lk.over), want = lk.kind === 'out' ? 'i' : 'o';
-      const near = () => { const P = pinsOf(target)[want]; let best = 0, bd = Infinity; P.forEach((q, i) => { const [qx, qy] = pinXY(tl, q), d = Math.hypot(tl.x + qx - lk.x2, tl.y + qy - lk.y2); if (d < bd) { bd = d; best = i; } }); return best; };
+      // sempre da pallino a pallino: uscita → ingresso, rombo → rombo. Sul corpo del blocco vale il pallino più vicino
+      // del tipo giusto; se il blocco non ne ha, ensurePins ne aggiunge uno sul lato rivolto a questo blocco
+      const oa = lk.overAnc, want = { out: 'in', in: 'out', str: 'str' }[lk.kind];
+      if (oa && oa.kind !== want) {
+        render();
+        return toast({ out: 'Un’uscita va collegata a un ingresso', in: 'Un ingresso va collegato a un’uscita', str: 'Un rombo di struttura va collegato a un altro rombo' }[lk.kind]);
+      }
+      const target = findM(curTree(), lk.over).n, tl = S.L.get(lk.over);
+      const near = () => { let best = 0, bd = Infinity; pinsOf(target)[PK[want]].forEach((q, i) => { const [qx, qy] = pinXY(tl, q), d = Math.hypot(tl.x + qx - lk.x2, tl.y + qy - lk.y2); if (d < bd) { bd = d; best = i; } }); return best; };
       const tIdx = oa ? oa.idx : near();
+      if (lk.kind === 'str') return link(lk.id, null, lk.over, null, lk.idx, tIdx);
       return lk.kind === 'out' ? link(lk.id, lk.idx, lk.over, tIdx) : link(lk.over, tIdx, lk.id, lk.idx);
     }
     if (lk.kind === 'in') { // ingresso nel vuoto: si stacca il collegamento principale, il blocco resta dov'è
@@ -232,12 +254,13 @@ function endPointerCore(e) {
   }
   if (P.ro && !P.moved) { if (P.pick) selectOnly(P.pick); else clearSel(); render(); P = null; return; }
   if (!P.moved) {
-    const had = S.sels.size, hadE = S.esel;
-    if (P.mode === 'enote' || (P.mode === 'box' && P.edge)) selectEdge(P.id || P.edge);
+    const had = S.sels.size, hadE = S.esel, hadES = S.esels.size;
+    if (P.mode === 'box' && P.edge && P.add) toggleEdgeSel(P.edge); // Maiusc/Ctrl + clic: aggiunge o toglie il collegamento
+    else if (P.mode === 'enote' || (P.mode === 'box' && P.edge)) selectEdge(P.id || P.edge);
     else if (P.mode === 'box' && !P.add) clearSel();
     if (P.mode === 'drag' && P.wasMulti) selectOnly(P.id);
     if (P.mode === 'drag' && P.shiftOff) { toggleSel(P.id); render(); } // Maiusc+clic su un selezionato: lo toglie
-    if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel) render();
+    if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel || hadES !== S.esels.size) render();
   } else if (P.mode === 'drag' && S.dropOn) {
     const id = S.dropOn; S.dropOn = null; foldInto(id, P.movers);
   } else if (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote') {
@@ -299,8 +322,9 @@ function moveSel(key) {
 }
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (editing) endEdit(true); return saveProject(); }
+  if (noTab()) return; // pagina vuota (nessuna scheda aperta): niente scorciatoie della mappa
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !editing) { e.preventDefault(); closeMenu(); return openFind(); }
-  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar, #find, .side'))) return;
+  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar, #find, #side'))) return; // #side, non .side: con la barra aperta anche <body> ha la classe side
   if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; cv.classList.add('grab'); } return; }
   if (readOnly() && !(e.key.startsWith('Arrow') || e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c'))) {
     if (e.key.length === 1 && !(e.ctrlKey || e.metaKey) || ['Delete', 'Backspace', 'Enter', 'Tab', 'F2'].includes(e.key) || (e.ctrlKey || e.metaKey)) { e.preventDefault(); roToast(); }
@@ -320,10 +344,9 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (S.esel && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); return deleteEdge(S.esel); }
   if (e.key === 'Escape') {
     if (FIND) return closeFind();
-    if (S.sels.size || S.esel) { clearSel(); return render(); }
+    if (S.sels.size || S.esel || S.esels.size) { clearSel(); return render(); }
     return;
   }
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return removeSelected(); }

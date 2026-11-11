@@ -27,7 +27,7 @@ const ico = d => `<svg viewBox="0 0 28 14" width="28" height="14" aria-hidden="t
 const icoLine = da => `<svg viewBox="0 0 28 14" width="28" height="14" aria-hidden="true"><path d="M3 7H25"${da ? ` stroke-dasharray="${da}"` : ''}/></svg>`;
 // in cima alla sezione Stile: copia lo stile, e incollalo se quello copiato è dello stesso tipo (blocco o collegamento)
 const styleItems = (kind, n) => item('stcopy', 'Copia stile') +
-  (S.style && S.style.kind === kind ? item('stpaste', n > 1 ? `Incolla stile su ${n} blocchi` : 'Incolla stile') : '');
+  (S.style && S.style.kind === kind ? item('stpaste', n > 1 ? `Incolla stile su ${n} ${kind === 'edge' ? 'collegamenti' : 'blocchi'}` : 'Incolla stile') : '');
 // tipi di blocco: [chiave, nome, disegno, titolo del menu]
 const BTYPES = [
   ['text', 'Testo', ico('M5 4H23M5 7.5H23M5 11H16'), 'Blocco'],
@@ -144,9 +144,12 @@ menuEl.addEventListener('input', e => {
   if (e.target.id === 'meop') { // opacità del collegamento: come quella dei blocchi, un passo di annullamento per gesto
     const v = +e.target.value / 100; $('#veop').textContent = Math.round(v * 100) + '%';
     if (opArmed) { snapshot(); opArmed = false; }
-    const ed = edgeData(curTree(), MENU.id, true); if (!ed) return;
-    if (v >= 1) delete ed.op; else ed.op = v;
-    if (!MENU.id.startsWith('x:')) { const f = findM(curTree(), MENU.id); if (f && !Object.keys(f.n.edge).length) delete f.n.edge; }
+    const t = curTree();
+    edgeTargets(MENU.id).forEach(key => {
+      const ed = edgeData(t, key, true); if (!ed) return;
+      if (v >= 1) delete ed.op; else ed.op = v;
+      if (!key.startsWith('x:')) { const f = findM(t, key); if (f && f.n.edge && !Object.keys(f.n.edge).length) delete f.n.edge; }
+    });
     save(); render(); return;
   }
   if (e.target.id === 'mgfo') { // opacità dello sfondo del gruppo
@@ -216,15 +219,19 @@ cv.addEventListener('contextmenu', e => {
   }
   if (edge) {
     const id = edge.dataset.edge, ed = edgeData(curTree(), id) || {};
-    selectEdge(id); render();
+    // fa parte di più collegamenti presi col riquadro: la selezione resta e lo stile vale per tutti
+    const many = S.esels.size > 1 && S.esels.has(id);
+    if (many) S.esel = id; else selectEdge(id);
+    render();
     // forma e tratto valgono per tutti i collegamenti, anche quelli di struttura (di serie a puntini)
     const sh = ed.shape || 'curve', ln = lineOf(ed);
-    return showMenu(e.clientX, e.clientY, title(isStr(ed) ? 'Collegamento di struttura' : 'Collegamento') +
+    return showMenu(e.clientX, e.clientY, (many ? title(S.esels.size + ' collegamenti', 'Lo stile vale per tutti') + head('Stile') + styleItems('edge', S.esels.size) :
+      title(isStr(ed) ? 'Collegamento di struttura' : 'Collegamento') +
       item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota', '', 'Doppio clic') + (ed.note ? item('enotedel', 'Togli la nota') : '') +
       (ed.nx || ed.ny ? item('enotepos', 'Riporta la nota sulla linea') : '') +
       (isStr(ed) ? '' : SEP + item('einsert', 'Inserisci un blocco intermedio') + item('ehub', 'Inserisci uno svincolo')) + SEP +
       item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
-      item('edel', 'Elimina collegamento', ' dng', 'Canc') + SEP + head('Stile') + styleItems('edge', 1) +
+      item('edel', 'Elimina collegamento', ' dng', 'Canc') + SEP + head('Stile') + styleItems('edge', 1)) +
       seg('Forma', [['curve', 'Morbida', sh === 'curve', ico('M3 11C13 11 15 3 25 3')], ['straight', 'Dritta', sh === 'st', ico('M3 11L25 3')],
         ['square', 'Squadrata', sh === 'sq', ico('M3 11H14V3H25')]]) +
       seg('Tratto', [['lsolid', 'Continuo', ln === 'solid', icoLine('')], ['ldash', 'Tratteggiato', ln === 'dash', icoLine('5 3')],
@@ -273,11 +280,11 @@ menuEl.addEventListener('click', e => {
     }
     if (st.dataset.st === 'lw') { // spessore del collegamento, a passi di mezzo pixel
       const w = clamp(Math.round((linkWidth(MENU.id) + d * 0.5) * 10) / 10, 0.5, 8);
-      setEdge(MENU.id, { lw: w }); $('#vlw').textContent = w + ' px'; return;
+      setEdgeStyle(MENU.id, { lw: w }); $('#vlw').textContent = w + ' px'; return;
     }
     if (st.dataset.st === 'gap') { // distanza tra puntini o trattini, a passi di 1 px
       const g = clamp(gapOf(linkData(MENU.id)) + d, 2, 30);
-      setEdge(MENU.id, { gap: g }); $('#vgap').textContent = g + ' px'; return;
+      setEdgeStyle(MENU.id, { gap: g }); $('#vgap').textContent = g + ' px'; return;
     }
     if (st.dataset.st === 'pin') { // contatore dei pallini: −/+ toglie l'ultimo o ne aggiunge uno
       const k = st.dataset.k, n = findM(curTree(), MENU.id || S.sel).n, len = pinsOf(n)[PK[k]].length;
@@ -293,7 +300,7 @@ menuEl.addEventListener('click', e => {
   // forma e tratto del collegamento: il menu resta aperto, così si provano una dopo l'altra
   const SH = { curve: '', straight: 'st', square: 'sq' }, LN = ['lsolid', 'ldash', 'ldot'];
   if (a in SH || LN.includes(a)) {
-    setEdge(id, a in SH ? { shape: SH[a] } : { line: a.slice(1), dash: false });
+    setEdgeStyle(id, a in SH ? { shape: SH[a] } : { line: a.slice(1), dash: false });
     (a in SH ? Object.keys(SH) : LN).forEach(k => { const x = menuEl.querySelector(`[data-a="${k}"]`); x.classList.toggle('on', k === a); x.setAttribute('aria-pressed', k === a); });
     if (LN.includes(a)) $('#rgap').hidden = a === 'lsolid';
     return;

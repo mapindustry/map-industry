@@ -20,14 +20,20 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   si sta lasciando una struttura trascinata).
 - Salvataggio: `localStorage['officina-mappe-v3'] = { projects: [{id,name,updated,root}], cur }`.
   **Cartella dei progetti** (`js/files.js`, File System Access API: Edge/Chrome, anche da file://): dal menu Progetti si
-  sceglie una cartella; ogni progetto diventa un file `.json` (`p.file`, formato di "Scarica come file .json") e
+  sceglie una cartella; ogni progetto diventa un file `.json` (`p.file`, formato di Esporta → "File .json del progetto") e
   `writeStore` lo riscrive a ogni salvataggio (`fsSave`, scritture in coda). Il riferimento alla cartella sta in IndexedDB
   (`officina-mappe-fs`); all'avvio `fsInit` lo riprende e, se il permesso va riconfermato, lo chiede al primo clic o tasto.
   `fsSync` fa coincidere i progetti con i file (il file vince, tranne modifiche locali più recenti); aprire un progetto
   rilegge il file (`fsReload`); rinominare rinomina il file; eliminare lo sposta in `Eliminati/`. localStorage resta la
   copia di riserva. Per le prove si può passare a `useFolder` una cartella di `navigator.storage.getDirectory()`.
   **Schede** (`js/menubar.js`): `S.tabs` = progetti aperti (salvati come `tabs` in localStorage). Barra: Progetti, Esporta,
-  poi le schede (la attiva contiene `#pName`), "+" = nuovo progetto. `switchTo` apre la scheda accanto a quella attiva e
+  poi le schede (la attiva contiene `#pName`), "+" = nuovo progetto; a destra **Salva** (`#bSave`, in evidenza, = Ctrl+S;
+  il salvataggio resta anche automatico). Menu Progetti (`projMenuHtml`), in quest'ordine: Nuovo progetto,
+  Carica progetto (apre dentro il menu l'elenco dei progetti, `projOpen`, ognuno con il cestino `data-del`: primo clic
+  "Elimina?", secondo elimina, `deleteProject(id)`), Apri file .json, poi la cartella. Il file .json si scarica da Esporta.
+  Si può eliminare anche l'ultimo progetto: `noProjects()` (nessun progetto, `S.pid` null, radice vuota), pagina vuota.
+  Si può chiudere anche l'ultima scheda: `S.tabs` vuoto = **pagina vuota** (`noTab()`, `body.empty`, `#empty` con "Crea nuovo
+  progetto"); `S.pid` resta su un progetto nascosto (o è null), tastiera ferma, `render` non disegna. `fixTabs` (load, cloudSync, fsSync) tiene le schede vuote vuote. `switchTo` apre la scheda accanto a quella attiva e
   salva lo stato di quella lasciata in `TABST` (annulla/rifai, vista, selezione; `enterTab` lo riprende). Chiudere una
   scheda (× o tasto centrale) non elimina il progetto; aprire dal menu un progetto già aperto passa alla sua scheda.
   **Account e mappe online** (`js/config.js` + `js/cloud.js`, Supabase via fetch, nessuna libreria): con `SB_URL`/`SB_KEY`
@@ -42,7 +48,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   "Ricordami su questo dispositivo" (di serie): sessione e copia delle mappe in localStorage; senza, in sessionStorage
   (`authStore`/`mapStore`), e l'accesso finisce chiudendo il browser.
   Menu Account: nome, carica online le mappe del browser (`uploadLocal`), cambia password, esci. Per provarlo senza Supabase: finto `fetch` nella pagina.
-  **Lucchetto** (`#bLock`, `p.locked` salvato con il progetto): sola lettura; `readOnly()` ferma `mutate`, annulla, editor,
+  **Lucchetto** (`#bLock`, `p.locked` salvato con il progetto): sola lettura (sfondo a righe diagonali, `body.ro`, `--ro-stripe`); `readOnly()` ferma `mutate`, annulla, editor,
   tasti e trascinamenti (che spostano la vista); restano selezione, Copia, Cerca, aprire/chiudere rami e gruppi (`S.roOk`).
   Al primo avvio migra da `v2` ({root}) o dalla mappa mentale aperta in `v1`. Le vecchie **strutture interne**
   (`n.sub`, tela separata, tolte il 2026-11-10) vengono convertite in rami compressi da `flattenSubs` al caricamento
@@ -93,9 +99,13 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     `defaultPins` (primaria: ingresso in alto, uscite l/r; altri: ingresso l e uscita r, scambiati con `flip`).
     Un pallino si trascina lungo il bordo (`nearestBorder`, entro 16 px) o verso un altro blocco per collegare.
     Terzo tipo `s` = **struttura** (rombo `--anc-str`): collega il blocco alle sue parti, non a un passo di processo.
-    Ogni tipo può avere zero pallini (blocco con solo ingressi, solo uscite, nessuno); senza pallino la linea arriva
-    sul lato rivolto all'altro blocco (`facePin`). Clic su un pallino = menu: tipo, duplica, elimina (`editPin`, che
-    riassegna gli indici dei collegamenti attaccati).
+    **Un collegamento parte e arriva SEMPRE su un pallino** (richiesto il 2026-11-11): processo = uscita (`po`) →
+    ingresso (`pi`), struttura = rombo (`sp`) → rombo del figlio (`ts`, `tsIdx`). Al rilascio vale solo l'abbinamento
+    giusto (altrimenti un avviso); sul corpo del blocco il pallino più vicino del tipo giusto. Un tipo può avere zero
+    pallini, ma se un collegamento ne ha bisogno `ensurePins` (in `mindLayout`) ne aggiunge uno sul lato rivolto
+    all'altro blocco (`facePin`), in un punto libero. Clic su un pallino = menu: tipo, duplica, elimina (`editPin`: i
+    collegamenti del pallino tolto o cambiato restano dello stesso tipo e passano a un altro pallino di quel tipo;
+    gli altri indici e i `foldOut` vengono riassegnati).
   - Rami compressi: `fold` (tutti i rami) o `foldOut` (`['o:1','s:0']`, solo i rami che partono da quei pallini,
     dal menu del pallino). `mindLayout` toglie da `L` i discendenti (`foldedSet`/`isFoldedChild`), quindi non si
     disegnano né loro né i loro collegamenti; "+N" (sull'angolo, o accanto al pallino) per riaprirli, al passaggio
@@ -119,7 +129,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - `type` (`js/blocks.js`, Tipo nel menu del blocco): di serie testo; `ul`/`ol` elenchi, `todo` lista di controllo
     (`done` = testi delle voci spuntate, clic sulla casella `data-chk`), `table` (`table.rows`, prima riga = intestazione,
     `text` = titolo, anche vuoto). Misure in `listSize`/`tableSize` (chiamate da `sizeMap`), disegno in
-    `listMarkup`/`tableMarkup`. Elenchi: ogni riga del testo è una voce, mentre si scrive Invio = nuova voce (Ctrl+Invio
+    `listMarkup`/`tableMarkup`; le voci degli elenchi partono dall'alto anche in un blocco più alto. Elenchi: ogni riga del testo è una voce, mentre si scrive Invio = nuova voce (Ctrl+Invio
     o clic fuori per finire). Tabella: doppio clic su una cella (editor `cell`, id `blocco|riga|colonna`), Tab = cella
     successiva (dall'ultima aggiunge una riga); Righe/Colonne nel menu, tasto destro su una cella = elimina riga/colonna;
     niente maniglia di ridimensionamento. Cerca trova anche il testo delle celle.
@@ -128,6 +138,22 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.
+- Riquadro di selezione (`dragBox`): trascinato verso destra = finestra (`.marquee.win`, `--win` verde, tratto continuo),
+  prende solo ciò che vi sta tutto dentro; verso sinistra (azzurro, tratteggiato) basta toccare. I gruppi sempre per intero.
+  Prende anche i collegamenti (`S.esels`), valutati su punti lungo tutta la linea (`edgePoints`, presi una volta per
+  riquadro in `P.epts`): finestra = tutti i punti dentro, altrimenti uno basta. Tasto destro su
+  uno di loro = menu "N collegamenti" con il solo stile, che vale per tutti (`edgeTargets`/`setEdgeStyle`/`setEdges`);
+  Incolla stile di un collegamento va su tutti. Attenzione: con la barra dei componenti aperta `<body>` ha la classe
+  `side`, quindi per la barra si usa `#side` (con `.side` i tasti della mappa si fermavano tutti).
+- Maiusc/Ctrl + clic aggiunge o toglie anche i collegamenti (`toggleEdgeSel`; `keepEdge` porta `S.esel` in `S.esels`), e
+  Maiusc + riquadro aggiunge. Canc = `removeSelected`: blocchi, note, gruppi e collegamenti selezionati (`selEdges`,
+  `cutEdges`) in un solo passo; un solo collegamento → `deleteEdge`.
+- Lo stile di serie dipende dal livello (`sizeMap`: 1 per primo livello e blocchi liberi, 2 sotto): `mutate` confronta
+  i livelli prima e dopo (`styleLevels`/`keepLook`) e chi cambia livello tiene fs/fw/bw che aveva (staccare un blocco non
+  lo fa diventare grassetto). Primarie e svincoli esclusi.
+- Rami senza `po` seguono il pallino d'uscita a destra (`outIdx`, cercato sui pallini salvati, non su quelli provvisori del
+  trascinamento); `setPin`/`addPin` chiamano `freezeOuts`, che scrive `po`, così spostando i pallini i collegamenti e i
+  rami compressi (`foldOut` 'o:N') restano sullo stesso pallino.
 - Selezione di un collegamento: `S.esel` = chiave. Eliminare il principale = `detach` (il blocco resta libero, stessa
   posizione); un aggiuntivo si toglie da `tree.links`. Appunti: `S.clip` (`cloneFresh` rinomina id e collegamenti).
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.
@@ -144,8 +170,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   poi le azioni con la scorciatoia a destra (`item(a, etichetta, classe, scorciatoia, spiegazione)` → `<kbd>`/`<small>`),
   Elimina, e in fondo le sezioni di stile (`head()` → `.mhead`). Le scelte attive hanno la spunta (`.on`).
   Pallini = contatori −/+ (`pinsHtml`, `data-st="pin"`); forma e tratto del collegamento = pulsanti con disegno (`seg`).
-  Tutto ciò che si regola lascia aperto il menu. Barra: Progetti (azioni, recenti, Elimina) ed Esporta; niente pulsante
-  Salva (il salvataggio è automatico, Ctrl+S salva subito).
+  Tutto ciò che si regola lascia aperto il menu. Barra: Progetti ed Esporta, Salva a destra (richiesto il 2026-11-11).
   - la data del progetto cambia solo con una modifica (`dirty`); il bagliore non va nell'esportazione.
 - Cerca (Ctrl+F, `js/find.js`): campo `#find` sotto la barra, solo su richiesta. Trova blocchi (testo, etichetta) e note
   della tela, senza maiuscole né accenti (`norm`); `FIND = { q, cur }`. `findMarks` dà a `treeMarkup` le classi `hit`/`cur`

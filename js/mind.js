@@ -45,6 +45,24 @@ function tagLeft(n, l, w) {
 const NOTE_FONT = `500 11.5px ${FB}`, CNOTE_FONT = `400 13px ${FB}`, GFONT = `600 13px ${FB}`;
 const GHEAD = 28, GPAD = 22, GMIN = [120, 70];
 
+// Lo stile di serie dipende dalla profondità (sizeMap): staccare, collegare o eliminare un blocco intermedio la
+// cambierebbe, e un blocco diventerebbe grassetto o più grande. `mutate` confronta i livelli prima e dopo: chi cambia
+// livello tiene i valori che aveva (fs, fw, bw), come se li avesse scelti. Le idee primarie (livello 0) e gli svincoli no.
+function styleLevels(t) {
+  const m = new Map(), re = (n, d) => { if (!n.hub && !n.primary) m.set(n.id, Math.max(1, d)); n.children.forEach(c => re(c, d + 1)); };
+  if (!t.void) re(t, 0); (t.free || []).forEach(r => re(r, 1));
+  return m;
+}
+function keepLook(t, before) {
+  const after = styleLevels(t);
+  walkAll(t, n => {
+    const a = before.get(n.id), b = after.get(n.id); if (a == null || b == null || a === b) return;
+    if (n.fs == null && fsOf(n, a) !== fsOf(n, b)) n.fs = fsOf(n, a);
+    if (!n.fw && fwOf(n, a) !== fwOf(n, b)) n.fw = fwOf(n, a);
+    if (n.bw == null && bwOf(n, a) !== bwOf(n, b)) n.bw = bwOf(n, a);
+  });
+}
+
 /* ---------- dimensioni e posizioni ---------- */
 // livello di stile: 0 = idea primaria, poi 1 e 2 secondo la profondità nell'albero
 function sizeMap(tree) {
@@ -150,6 +168,7 @@ function mindLayout(tree) {
   const SZ = sizeMap(tree), changed = ensurePositions(tree, SZ);
   const SZ2 = changed && tree.primary && !tree.void ? sizeMap(tree) : SZ; // la radice può essere appena diventata primaria
   if (changed) save();
+  if (ensurePins(tree, SZ2)) save();
   // i rami compressi non hanno posto nel disegno: senza voce in L non si disegnano né loro né i loro collegamenti
   const L = new Map(), hid = foldedSet(tree);
   walkAll(tree, n => { if (!hid.has(n.id)) L.set(n.id, { ...SZ2.get(n.id), x: n.x, y: n.y }); });
@@ -228,14 +247,28 @@ const pinXY = (l, [side, t]) => side === 'l' ? [0, t * l.h] : side === 'r' ? [l.
 const SIDES = { l: [-1, 0], r: [1, 0], t: [0, -1], b: [0, 1] };
 // quale uscita del genitore usa un collegamento (dati vecchi: ps = lato 'l'/'r')
 // -1 = il blocco non ha pallini di quel tipo: la linea arriva sul lato rivolto all'altro blocco
+// Senza po si cerca il pallino per lato sui pallini salvati, non su quelli provvisori: mentre se ne trascina uno
+// la linea non deve saltare su un altro pallino (e i rami compressi su quel pallino non devono riaprirsi)
 function outIdx(p, e) {
   const o = pinsOf(p).o; e = e || {}; if (!o.length) return -1;
   if (e.po != null) return clamp(e.po, 0, o.length - 1);
-  if (e.ps) { const i = o.findIndex(q => q[0] === e.ps); if (i >= 0) return i; }
-  const r = o.findIndex(q => q[0] === 'r'); return r >= 0 ? r : 0;
+  const B = (p.pin || defaultPins(p)).o || [];
+  if (e.ps) { const i = B.findIndex(q => q[0] === e.ps); if (i >= 0) return Math.min(i, o.length - 1); }
+  const r = B.findIndex(q => q[0] === 'r'); return r >= 0 ? Math.min(r, o.length - 1) : 0;
+}
+// i collegamenti che escono da n senza po (rami nuovi, dati vecchi) ricevono l'indice dell'uscita che usano adesso:
+// così, quando i pallini cambiano lato, restano attaccati allo stesso pallino
+function freezeOuts(t, n) {
+  allLinks(t).forEach(L => {
+    if (L.from.id !== n.id || isStr(L.e) || L.e.po != null) return;
+    const i = outIdx(n, L.e); if (i < 0) return;
+    const e = L.extra ? L.e : (L.to.edge = L.to.edge || {}); e.po = i; delete e.ps;
+  });
 }
 const inIdx = (c, e) => Math.min((e && e.pi) || 0, pinsOf(c).i.length - 1);
 const strIdx = (p, e) => Math.min((e && e.sp) || 0, pinsOf(p).s.length - 1);
+// rombo d'arrivo di un collegamento di struttura (ts, sul blocco figlio)
+const tsIdx = (c, e) => Math.min((e && e.ts) || 0, pinsOf(c).s.length - 1);
 const isStr = e => !!(e && e.str);
 // tratto della linea: continuo, tratteggiato, a puntini (di serie: puntini per la struttura, continuo per il resto;
 // `dash: true` è il formato vecchio del tratteggiato)
@@ -282,6 +315,25 @@ function nearestBorder(l, p) {
   return { side, t, dist };
 }
 
+// Un collegamento parte e arriva SEMPRE su un pallino: processo = uscita → ingresso, struttura = rombo → rombo.
+// Se a un blocco manca il pallino che serve (mappe vecchie, pallino eliminato, blocco senza ingressi), se ne aggiunge
+// uno sul lato rivolto all'altro blocco, in un punto libero di quel lato.
+function ensurePins(t, SZ) {
+  let changed = false;
+  const box = n => { const s = SZ.get(n.id) || { w: 0, h: 0 }; return { x: n.x || 0, y: n.y || 0, w: s.w, h: s.h }; };
+  allLinks(t).forEach(L => {
+    const str = isStr(L.e);
+    [[L.from, str ? 's' : 'o', L.to], [L.to, str ? 's' : 'i', L.from]].forEach(([n, k, other]) => {
+      const B = n.pin || defaultPins(n); if ((B[k] || []).length) return;
+      const P = { i: [...(B.i || [])], o: [...(B.o || [])], s: [...(B.s || [])] }, ob = box(other);
+      const [side] = facePin(box(n), ob.x + ob.w / 2, ob.y + ob.h / 2), used = [...P.i, ...P.o, ...P.s].filter(q => q[0] === side).map(q => q[1]);
+      const pos = [0.5, 0.3, 0.7, 0.2, 0.8].find(v => !used.some(u => Math.abs(u - v) < 0.08)) ?? 0.5;
+      P[k].push([side, pos]); n.pin = P; changed = true;
+    });
+  });
+  return changed;
+}
+
 /* ---------- collegamenti ---------- */
 // la linea parte da un pallino d'uscita e arriva a un pallino d'ingresso: sempre quelli, ovunque si spostino i blocchi.
 // Collegamento di struttura: parte dal pallino di struttura e arriva sul lato del blocco rivolto verso di esso.
@@ -289,7 +341,7 @@ function linkGeom(pn, pl, cn, cl, e) {
   const P = pinsOf(pn), str = isStr(e);
   const a = (str ? P.s[strIdx(pn, e)] : P.o[outIdx(pn, e)]) || facePin(pl, cl.x + cl.w / 2, cl.y + cl.h / 2);
   const [ax1, ay1] = pinXY(pl, a);
-  const b = (!str && pinsOf(cn).i[inIdx(cn, e)]) || facePin(cl, pl.x + ax1, pl.y + ay1);
+  const b = (str ? pinsOf(cn).s[tsIdx(cn, e)] : pinsOf(cn).i[inIdx(cn, e)]) || facePin(cl, pl.x + ax1, pl.y + ay1);
   const [ax0, ay0] = pinXY(pl, a), [bx0, by0] = pinXY(cl, b);
   const ax = pl.x + ax0, ay = pl.y + ay0, bx = cl.x + bx0, by = cl.y + by0;
   const ta = SIDES[a[0]], tb = SIDES[b[0]];
@@ -341,14 +393,15 @@ function treeMarkup(tree, L, NL, live) {
     // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
     const nx = g.mx + (e.nx || 0), ny = g.my + (e.ny || 0);
     E.set(key, { x: nx, y: ny });
-    const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (live && S.esel === key ? ' sel' : '');
-    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="${edgeStyle(e, lwOf(e, pl.depth) + (live && S.esel === key ? 1 : 0))}" d="${g.d}"/>` +
+    const esel = live && (S.esel === key || S.esels.has(key));
+    const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (esel ? ' sel' : '');
+    edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="${edgeStyle(e, lwOf(e, pl.depth) + (esel ? 1 : 0))}" d="${g.d}"/>` +
       (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
     if (e.note && !(editing && editing.kind === 'edge' && editing.id === key)) {
       const lines = wrap(e.note, 170, NOTE_FONT, 3), w = Math.max(...lines.map(s => tw(s, NOTE_FONT))) + 16, h = lines.length * 14 + 8;
       const lead = e.nx || e.ny ? `<path class="lead" d="M${g.mx},${g.my} L${nx},${ny}"/>` : '';
       // etichetta a pillola chiara: deve distinguersi a colpo d'occhio dai blocchi (scuri) e dalle note della tela (gialle)
-      notes += `<g class="enote${live && S.esel === key ? ' sel' : ''}"${live ? ` data-edge="${key}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="${lines.length > 1 ? 10 : h / 2}"/>` +
+      notes += `<g class="enote${esel ? ' sel' : ''}"${live ? ` data-edge="${key}"` : ''}>${lead}<rect x="${nx - w / 2}" y="${ny - h / 2}" width="${w}" height="${h}" rx="${lines.length > 1 ? 10 : h / 2}"/>` +
         lines.map((s, i) => `<text x="${nx}" y="${ny - h / 2 + 15 + i * 14}" text-anchor="middle">${esc(s)}</text>`).join('') + `</g>`;
     }
   });
@@ -456,6 +509,7 @@ function treeMarkup(tree, L, NL, live) {
 }
 
 function render() {
+  if (noTab()) return renderBar(); // pagina vuota: niente mappa da disegnare
   const tree = curTree(), L = mindLayout(tree), NL = notesLayout(tree); S.L = L; S.NL = NL;
   vp.innerHTML = treeMarkup(tree, L, NL, true); renderLegend();
   applyView(); renderBar();
@@ -489,11 +543,24 @@ function addCanvasNote(x, y) {
 }
 // toglie i collegamenti aggiuntivi che puntano a blocchi non più presenti
 function cleanLinks(t) { if (t.links) { t.links = t.links.filter(x => findM(t, x.from) && findM(t, x.to)); if (!t.links.length) delete t.links; } }
+// collegamenti selezionati: quello cliccato (S.esel) e quelli presi col riquadro o con Maiusc (S.esels)
+function selEdges() { return [...new Set([...S.esels, ...(S.esel ? [S.esel] : [])])]; }
+// toglie dei collegamenti dentro una modifica: un aggiuntivo sparisce, il principale si stacca (il blocco resta libero)
+function cutEdges(tt, keys) {
+  keys.forEach(key => {
+    if (key.startsWith('x:')) { tt.links = (tt.links || []).filter(x => x.id !== key.slice(2)); if (!tt.links.length) delete tt.links; return; }
+    const g = findM(tt, key); if (!g || !g.p) return;
+    g.list.splice(g.list.indexOf(g.n), 1); delete g.n.edge; (tt.free = tt.free || []).push(g.n);
+  });
+}
+// Canc: blocchi, note, gruppi e collegamenti selezionati, in un solo passo di annullamento
 function removeSelected() {
-  const t = curTree(), ids = [...S.sels], delRoot = ids.includes(t.id);
-  if (!ids.length) return;
-  const f0 = findM(t, ids.includes(S.sel) ? S.sel : ids[0]), pid = f0 && f0.p && !ids.includes(f0.p.id) ? f0.p.id : null;
+  const t = curTree(), ids = [...S.sels], ek = selEdges(), delRoot = ids.includes(t.id);
+  if (!ids.length && !ek.length) return;
+  if (!ids.length && ek.length === 1) return deleteEdge(ek[0]);
+  const f0 = ids.length && findM(t, ids.includes(S.sel) ? S.sel : ids[0]), pid = f0 && f0.p && !ids.includes(f0.p.id) ? f0.p.id : null;
   mutate(tt => {
+    cutEdges(tt, ek);
     // si elimina solo il blocco, non quello che viene dopo: i suoi rami passano al genitore (A → X → B diventa A → B,
     // dalla stessa uscita di A e nello stesso ingresso di B) o, se X non ha genitore, restano liberi dove sono
     const bridge = (n, p, list) => {
@@ -523,6 +590,7 @@ function removeSelected() {
     cleanLinks(curTree());
   });
   selectOnly(pid && findM(curTree(), pid) ? pid : null); render();
+  if (!ids.length) toast(ek.length + ' collegamenti eliminati');
 }
 // il blocco libero `nr` diventa la radice dei dati del livello: prende con sé blocchi liberi, collegamenti aggiuntivi e note.
 // Nessun blocco si sposta e nessuno cambia aspetto (l'attributo "primaria" resta quello che era).
@@ -542,19 +610,19 @@ function emptyLevel(t) {
 // Se il blocco d'arrivo non ha ancora un genitore diventa suo figlio, altrimenti si aggiunge un collegamento:
 // così un blocco può avere più ingressi.
 // sp (indice di un pallino di struttura) al posto di po/pi = collegamento di struttura: `to` è una parte di `from`
-function link(fromId, po, toId, pi, sp = null) {
+function link(fromId, po, toId, pi, sp = null, ts = 0) {
   const t = curTree(); if (fromId === toId) return render();
   const a = findM(t, fromId), b = findM(t, toId); if (!a || !b) return render();
   const links = allLinks(t), str = sp != null;
   const same = links.find(L => L.from.id === fromId && L.to.id === toId);
   if (same) {
     // stesso collegamento con pallini diversi (o di altro tipo): si riaggancia
-    const moved = str ? !isStr(same.e) || strIdx(a.n, same.e) !== sp
+    const moved = str ? !isStr(same.e) || strIdx(a.n, same.e) !== sp || tsIdx(b.n, same.e) !== ts
       : isStr(same.e) || outIdx(a.n, same.e) !== po || inIdx(b.n, same.e) !== pi;
-    if (moved) { setEdge(same.key, str ? { str: true, sp, po: undefined, pi: undefined } : { po, pi, str: false, sp: undefined }); return toast('Collegamento spostato'); }
+    if (moved) { setEdge(same.key, str ? { str: true, sp, ts, po: undefined, pi: undefined } : { po, pi, str: false, sp: undefined, ts: undefined }); return toast('Collegamento spostato'); }
     render(); return toast('Sono già collegati');
   }
-  const ends = str ? { str: true, sp } : { po, pi };
+  const ends = str ? { str: true, sp, ts } : { po, pi };
   if (links.some(L => L.from.id === toId && L.to.id === fromId)) { render(); return toast('Esiste già il collegamento opposto'); }
   let inside = false; walk(b.n, n => { if (n.id === fromId) inside = true; });
   const asChild = !b.p && !inside;
@@ -568,7 +636,7 @@ function link(fromId, po, toId, pi, sp = null) {
       } else f.list.splice(f.list.indexOf(f.n), 1);
       pp.children.push(f.n);
       const ed = Object.assign({}, f.n.edge, ends); delete ed.ps;
-      if (str) { delete ed.po; delete ed.pi; } else { delete ed.str; delete ed.sp; }
+      if (str) { delete ed.po; delete ed.pi; } else { delete ed.str; delete ed.sp; delete ed.ts; }
       Object.keys(ed).forEach(k => { if (!ed[k] && ed[k] !== 0) delete ed[k]; }); if (!ed.pi) delete ed.pi;
       f.n.edge = ed;
     } else {
@@ -626,43 +694,47 @@ function spreadSide(list, side) { const on = list.filter(p => p[0] === side); on
 function addPin(id, kind) {
   mutate(t => {
     const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[PK[kind]];
+    freezeOuts(t, n);
     const side = list.length ? list[list.length - 1][0] : { in: 'l', out: 'r', str: 'b' }[kind];
     list.push([side, 0.5]); spreadSide(list, side); n.pin = P;
   });
 }
 function removePin(id, kind) { const n = findM(curTree(), id).n, len = pinsOf(n)[PK[kind]].length; if (len) editPin(id, kind, len - 1, 'del'); }
 function setPin(id, kind, idx, pos) {
-  mutate(t => { const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n))); P[PK[kind]][idx] = pos; n.pin = P; });
+  mutate(t => {
+    const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n)));
+    freezeOuts(t, n); P[PK[kind]][idx] = pos; n.pin = P;
+  });
 }
-// Un pallino si duplica, si elimina o cambia tipo. I collegamenti che lo usano lo seguono: da uscita a struttura
-// (e viceversa) restano attaccati e cambiano linea; se il pallino sparisce o diventa ingresso/uscita incompatibile,
-// passano a un altro pallino dello stesso tipo o, se non ce ne sono, al lato rivolto all'altro blocco.
+// Un pallino si duplica, si elimina o cambia tipo. Un collegamento parte e arriva sempre su un pallino del tipo giusto
+// (uscita → ingresso, rombo → rombo): se il suo pallino sparisce o cambia tipo, il collegamento resta com'è e passa
+// al primo pallino rimasto di quel tipo; se non ce ne sono, ensurePins ne aggiunge uno sul lato rivolto all'altro blocco.
 function editPin(id, kind, idx, op, nk) {
   mutate(t => {
-    const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[PK[kind]], pin = list[idx];
+    const n = findM(t, id).n, k = PK[kind];
+    freezeOuts(t, n); // i rami senza po ricevono l'indice dell'uscita che usano adesso
+    const P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[k], pin = list[idx];
     if (!pin) return;
     if (op === 'dup') { list.push([pin[0], Math.round((pin[1] <= 0.75 ? pin[1] + 0.15 : pin[1] - 0.15) * 100) / 100]); n.pin = P; return; }
-    // gli indici dei pallini di questo tipo cambiano: i loro rami compressi si riaprono
-    if (n.foldOut) { n.foldOut = n.foldOut.filter(k => k[0] !== PK[kind]); if (!n.foldOut.length) delete n.foldOut; }
-    // collegamenti che usano un pallino di questo tipo, con l'indice attuale (calcolato prima di cambiare i pallini)
-    const fld = { in: 'pi', out: 'po', str: 'sp' }[kind], cur = { in: inIdx, out: outIdx, str: strIdx }[kind];
+    // estremi dei collegamenti su pallini di questo tipo, con l'indice attuale (prima di cambiare i pallini).
+    // Un rombo può essere partenza (sp) o arrivo (ts) di un collegamento di struttura.
     const ends = [];
     allLinks(t).forEach(L => {
-      const fromSide = kind !== 'in', node = fromSide ? L.from : L.to;
-      if (node.id !== id || (kind === 'str') !== isStr(L.e)) return;
-      const e = L.extra ? L.e : (L.to.edge = L.to.edge || {});
-      ends.push({ e, i: cur(n, e) });
+      const e = () => L.extra ? L.e : (L.to.edge = L.to.edge || {}), str = isStr(L.e);
+      if (L.from.id === id && kind === 'out' && !str) ends.push({ e: e(), f: 'po', i: outIdx(n, L.e) });
+      if (L.from.id === id && kind === 'str' && str) ends.push({ e: e(), f: 'sp', i: strIdx(n, L.e) });
+      if (L.to.id === id && kind === 'in' && !str) ends.push({ e: e(), f: 'pi', i: inIdx(n, L.e) });
+      if (L.to.id === id && kind === 'str' && str) ends.push({ e: e(), f: 'ts', i: tsIdx(n, L.e) });
     });
+    // rami compressi su un pallino di questo tipo: seguono il nuovo indice; quelli del pallino tolto si riaprono
+    if (n.foldOut && (k === 'o' || k === 's')) {
+      n.foldOut = n.foldOut.flatMap(x => { if (x[0] !== k) return [x]; const i = +x.slice(2); return i === idx ? [] : [k + ':' + (i > idx ? i - 1 : i)]; });
+      if (!n.foldOut.length) delete n.foldOut;
+    }
     list.splice(idx, 1);
-    let ni = null;
-    if (op === 'type') { P[PK[nk]].push(pin); ni = P[PK[nk]].length - 1; }
+    if (op === 'type') P[PK[nk]].push(pin);
     n.pin = P;
-    ends.forEach(({ e, i }) => {
-      if (i !== idx) { if (i > idx) e[fld] = i - 1; else if (i >= 0) e[fld] = i; return; }
-      delete e[fld];
-      if (ni === null || kind === 'in' || nk === 'in') return;
-      if (nk === 'str') { e.str = true; e.sp = ni; delete e.po; delete e.pi; } else { delete e.str; delete e.sp; e.po = ni; }
-    });
+    ends.forEach(({ e, f, i }) => { if (i === idx) delete e[f]; else if (i > idx) e[f] = i - 1; else e[f] = i; });
     walkAll(t, x => { if (x.edge && !Object.keys(x.edge).length) delete x.edge; });
   });
 }
@@ -681,7 +753,7 @@ function cloneFresh(n) {
 }
 // copia "staccata": senza i contenuti del livello (se era la radice) e senza collegamento in entrata
 function looseCopy(n) { const c = cloneFresh(n); ['free', 'notes', 'links', 'groups', 'edge'].forEach(k => delete c[k]); return c; }
-function selectMany(ids) { S.sels = new Set(ids); S.sel = ids[ids.length - 1] || null; S.esel = null; }
+function selectMany(ids) { S.sels = new Set(ids); S.sel = ids[ids.length - 1] || null; S.esel = null; S.esels = new Set(); }
 // il blocco con tutti i suoi rami: trascinandolo si sposta tutto insieme
 function selectBranch(id) { const f = findM(curTree(), id); if (!f) return; const ids = []; walk(f.n, d => ids.push(d.id)); selectMany(ids); S.sel = id; render(); }
 // altezza del sotto-albero sullo schermo (per mettere la copia subito sotto)
@@ -817,10 +889,10 @@ function copyStyle() {
 }
 function pasteStyle() {
   const st = S.style; if (!st) return toast('Nessuno stile copiato');
-  if (S.esel) {
-    if (st.kind !== 'edge') return toast('Lo stile copiato è di un blocco: incollalo su un blocco');
-    setEdge(S.esel, { ...st.data, dash: false }); return toast('Stile incollato');
-  }
+  // collegamenti: quello del menu, o tutti quelli presi col riquadro (anche insieme a dei blocchi)
+  const ek = S.esels.size ? [...S.esels] : S.esel ? [S.esel] : [];
+  if (st.kind === 'edge' && ek.length) { setEdges(ek, { ...st.data, dash: false }); return toast('Stile incollato'); }
+  if (S.esel) return toast(st.kind === 'group' ? 'Lo stile copiato è di un gruppo: incollalo su un gruppo' : 'Lo stile copiato è di un blocco: incollalo su un blocco');
   const gids = [...S.sels].filter(id => findGroup(curTree(), id));
   if (gids.length && st.kind === 'group') { setGroupStyle(st.data, gids); return toast('Stile incollato'); }
   if (gids.length && ![...S.sels].some(id => S.L.has(id))) return toast('Lo stile copiato non è di un gruppo');
@@ -929,7 +1001,7 @@ function selectGroupContents(id) {
   const t = curTree(), g = findGroup(t, id); if (!g) return;
   if (g.fold) return toast('Espandi il gruppo per selezionarne il contenuto');
   const ids = groupItems(t, g).map(i => i.id); if (!ids.length) return toast('Il gruppo è vuoto');
-  S.sels = new Set(ids); S.sel = ids[0]; S.esel = null; render();
+  S.sels = new Set(ids); S.sel = ids[0]; S.esel = null; S.esels = new Set(); render();
 }
 const toggleGroupLock = id => mutate(t => { const g = findGroup(t, id); if (g) { if (g.lock) delete g.lock; else g.lock = true; } });
 const within = (l, g) => l.x >= g.x && l.y >= g.y && l.x + l.w <= g.x + g.w && l.y + l.h <= g.y + g.h;
@@ -951,15 +1023,19 @@ function setColor(c) { eachSelected(n => { if (c === '') delete n.color; else n.
 function autoSize() { eachSelected(n => { delete n.w; delete n.h; }); }
 
 /* ---------- stile e nota dei collegamenti ---------- */
-function setEdge(key, patch) {
-  mutate(t => {
+function setEdge(key, patch) { setEdges([key], patch); }
+// collegamenti presi col riquadro (S.esels): lo stile scelto sul menu di uno di loro vale per tutti
+function edgeTargets(key) { return S.esels.size > 1 && S.esels.has(key) ? [...S.esels] : [key]; }
+function setEdgeStyle(key, patch) { setEdges(edgeTargets(key), patch); }
+function setEdges(keys, patch) {
+  mutate(t => keys.forEach(key => {
     const e = edgeData(t, key, true); if (!e) return;
     Object.assign(e, patch);
     if (e.gap === GAP) delete e.gap; if (e.op >= 1) delete e.op; // valori di serie: non si salvano
     // si tolgono i valori vuoti; po (indice dell'uscita) vale anche 0
     Object.keys(e).forEach(k => { if (['id', 'from', 'to'].includes(k) || (k === 'po' && typeof e[k] === 'number')) return; if (!e[k]) delete e[k]; });
     if (!key.startsWith('x:')) { const f = findM(t, key); if (f && !Object.keys(f.n.edge).length) delete f.n.edge; }
-  });
+  }));
 }
 
 // riquadro che contiene tutta la mappa (coordinate della tela)

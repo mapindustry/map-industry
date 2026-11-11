@@ -33,6 +33,7 @@
   <div class="tabs" id="tabs" role="tablist" aria-label="Progetti aperti"></div>
   <button class="tadd" id="tAdd" title="Nuovo progetto in una nuova scheda" aria-label="Nuovo progetto">+</button>
   <input id="pName" aria-label="Nome del progetto" spellcheck="false">
+  <button class="bsave" id="bSave" title="Salva il progetto adesso (Ctrl+S). Si salva anche da solo a ogni modifica"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5H11L13.5 5V13.5H2.5V2.5Z"/><path d="M5 2.5V6H10.5V2.5M5 13.5V9.5H11V13.5"/></svg>Salva</button>
   <button class="bb lockb" id="bLock" aria-pressed="false" title="Blocca le modifiche: la mappa si può solo guardare"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7.5" rx="1.6"/><path class="shackle" d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2"/></svg><span class="ll">Modifica</span></button>
   <div class="dd ddr" id="accWrap" hidden><button class="bb" id="bAcc" aria-haspopup="true" aria-controls="mAcc" aria-expanded="false">Accedi</button><div class="menu ddm" id="mAcc" hidden></div></div>
   <input type="file" id="fileIn" accept=".json,application/json" hidden>
@@ -44,6 +45,12 @@
   <p class="stip">Clic: al centro · Trascina: dove vuoi</p>
 </aside>
 <button class="sopen" id="sideOpen" title="Mostra i componenti" aria-label="Mostra i componenti" hidden>«</button>
+
+<div class="empty" id="empty" hidden><div class="ebox">
+  <h2>Nessun progetto aperto</h2>
+  <p>Crea un progetto nuovo, oppure aprine uno da Progetti → Carica progetto.</p>
+  <button class="ego" id="eNew">Crea nuovo progetto</button>
+</div></div>
 
 <div class="marquee" id="box" hidden></div>
 <textarea id="ed" aria-label="Testo" spellcheck="false" hidden></textarea>
