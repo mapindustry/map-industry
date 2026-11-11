@@ -858,6 +858,24 @@ function mergePins(id, kind, a, b) {
   });
   toast('Pallini fusi');
 }
+// il collegamento key ha un capo sul pallino (blocco id, tipo kind, indice idx)?
+function edgeOnPin(key, id, kind, idx) {
+  const x = pinEnds(curTree()).find(y => y.L.key === key); if (!x) return false;
+  const k = PK[kind];
+  return (x.from.id === id && k === (x.str ? 's' : 'o') && x.fp === pinData(x.from)[k][idx]) || (x.to.id === id && k === (x.str ? 's' : 'i') && x.tp === pinData(x.to)[k][idx]);
+}
+// Ctrl + trascina il pallino di un collegamento selezionato: solo quel collegamento lascia il pallino (comune) e va su
+// un altro pallino dello stesso tipo (to.idx) o su uno nuovo nel punto del bordo dove si rilascia (to.pos)
+function splitEnd(key, id, kind, idx, to) {
+  mutate(t => {
+    const ends = pinEnds(t), x = ends.find(y => y.L.key === key), N = findM(t, id).n; if (!x || !N) return;
+    const list = pinData(N)[PK[kind]], X = list[idx]; let Q = to.idx != null ? list[to.idx] : null;
+    if (!Q) { Q = to.pos; list.push(Q); }
+    if (x.from === N && x.fp === X) x.fp = Q; else if (x.to === N && x.tp === X) x.tp = Q;
+    pinWrite(t, ends);
+  });
+  selectEdge(key); render(); toast('Collegamento spostato su un pallino a parte');
+}
 // elimina il pallino con tutti i suoi collegamenti (i blocchi restano dove sono)
 function deletePin(id, kind, idx) {
   const t0 = curTree(), N0 = findM(t0, id).n, X0 = pinData(N0)[PK[kind]][idx]; if (!X0) return;

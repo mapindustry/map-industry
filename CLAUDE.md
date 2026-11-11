@@ -111,6 +111,9 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     nasce uno accanto; niente doppioni) ed Elimina il pallino con i suoi collegamenti (`deletePin`).
     **Ctrl + trascina un pallino su un altro dello stesso blocco = fonderli** (`S.link.merge`, `mergePins`; tipi diversi:
     avviso, va cambiato prima il tipo); con Ctrl il pallino non scorre, e su un altro blocco collega come sempre.
+    **Con un collegamento selezionato**, Ctrl + trascina un suo pallino sposta solo quel collegamento (`S.link.split`,
+    `edgeOnPin`, `splitEnd`): rilasciato sul bordo del blocco nasce un pallino nuovo lì, su un pallino dello stesso tipo
+    si aggancia a quello (così si separa un collegamento da un pallino comune).
   - Rami compressi: `fold` (tutti i rami) o `foldOut` (`['o:1','s:0']`, solo i rami che partono da quei pallini,
     dal menu del pallino). `mindLayout` toglie da `L` i discendenti (`foldedSet`/`isFoldedChild`), quindi non si
     disegnano né loro né i loro collegamenti; "+N" (sull'angolo, o accanto al pallino) per riaprirli, al passaggio

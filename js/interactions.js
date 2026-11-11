@@ -73,8 +73,10 @@ cv.addEventListener('pointerdown', e => {
     const hit = pinAt(findM(curTree(), id).n, l, toSvg(e.clientX, e.clientY)) || { kind: a.dataset.anc, idx: +a.dataset.idx };
     const { kind, idx } = hit;
     const [px, py] = pinXY(l, pinsOf(findM(curTree(), id).n)[PK[kind]][idx]);
-    // Ctrl: trascinato su un altro pallino dello stesso blocco lo fonde con quello (merge); il pallino non scorre sul bordo
-    S.link = { kind, idx, id, merge: e.ctrlKey || e.metaKey, x1: l.x + px, y1: l.y + py, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
+    // Ctrl: trascinato su un altro pallino dello stesso blocco lo fonde con quello (merge); il pallino non scorre sul bordo.
+    // Ctrl con un collegamento selezionato che usa questo pallino: si sposta solo quel collegamento (split)
+    const ctrl = e.ctrlKey || e.metaKey, split = ctrl && S.esel && !S.esels.size && edgeOnPin(S.esel, id, kind, idx) ? S.esel : null;
+    S.link = { kind, idx, id, merge: ctrl && !split, split, x1: l.x + px, y1: l.y + py, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
     P = { ...base, mode: 'link', id }; cv.classList.add('linking');
   } else if (g && e.target.closest('[data-rsz]')) {
     const id = g.dataset.id, l = S.L.get(id);
@@ -146,7 +148,7 @@ cv.addEventListener('pointermove', e => {
     const p = toSvg(e.clientX, e.clientY), lk = S.link;
     // vicino al bordo del proprio blocco il pallino scorre lungo il bordo; lontano si disegna un collegamento
     const nb = nearestBorder(S.L.get(lk.id), p);
-    lk.pinMove = !lk.auto && !lk.merge && nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
+    lk.pinMove = !lk.auto && !lk.merge && !lk.split && nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
     if (lk.auto) { const sp = autoOutPoint(lk.id, p.x, p.y); lk.x1 = sp.x; lk.y1 = sp.y; } // dal pallino d'uscita più vicino
     lk.x2 = p.x; lk.y2 = p.y; lk.over = null; lk.overAnc = null;
     if (!lk.pinMove) {
@@ -155,7 +157,7 @@ cv.addEventListener('pointermove', e => {
       const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
       lk.over = ok ? g.dataset.id : null;
       // sul pallino più vicino al puntatore (preferendo quello compatibile), non su quello disegnato sopra
-      if (lk.merge && g && g.dataset.id === lk.id) { // Ctrl su un pallino, sopra il suo blocco: pallino con cui fonderlo
+      if ((lk.merge || lk.split) && g && g.dataset.id === lk.id) { // Ctrl su un pallino, sopra il suo blocco: pallino su cui portarlo
         const hit = pinAt(findM(curTree(), lk.id).n, S.L.get(lk.id), p, lk.kind);
         lk.over = lk.id; lk.overAnc = hit && !(hit.kind === lk.kind && hit.idx === lk.idx) ? hit : null;
         return render();
@@ -267,6 +269,13 @@ function endPointerCore(e) {
       if (!lk.over) { render(); return toast('Rilascia su un altro blocco per collegarli'); }
       if (lk.overAnc && lk.overAnc.kind !== 'in') { render(); return toast('Un’uscita va collegata a un ingresso'); }
       return autoLink(lk.id, lk.over, lk.overAnc && lk.overAnc.idx);
+    }
+    if (lk.split && moved) { // un solo collegamento lascia il pallino comune: su un pallino del blocco o su uno nuovo
+      const key = lk.split, oa = lk.overAnc; render();
+      if (lk.over !== lk.id) { selectEdge(key); render(); return toast('Rilascia su questo blocco: sul bordo nasce un pallino nuovo, su un pallino si aggancia lì'); }
+      if (oa && oa.kind !== lk.kind) { selectEdge(key); render(); return toast('Pallino di tipo diverso: cambia prima il tipo'); }
+      const nb = nearestBorder(S.L.get(lk.id), { x: lk.x2, y: lk.y2 });
+      return splitEnd(key, lk.id, lk.kind, lk.idx, oa ? { idx: oa.idx } : { pos: [nb.side, Math.round(clamp(nb.t, 0.05, 0.95) * 100) / 100] });
     }
     if (lk.merge && moved && lk.over === lk.id) { // Ctrl + pallino su un altro pallino dello stesso blocco: si fondono
       const oa = lk.overAnc; render();
