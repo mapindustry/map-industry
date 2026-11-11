@@ -59,7 +59,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   La tela può restare vuota: eliminando l'ultimo blocco la radice diventa `{ void: true }` (contenitore invisibile
   che tiene le note, saltato da `walkAll`/`sizeMap`); `mutate` promuove a radice il primo blocco aggiunto.
 - Stile: Copia/Incolla stile in cima alla sezione Stile dei menu del blocco e del collegamento (`styleItems`; niente scorciatoie): `copyStyle`/`pasteStyle`, `S.style = { kind: 'node'|'edge'|'group', data }`
-  con i valori come si vedono (blocco: colore, fs, fw, bw, op; collegamento: shape, line, lw, gap, op). Si incolla solo
+  con i valori come si vedono (blocco: colore, fs, fw, bw, op; collegamento: colore, shape, line, lw, gap, op). Si incolla solo
   sullo stesso tipo; su tutti i blocchi selezionati. Testo, posizione, dimensione, pallini e note non si copiano.
 - Maiusc + trascina: la selezione scorre su un binario orizzontale o verticale (lo spostamento maggiore), con una
   linea guida (`S.rail`, `.rail`); Maiusc + clic aggiunge o toglie dalla selezione (deciso al rilascio).
@@ -208,7 +208,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   (`prefers-color-scheme` e `[data-theme]`). Niente colori letterali nei componenti (eccezione: i file d'icona).
 - Blocchi: sfondo scuro con bordo un po' più chiaro in entrambi i temi; il colore scelto tinge sfondo e bordo.
 - Note dei collegamenti: pillole chiare in corsivo (`--enote-*`), ben diverse dai blocchi e dalle note gialle della tela.
-- Collegamenti sempre neutri (`--edge`), mai del colore del blocco. Pallini sempre visibili: ingresso `--anc-in`
+- Collegamenti di serie neutri (`--edge`), mai del colore del blocco; l'utente può sceglierne uno (`e.color` 0–5, stessi
+  colori dei blocchi, classe `cc cN` su `.eg`; fila dei colori in cima al menu, anche per più collegamenti, menu aperto). Pallini sempre visibili: ingresso `--anc-in`
   (bianco), uscita `--anc-out` (grigio scuro con bordo chiaro), area di presa più grande del pallino.
 - Font: Instrument Sans. Logo: cerchi collegati.
 

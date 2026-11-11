@@ -395,7 +395,7 @@ function treeMarkup(tree, L, NL, live) {
     const nx = g.mx + (e.nx || 0), ny = g.my + (e.ny || 0);
     E.set(key, { x: nx, y: ny });
     const esel = live && (S.esel === key || S.esels.has(key));
-    const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (esel ? ' sel' : '');
+    const cls = 'eg l-' + lineOf(e) + (isStr(e) ? ' str' : '') + (hasColor(e) ? ' cc c' + e.color : '') + (esel ? ' sel' : '');
     edges += `<g class="${cls}"${live ? ` data-edge="${key}"` : ''}><path class="edge" style="${edgeStyle(e, lwOf(e, pl.depth) + (esel ? 1 : 0))}" d="${g.d}"/>` +
       (live ? `<path class="ehit" d="${g.d}"><title>Doppio clic: nota · Tasto destro: opzioni del collegamento</title></path>` : '') + `</g>`;
     if (e.note && !(editing && editing.kind === 'edge' && editing.id === key)) {
@@ -875,7 +875,7 @@ function copyStyle() {
   const t = curTree();
   if (S.esel) {
     const e = edgeData(t, S.esel) || {};
-    S.style = { kind: 'edge', data: { shape: e.shape || '', line: lineOf(e), lw: linkWidth(S.esel), gap: gapOf(e), op: eopOf(e) } };
+    S.style = { kind: 'edge', data: { color: hasColor(e) ? e.color : null, shape: e.shape || '', line: lineOf(e), lw: linkWidth(S.esel), gap: gapOf(e), op: eopOf(e) } };
     return toast('Stile del collegamento copiato');
   }
   const g = S.sel && findGroup(t, S.sel);
@@ -1035,7 +1035,7 @@ function setEdges(keys, patch) {
     Object.assign(e, patch);
     if (e.gap === GAP) delete e.gap; if (e.op >= 1) delete e.op; // valori di serie: non si salvano
     // si tolgono i valori vuoti; po (indice dell'uscita) vale anche 0
-    Object.keys(e).forEach(k => { if (['id', 'from', 'to'].includes(k) || (k === 'po' && typeof e[k] === 'number')) return; if (!e[k]) delete e[k]; });
+    Object.keys(e).forEach(k => { if (['id', 'from', 'to'].includes(k) || ((k === 'po' || k === 'color') && typeof e[k] === 'number')) return; if (!e[k]) delete e[k]; });
     if (!key.startsWith('x:')) { const f = findM(t, key); if (f && !Object.keys(f.n.edge).length) delete f.n.edge; }
   }));
 }

@@ -13,7 +13,7 @@ function legendStyle(kind, id) {
   const t = curTree();
   if (kind === 'edge') {
     const e = edgeData(t, id) || {};
-    return { shape: e.shape || '', line: lineOf(e), lw: linkWidth(id), gap: gapOf(e), op: eopOf(e) };
+    return { color: hasColor(e) ? e.color : null, shape: e.shape || '', line: lineOf(e), lw: linkWidth(id), gap: gapOf(e), op: eopOf(e) };
   }
   if (kind === 'group') {
     const g = findGroup(t, id);
@@ -74,7 +74,7 @@ function legendSample(i) {
   if (i.kind === 'edge') {
     const d = s.shape === 'st' ? 'M2 19L42 5' : s.shape === 'sq' ? 'M2 19H22V5H42' : 'M2 19C18 19 26 5 42 5';
     const e = { line: s.line, gap: s.gap, op: s.op < 1 ? s.op : 0 };
-    return `<g class="eg l-${s.line || 'solid'}"><path class="edge" d="${d}" style="${edgeStyle(e, s.lw || 1.5)}"/></g>`;
+    return `<g class="eg l-${s.line || 'solid'}${cc}"><path class="edge" d="${d}" style="${edgeStyle(e, s.lw || 1.5)}"/></g>`;
   }
   if (i.kind === 'group') {
     const ln = s.line || 'dash';

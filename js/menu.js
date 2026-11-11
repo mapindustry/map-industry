@@ -228,8 +228,11 @@ cv.addEventListener('contextmenu', e => {
     render();
     // forma e tratto valgono per tutti i collegamenti, anche quelli di struttura (di serie a puntini)
     const sh = ed.shape || 'curve', ln = lineOf(ed);
-    return showMenu(e.clientX, e.clientY, (many ? title(S.esels.size + ' collegamenti', 'Lo stile vale per tutti') + head('Stile') + styleItems('edge', S.esels.size) :
-      title(isStr(ed) ? 'Collegamento di struttura' : 'Collegamento') +
+    // colore: uguale per tutti i presi col riquadro, altrimenti nessuno spuntato (misto)
+    const cols = edgeTargets(id).map(k => { const x = edgeData(curTree(), k) || {}; return hasColor(x) ? String(x.color) : ''; });
+    const ecol = swatches(cols.every(c => c === cols[0]) ? cols[0] : null);
+    return showMenu(e.clientX, e.clientY, (many ? title(S.esels.size + ' collegamenti', 'Lo stile vale per tutti') + ecol + SEP + head('Stile') + styleItems('edge', S.esels.size) :
+      title(isStr(ed) ? 'Collegamento di struttura' : 'Collegamento') + ecol + SEP +
       item('enote', ed.note ? 'Modifica nota' : 'Scrivi una nota', '', 'Doppio clic') + (ed.note ? item('enotedel', 'Togli la nota') : '') +
       (ed.nx || ed.ny ? item('enotepos', 'Riporta la nota sulla linea') : '') +
       (isStr(ed) ? '' : SEP + item('einsert', 'Inserisci un blocco intermedio') + item('ehub', 'Inserisci uno svincolo')) + SEP +
@@ -266,6 +269,10 @@ menuEl.addEventListener('click', e => {
   if (!MENU) return;
   const sw = e.target.closest('[data-c]');
   if (sw) {
+    if (MENU.kind === 'edge') { // colore dei collegamenti: il menu resta aperto, per provarne più d'uno
+      setEdgeStyle(MENU.id, { color: sw.dataset.c === '' ? null : +sw.dataset.c });
+      sw.parentNode.querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === sw)); return;
+    }
     if (MENU.kind === 'group') { const ids = menuGroups(); closeMenu(); return setGroupStyle({ color: sw.dataset.c === '' ? null : +sw.dataset.c }, ids); }
     closeMenu(); return setColor(sw.dataset.c);
   }

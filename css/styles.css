@@ -121,6 +121,7 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .eg.l-dot .edge{stroke-dasharray:1 5}
 .eg.lifted .edge{opacity:.25}
 .ehit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+.eg.cc .edge{stroke:var(--cc)} /* colore scelto dall'utente; di serie neutro */
 .eg:hover .edge{stroke:var(--accent)}
 .eg.sel .edge{stroke:var(--accent)} /* spessore: +1 px, in linea (treeMarkup) */
 .enote{cursor:move}
@@ -206,6 +207,7 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .leg .ltext.lempty{fill:var(--muted);font-style:italic}
 .leg .mn text{fill:var(--on-node)}
 .leg .eg:hover .edge{stroke:var(--edge)}
+.leg .eg.cc:hover .edge{stroke:var(--cc)}
 #ed.legrow,#ed.legtitle{background:var(--surface);color:var(--ink);text-align:left;padding-left:4px;border-radius:4px}
 
 /* riquadro di selezione */
