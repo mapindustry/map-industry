@@ -6,6 +6,7 @@ function editorBox() {
   const v = view(), k = v.k, sx = x => v.x + x * k, sy = y => v.y + y * k, id = editing.id;
   if (editing.kind === 'node') {
     const l = S.L.get(id), f = findM(curTree(), id); if (!l || !f) return null;
+    if (l.im || l.au) return mediaEditorBox(l, f, sx, sy, k); // didascalia dell'immagine, titolo dell'audio
     return { x: sx(l.x), y: sy(l.y), w: l.w * k, h: l.h * k, font: nodeFont(f.n, l.depth), fs: fsOf(f.n, l.depth), lh: l.lh, minW: 160 };
   }
   if (editing.kind === 'tag') {
@@ -109,7 +110,7 @@ function endEdit(commit) {
         f.n.text = v;
         if (w0 !== null) f.n.x = Math.round(f.n.x - (sizeMap(t).get(id).w - w0));
         save();
-      } else if (f && f.n.type === 'table') { snapshot(); f.n.text = ''; save(); } // tabella senza titolo
+      } else if (f && (f.n.type === 'table' || isMedia(f.n))) { snapshot(); f.n.text = ''; save(); } // tabella senza titolo, immagine senza didascalia, audio col nome del file
       else if (f) toast('Testo vuoto: il blocco resta com’era');
     }
   }

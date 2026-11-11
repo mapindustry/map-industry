@@ -63,9 +63,14 @@ function writeStore() {
   if (p) { p.root = S.root; if (dirty) { p.updated = Date.now(); dirty = false; } }
   if (p) { if (CL.session) cloudSave(p); else fsSave(p); } // anche online (con l'accesso) o nel file della cartella
   try { mapStore().setItem(storeKey(), JSON.stringify({ projects: S.projects, cur: S.pid, tabs: S.tabs })); return true; }
-  catch (e) { if (FS.ok) return true; toast('Salvataggio non disponibile in questo browser'); return false; }
+  catch (e) {
+    // spazio del browser esaurito (immagini e audio pesano): la copia online o nel file della cartella resta buona
+    const full = e && (e.name === 'QuotaExceededError' || e.code === 22);
+    if (FS.ok || CL.session) { if (full && !quotaWarned) { quotaWarned = true; toast('Spazio del browser pieno: la mappa è salvata ' + (CL.session ? 'online' : 'nella cartella') + ', non la copia locale'); } return true; }
+    toast(full ? 'Spazio del browser pieno: togli qualche immagine o audio, o scegli una cartella dei progetti' : 'Salvataggio non disponibile in questo browser'); return false;
+  }
 }
-let saveT, dirty = false;
+let saveT, dirty = false, quotaWarned = false;
 function save() { dirty = true; clearTimeout(saveT); saveT = setTimeout(writeStore, 250); }
 function saveNow() { clearTimeout(saveT); return writeStore(); }
 

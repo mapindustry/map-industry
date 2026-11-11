@@ -177,6 +177,23 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .mn.cc .xsep{stroke:color-mix(in srgb,var(--cc) 55%,var(--node-bg))}
 .mn text.xbody{font-weight:400;opacity:.85}
 .mn text.xbody.xempty{font-style:italic;opacity:.45}
+.mn .bimg{pointer-events:none}
+.mn .mph{fill:none;stroke:var(--on-node);stroke-width:1.2;stroke-dasharray:4 3;opacity:.4}
+.mn .mphi{fill:var(--on-node);fill-rule:evenodd;opacity:.35}
+.mn text.mpht{font-size:11px;font-weight:400;font-style:italic;opacity:.55}
+.mn .aplay{cursor:pointer}
+.mn .aplay .abtn{fill:var(--accent)}
+.mn .aplay:hover .abtn{fill:color-mix(in srgb,var(--accent) 80%,var(--on-node))}
+.mn .aplay.off{cursor:default}
+.mn .aplay.off .abtn{fill:var(--on-node);opacity:.15}
+.mn .aico{fill:var(--on-accent);stroke:none}
+.mn .aico.pz{fill:none;stroke:var(--on-accent);stroke-width:3;stroke-linecap:round}
+.mn .aplay.off .aico{fill:var(--on-node);opacity:.5}
+.mn .aseek{cursor:pointer}
+.mn .ahit{fill:transparent}
+.mn .abar{fill:var(--on-node);opacity:.2}
+.mn .aprog{fill:var(--accent)}
+.mn text.atime{font-size:10.5px;font-weight:400;opacity:.65;text-anchor:start}
 #ed.body{background:var(--node-bg);color:var(--on-node);text-align:left;padding-left:4px;border-radius:4px}
 #ed.cell{background:var(--node-bg);color:var(--on-node);text-align:left;padding-left:6px;border-radius:3px}
 

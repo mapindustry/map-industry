@@ -11,6 +11,8 @@ const COMPONENTS = [
   ['todo', 'Lista di controllo', sic('<rect x="2.5" y="3.5" width="5" height="5" rx="1"/><path d="M3.6 6 4.8 7.2 6.6 4.8M10 6H17.5"/><rect x="2.5" y="11.5" width="5" height="5" rx="1"/><path d="M10 14H17.5"/>')],
   ['table', 'Tabella', sic('<rect x="2.5" y="4" width="15" height="12" rx="1.5"/><path d="M2.5 8H17.5M2.5 12H17.5M10 4V16"/>')],
   ['exp', 'Espandibile', sic('<path class="f" d="M3 5.5H8L5.5 8.5Z"/><path d="M10 7H17.5M5 12H17.5M5 15.5H14"/>')],
+  ['img', 'Immagine', sic('<rect x="2.5" y="3.5" width="15" height="13" rx="2"/><circle class="f" cx="13" cy="7.5" r="1.5"/><path d="M2.5 14 7.5 9.5 11 12.5 13 11 17.5 14.5"/>')],
+  ['audio', 'Audio', sic('<path d="M3 8H6L10 4.5V15.5L6 12H3Z"/><path d="M13 7.5Q14.8 10 13 12.5M15.5 5Q19 10 15.5 15"/>')],
   ['Tela'],
   ['note', 'Nota', sic('<path class="nt" d="M3.5 3.5H16.5V12.5L12.5 16.5H3.5Z"/><path class="ntb" d="M3.5 3.5H16.5"/><path d="M6.5 8H13.5M6.5 11H11"/>')],
   ['group', 'Gruppo', sic('<rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke-dasharray="2.5 2"/><path d="M5 7H11"/>')],
@@ -42,6 +44,7 @@ function addComponent(k, x, y, corner, avoid) {
   if (readOnly()) return toast('Mappa bloccata: sbloccala per aggiungere componenti');
   if (editing) endEdit(true);
   if (k === 'note') return addCanvasNote(x - 70, y - 30);
+  if (k === 'img' || k === 'audio') return addMediaBlock(k, x, y); // prima si sceglie il file
   if (k === 'group') {
     const g = { id: uid(), x: Math.round(x - 140), y: Math.round(y - 90), w: 280, h: 180, text: 'Gruppo' };
     mutate(t => (t.groups = t.groups || []).push(g));

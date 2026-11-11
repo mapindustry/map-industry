@@ -135,6 +135,15 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     niente maniglia di ridimensionamento. Cerca trova anche il testo delle celle.
     `exp` = espandibile: titolo (`text`) con freccina (`data-xtog`, `toggleExp`, anche in sola lettura), aperto (`open`)
     mostra il testo `body` più piccolo (`expSize`/`expMarkup`); doppio clic sotto il titolo = editor `body` (Invio a capo).
+  - **Immagine e audio** (`js/media.js`, tipi `img`/`audio`, richiesti il 2026-11-11): il file sta nella mappa come data URL
+    (`n.img = { src, w, h }`, `n.audio = { src, name, dur }`), così viaggia con il progetto. Le immagini si riducono a
+    `IMG_MAX` px (WebP/JPEG; SVG e GIF piccole come sono); audio fino a `AUDIO_MAX` (3 MB). Dalla barra si sceglie prima il
+    file (`addMediaBlock`); dal menu Tipo nasce un segnaposto: doppio clic o "Scegli/Cambia…" = `pickMedia`. Immagine:
+    `n.text` = didascalia (vuota = niente), la maniglia cambia la larghezza e l'altezza segue le proporzioni. Audio:
+    `n.text` = titolo (vuoto = nome del file), ▶/❚❚ (`data-play`) e barra (`data-seek`), anche in sola lettura; un audio
+    alla volta (`AUD`), avanzamento aggiornato sugli elementi senza ridisegnare (`audioTick`). Sulla tela indirizzi blob:
+    (`mediaUrl`), nell'esportazione il data URL; `takeImages`/`keepImages` (in `render`) rimettono gli `<image>` già
+    decodificati, altrimenti a ogni ridisegno lampeggiano. localStorage pieno: `writeStore` lo dice (`quotaWarned`).
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.
@@ -186,7 +195,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   trascinamento già avviato resta e si salva); dopo lo zoom il dito rimasto non fa nulla (`pinchEnd`). `#cv` ha
   `touch-action:none`, quindi lo zoom del browser non c'è: serve questo.
 - **Barra dei componenti** (`js/sidebar.js`, `<aside id="side">`, richiesta il 2026-11-11): a destra sotto la barra dei
-  menu, larga `SIDE_W`. Voci in `COMPONENTS`: blocchi (testo, elenchi, lista di controllo, tabella, espandibile) e, sulla
+  menu, larga `SIDE_W`. Voci in `COMPONENTS`: blocchi (testo, elenchi, lista di controllo, tabella, espandibile, immagine, audio) e, sulla
   tela, nota, gruppo, legenda. Clic = al centro della vista utile, scendendo finché c'è spazio libero (`freeSpot`);
   trascinamento sulla tela = centrato dove si lascia (la legenda va nell'angolo più vicino). `addComponent` crea e apre
   l'editor (Esc toglie l'elemento appena creato; la tabella no). » la nasconde e resta la linguetta `#sideOpen`; la scelta

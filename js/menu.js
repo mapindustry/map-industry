@@ -35,7 +35,9 @@ const BTYPES = [
   ['ol', 'Elenco numerato', '<span class="sgt">1.</span>', 'Elenco numerato'],
   ['todo', 'Lista di controllo', ico('M4 3.5h6v6H4zM5.6 6.6l1.3 1.3 2-2.6M13 6.5H24'), 'Lista di controllo'],
   ['table', 'Tabella', ico('M4 2.5H24V11.5H4ZM4 5.5H24M11 2.5V11.5M17.5 2.5V11.5'), 'Tabella'],
-  ['exp', 'Espandibile', ico('M4 3l3 2.5L4 8M10 5.5H24M10 10H20'), 'Blocco espandibile']];
+  ['exp', 'Espandibile', ico('M4 3l3 2.5L4 8M10 5.5H24M10 10H20'), 'Blocco espandibile'],
+  ['img', 'Immagine', ico('M5 2.5H23V11.5H5ZM5 11.5L11 6l4 3.5 2.5-2L23 11.5'), 'Immagine'],
+  ['audio', 'Audio', ico('M5 5.5H8L12 2.5V11.5L8 8.5H5ZM15.5 4.5Q17.5 7 15.5 9.5M18.5 2.5Q22 7 18.5 11.5'), 'Audio']];
 let MENU_CELL = null; // cella della tabella su cui si è aperto il menu: [riga, colonna]
 const plural = (n, one, many) => n === 1 ? one : `${n} ${many}`;
 // corsivo del testo (blocchi) o del titolo (gruppi): Normale | Corsivo, il menu resta aperto
@@ -86,9 +88,10 @@ function nodeMenuHtml() {
       stepper('Righe', 'trow', rows.length, 'vtrow', 'Togli l’ultima riga', 'Aggiungi una riga') +
       stepper('Colonne', 'tcol', nc, 'vtcol', 'Togli l’ultima colonna', 'Aggiungi una colonna') + SEP;
   }
+  if (one && isMedia(one)) h += item('media', one.type === 'img' ? (one.img ? 'Cambia immagine…' : 'Scegli un’immagine…') : (one.audio ? 'Cambia audio…' : 'Scegli un audio…')) + SEP;
   if (one) {
     const nd = countDesc(one);
-    h += item('edit', 'Rinomina', '', 'F2') +
+    h += item('edit', isMedia(one) ? (one.type === 'img' ? 'Didascalia' : 'Titolo') : 'Rinomina', '', 'F2') +
       item('tag', one.tag ? 'Modifica etichetta' : 'Aggiungi etichetta') + (one.tag ? item('tagdel', 'Togli etichetta') : '') +
       item('child', 'Aggiungi ramo', '', 'Tab') +
       item('primary', 'Idea primaria', one.primary ? ' on' : '') + SEP;
@@ -328,6 +331,7 @@ menuEl.addEventListener('click', e => {
   }
   closeMenu();
   if (a === 'edit') startEdit(id, true);
+  if (a === 'media') pickMedia(id);
   else if (a === 'fit') fit();
   else if (a === 'selbranch') selectBranch(id);
   else if (a === 'child') addChild(id);
