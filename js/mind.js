@@ -42,7 +42,7 @@ function tagLeft(n, l, w) {
     .forEach(px => { if (px > x - 8 && px < x + w + 8) x = px + 10; });
   return x;
 }
-const NOTE_FONT = `500 11.5px ${FB}`, CNOTE_FONT = `400 13px ${FB}`, GFONT = `600 13px ${FB}`;
+const NOTE_FONT = `500 11.5px ${FB}`, GFONT = `600 13px ${FB}`;
 const GHEAD = 28, GPAD = 22, GMIN = [120, 70];
 
 // Lo stile di serie dipende dalla profondità (sizeMap): staccare, collegare o eliminare un blocco intermedio la
@@ -217,12 +217,24 @@ function toggleFold(id, key) {
   });
   if (closed) { selectOnly(id); render(); }
 }
+// stile delle note della tela (menu della nota): color 0–5, fs, fw, it (di serie corsivo), op; i valori di serie si tolgono
+const NDEF = { color: null, fs: 13, fw: 400, it: true, op: 1 };
+const nfsOf = nt => nt.fs || NDEF.fs, nfwOf = nt => nt.fw || NDEF.fw, nitOf = nt => nt.it ?? NDEF.it, nopOf = nt => nt.op ?? NDEF.op;
+const noteFont = nt => `${nitOf(nt) ? 'italic ' : ''}${nfwOf(nt)} ${nfsOf(nt)}px ${FB}`;
+const noteLh = nt => Math.round(nfsOf(nt) * 18 / 13); // a 13 px: righe di 18 px
+function setNoteStyle(patch, ids = [...S.sels]) {
+  mutate(t => ids.forEach(id => {
+    const nt = findNote(t, id); if (!nt) return;
+    Object.entries(patch).forEach(([k, v]) => { if (v === null || v === undefined || v === '' || v === NDEF[k]) delete nt[k]; else nt[k] = v; });
+  }));
+}
 function notesLayout(tree) {
   const NL = new Map();
   (tree.notes || []).forEach(nt => {
     // ridimensionata con la maniglia (nt.w/nt.h): il testo va a capo sulla larghezza e si ferma all'altezza
-    const lines = wrap(nt.text || 'Nota', nt.w ? Math.max(30, nt.w - 22) : 220, CNOTE_FONT, nt.h ? Math.max(1, Math.floor((nt.h - 14) / 18)) : 10);
-    NL.set(nt.id, { x: nt.x, y: nt.y, lines, w: nt.w || Math.max(60, Math.max(...lines.map(s => tw(s, CNOTE_FONT))) + 22), h: nt.h || lines.length * 18 + 14 });
+    const font = noteFont(nt), lh = noteLh(nt);
+    const lines = wrap(nt.text || 'Nota', nt.w ? Math.max(30, nt.w - 22) : 220, font, nt.h ? Math.max(1, Math.floor((nt.h - 14) / lh)) : 10);
+    NL.set(nt.id, { x: nt.x, y: nt.y, lines, lh, w: nt.w || Math.max(60, Math.max(...lines.map(s => tw(s, font))) + 22), h: nt.h || lines.length * lh + 14 });
   });
   NL.full = new Map(NL); groupHidden(tree).forEach(id => NL.delete(id)); // note dentro un gruppo compresso
   return NL;
@@ -476,10 +488,11 @@ function treeMarkup(tree, L, NL, live) {
   (tree.notes || []).forEach(nt => {
     const l = NL.get(nt.id), sel = live && S.sels.has(nt.id), hide = editing && editing.kind === 'note' && editing.id === nt.id;
     if (!l) return; // nascosta in un gruppo compresso
-    cnotes += `<g class="cnote${sel ? ' sel' : ''}${fcls(nt.id)}${hide ? ' editing' : ''}"${live ? ` data-note="${nt.id}"` : ''} transform="translate(${l.x},${l.y})">` +
+    const fs = nfsOf(nt), op = nopOf(nt), tst = `font-size:${fs}px;font-weight:${nfwOf(nt)};font-style:${nitOf(nt) ? 'italic' : 'normal'}`;
+    cnotes += `<g class="cnote${hasColor(nt) ? ' cc c' + nt.color : ''}${sel ? ' sel' : ''}${fcls(nt.id)}${hide ? ' editing' : ''}"${live ? ` data-note="${nt.id}"` : ''} transform="translate(${l.x},${l.y})">` +
       (sel ? `<rect class="ring" x="-4" y="-4" width="${l.w + 8}" height="${l.h + 8}" rx="7"/>` : '') +
-      `<rect class="nbox" width="${l.w}" height="${l.h}" rx="4"/><rect class="nbar" width="3" height="${l.h}" rx="1.5"/>` +
-      l.lines.map((s, i) => `<text x="12" y="${20 + i * 18}">${esc(s)}</text>`).join('') +
+      `<g${op < 1 ? ` opacity="${op}"` : ''}><rect class="nbox" width="${l.w}" height="${l.h}" rx="4"/><rect class="nbar" width="3" height="${l.h}" rx="1.5"/>` +
+      l.lines.map((s, i) => `<text x="12" y="${7 + fs + i * l.lh}" style="${tst}">${esc(s)}</text>`).join('') + `</g>` +
       (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
   });
   // gruppi: riquadri sotto a tutto; si prendono dal titolo o dal bordo, l'interno lascia passare i clic
@@ -1021,7 +1034,7 @@ function dragMovers(t) {
 /* ---------- copia e incolla lo stile ---------- */
 // Stile di un blocco (colore, testo, peso, bordo, opacità) o di un collegamento (forma, tratto, spessore, distanza dei
 // puntini, opacità): si copiano i valori come si vedono, così chi li riceve appare uguale. S.style = { kind, data }.
-// Testo, posizione, dimensione, pallini e note restano quelli di chi riceve lo stile.
+// Testo, posizione, dimensione, pallini e note restano quelli di chi riceve lo stile. Anche gruppi e note della tela.
 function copyStyle() {
   const t = curTree();
   if (S.esel) {
@@ -1034,6 +1047,11 @@ function copyStyle() {
     S.style = { kind: 'group', data: { color: hasColor(g) ? g.color : null, line: glineOf(g), bw: gbwOf(g), fo: gfoOf(g), tfs: gfsOf(g), tfw: gfwOf(g), ta: g.ta || 'l', ti: !!g.ti } };
     return toast('Stile del gruppo copiato');
   }
+  const nt = S.sel && findNote(t, S.sel);
+  if (nt) {
+    S.style = { kind: 'note', data: { color: hasColor(nt) ? nt.color : null, fs: nfsOf(nt), fw: nfwOf(nt), it: nitOf(nt), op: nopOf(nt) } };
+    return toast('Stile della nota copiato');
+  }
   const f = S.sel && findM(t, S.sel), l = f && S.L.get(f.n.id);
   if (!f || !l) return toast('Seleziona un blocco o un collegamento');
   const n = f.n;
@@ -1045,12 +1063,16 @@ function pasteStyle() {
   // collegamenti: quello del menu, o tutti quelli presi col riquadro (anche insieme a dei blocchi)
   const ek = S.esels.size ? [...S.esels] : S.esel ? [S.esel] : [];
   if (st.kind === 'edge' && ek.length) { setEdges(ek, { ...st.data, dash: false }); return toast('Stile incollato'); }
-  if (S.esel) return toast(st.kind === 'group' ? 'Lo stile copiato è di un gruppo: incollalo su un gruppo' : 'Lo stile copiato è di un blocco: incollalo su un blocco');
+  const KN = { node: 'di un blocco: incollalo su un blocco', group: 'di un gruppo: incollalo su un gruppo', note: 'di una nota: incollala su una nota', edge: 'di un collegamento: incollalo su un collegamento' };
+  if (S.esel) return toast('Lo stile copiato è ' + KN[st.kind]);
+  const nids = [...S.sels].filter(id => findNote(curTree(), id));
+  if (nids.length && st.kind === 'note') { setNoteStyle(st.data, nids); return toast('Stile incollato'); }
+  if (nids.length && ![...S.sels].some(id => S.L.has(id) || findGroup(curTree(), id))) return toast('Lo stile copiato è ' + KN[st.kind]);
   const gids = [...S.sels].filter(id => findGroup(curTree(), id));
   if (gids.length && st.kind === 'group') { setGroupStyle(st.data, gids); return toast('Stile incollato'); }
   if (gids.length && ![...S.sels].some(id => S.L.has(id))) return toast('Lo stile copiato non è di un gruppo');
   if (![...S.sels].some(id => S.L.has(id))) return toast('Seleziona un blocco o un collegamento');
-  if (st.kind !== 'node') return toast(st.kind === 'group' ? 'Lo stile copiato è di un gruppo: incollalo su un gruppo' : 'Lo stile copiato è di un collegamento: incollalo su un collegamento');
+  if (st.kind !== 'node') return toast('Lo stile copiato è ' + KN[st.kind]);
   eachSelected(n => Object.entries(st.data).forEach(([k, v]) => { if (v === null) delete n[k]; else n[k] = v; }));
   toast('Stile incollato');
 }
@@ -1173,7 +1195,30 @@ function groupSelected() {
 function ungroup(id) { mutate(t => { t.groups = (t.groups || []).filter(g => g.id !== id); if (!t.groups.length) delete t.groups; }); clearSel(); render(); }
 function eachSelected(fn) { const ids = [...S.sels], L = S.L; mutate(t => ids.forEach(id => { const f = findM(t, id); if (f) fn(f.n, L.get(id)); })); }
 function setColor(c) { eachSelected(n => { if (c === '') delete n.color; else n.color = +c; }); }
-function autoSize() { eachSelected(n => { delete n.w; delete n.h; }); }
+// Adatta al testo: un blocco di testo prende la misura che serve a mostrare tutto il testo (senza "…"), sulla larghezza
+// che ha (o quella di serie), stretta alla riga più lunga; gli altri tipi tornano alla misura automatica.
+// Un blocco con flip tiene fermo il bordo destro, come scrivendo.
+const isTextBlock = n => !n.hub && (!n.type || n.type === 'text');
+function fitText(n, l) {
+  if (!isTextBlock(n)) { delete n.w; delete n.h; return; }
+  const lv = l ? l.depth : 1, fs = fsOf(n, lv), font = nodeFont(n, lv), lh = Math.round(fs * 1.28);
+  const padX = lv === 0 ? 36 : 24, padY = lv === 0 ? 22 : 14, minW = lv === 0 ? 120 : 48;
+  const dw = lv === 0 ? 220 : 200, fitW = ls => Math.ceil(Math.max(minW, Math.max(...ls.map(t => tw(t, font))) + padX));
+  const word = Math.max(0, ...String(n.text || '').split(/\s+/).map(x => tw(x, font))); // nessuna parola tagliata
+  const lines = wrap(n.text || 'Senza titolo', Math.max(n.w ? Math.max(16, n.w - padX) : dw, word), font, 999), nat = wrap(n.text || 'Senza titolo', dw, font, 4);
+  const w0 = l ? l.w : null, had = !!n.w;
+  delete n.w; delete n.h;
+  // larghezza scelta a mano: resta quella dell'a capo, stretta alla riga più lunga; di serie basta finché stanno 4 righe
+  if (had || lines.length > 4) {
+    const w = fitW(lines), h = lines.length * lh + padY;
+    if (lines.length > 4 || Math.abs(fitW(nat) - w) > 1 || nat.length !== lines.length) { n.w = w; n.h = h; }
+  }
+  if (n.flip && w0 && hasPos(n)) n.x = Math.round(n.x + w0 - (n.w || fitW(nat)));
+}
+function autoSize(ids) {
+  if (ids) return mutate(t => ids.forEach(id => { const f = findM(t, id); if (f) fitText(f.n, S.L.get(id)); }));
+  eachSelected(fitText);
+}
 
 /* ---------- stile e nota dei collegamenti ---------- */
 function setEdge(key, patch) { setEdges([key], patch); }

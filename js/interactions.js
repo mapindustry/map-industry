@@ -333,6 +333,7 @@ function onDouble(e) {
   const edge = el.closest('[data-edge]'); if (edge) return startEdgeNote(edge.dataset.edge);
   const cn = el.closest('[data-note]'); if (cn) return startNoteEdit(cn.dataset.note);
   const g = el.closest('.mn[data-id]');
+  if (g && el.closest('[data-rsz]')) return autoSize([g.dataset.id]); // doppio clic sulla maniglia: adatta al testo
   if (g && el.closest('[data-tag]')) return startTagEdit(g.dataset.id);
   const cell = g && cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); if (cell) return startCellEdit(g.dataset.id, cell[0], cell[1]); // anche sul testo della cella
   if (g && !el.closest('[data-anc]')) { const n = (findM(curTree(), g.dataset.id) || {}).n; if (isMedia(n) && !n[n.type]) return pickMedia(n.id); } // immagine o audio ancora da scegliere

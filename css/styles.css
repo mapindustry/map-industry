@@ -146,6 +146,7 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .cnote .nbox{fill:var(--note-bg);stroke:none}
 .cnote .nbar{fill:var(--note-bar)}
 .cnote text{fill:var(--note-ink);font-size:13px;font-style:italic}
+.cnote.cc .nbox{fill:color-mix(in srgb,var(--cc) 22%,var(--note-bg))} .cnote.cc .nbar{fill:var(--cc)}
 .cnote.editing text{visibility:hidden}
 
 /* gruppi: si prendono dal titolo o dal bordo, l'interno lascia passare i clic */

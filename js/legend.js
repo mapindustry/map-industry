@@ -19,7 +19,7 @@ function legendStyle(kind, id) {
     const g = findGroup(t, id);
     return { color: hasColor(g) ? g.color : null, line: glineOf(g), bw: gbwOf(g), fo: gfoOf(g) };
   }
-  if (kind === 'note') return {};
+  if (kind === 'note') { const nt = findNote(t, id); return { color: hasColor(nt) ? nt.color : null, op: nopOf(nt) }; }
   const f = findM(t, id), l = S.L.get(id), d = l ? l.depth : 2, n = f.n;
   return { color: hasColor(n) ? n.color : null, fw: fwOf(n, d), it: !!n.it, bw: bwOf(n, d), op: n.op ?? 1, hub: !!n.hub };
 }
@@ -81,7 +81,7 @@ function legendSample(i) {
     const st = `stroke-width:${s.bw ?? 1.2}px;fill-opacity:${s.fo ?? 0.08};` + (ln === 'none' ? 'stroke:none;' : `stroke-dasharray:${GLINE[ln]};`);
     return `<g class="grp${cc}"><rect class="gbox" x="1" y="2" width="${LSW - 2}" height="20" rx="6" style="${st}"/></g>`;
   }
-  if (i.kind === 'note') return `<g class="cnote"><rect class="nbox" x="0" y="2" width="${LSW}" height="20" rx="3"/><rect class="nbar" y="2" width="3" height="20" rx="1.5"/></g>`;
+  if (i.kind === 'note') return `<g class="cnote${cc}"${s.op != null && s.op < 1 ? ` opacity="${s.op}"` : ''}><rect class="nbox" x="0" y="2" width="${LSW}" height="20" rx="3"/><rect class="nbar" y="2" width="3" height="20" rx="1.5"/></g>`;
   if (s.hub) return `<g class="mn hub"><circle class="hubdot" cx="${LSW / 2}" cy="12" r="5.5"/></g>`;
   const st = `stroke-width:${s.bw ?? 1.4}px;` + (s.op != null && s.op < 1 ? `opacity:${s.op};` : '');
   return `<g class="mn d2${cc}"><rect class="box" x="1" y="2" width="${LSW - 2}" height="20" rx="6" style="${st}"/>` +

@@ -54,7 +54,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   (`n.sub`, tela separata, tolte il 2026-11-10) vengono convertite in rami compressi da `flattenSubs` al caricamento
   e all'apertura di un file .json.
 - **Mappa** = un solo albero (non ci sono più livelli): la radice dei dati fa anche da contenitore per `free`,
-  `links` (blocchi liberi, alberi senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text,w?,h?}`; `w`/`h` dalla maniglia: il testo va a capo e si ferma lì).
+  `links` (blocchi liberi, alberi senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text,w?,h?}`; `w`/`h` dalla maniglia: il testo va a capo e si ferma lì;
+  stile dal menu della nota, `noteMenuHtml`/`setNoteStyle`, valori di serie in `NDEF` tolti dai dati: `color` 0–5 (tinge
+  sfondo e barra), `fs`, `fw`, `it` (di serie corsivo: `it: false` = dritto), `op`; vale per tutte le note selezionate,
+  con copia/incolla stile `kind: 'note'`).
   `curTree()` = `S.root`; `setLevelRoot()` la sostituisce quando la radice cambia (vedi `promoteRoot`).
   La tela può restare vuota: eliminando l'ultimo blocco la radice diventa `{ void: true }` (contenitore invisibile
   che tiene le note, saltato da `walkAll`/`sizeMap`); `mutate` promuove a radice il primo blocco aggiunto.
@@ -158,6 +161,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     (`data-ref`, anche in sola lettura) = `openRef` → `openProject` in una scheda. Progetto eliminato: linguetta spenta
     (`.gone`). Menu del blocco: Apri, Collega/Cambia (elenco dentro il menu, `REF_OPEN`, `data-refp`), Togli (`setRef`).
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
+  - **Adatta al testo** (menu del blocco, sempre presente per i blocchi di testo, o doppio clic sulla maniglia; `autoSize`
+    → `fitText`): mostra tutto il testo senza "…". Tiene la larghezza scelta a mano (mai più stretta della parola più
+    lunga) e la stringe alla riga più lunga; se basta la misura di serie (fino a 4 righe) toglie `w/h`. Con `flip` resta
+    fermo il bordo destro. Gli altri tipi tornano alla misura automatica ("Dimensione automatica").
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.
 - Riquadro di selezione (`dragBox`): trascinato verso destra = finestra (`.marquee.win`, `--win` verde, tratto continuo),

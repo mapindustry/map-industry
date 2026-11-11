@@ -70,6 +70,23 @@ function groupMenuHtml(g) {
     italicSeg('gti', !!g.ti) +
     seg('Posizione', [['gta-l', 'A sinistra', ta === 'l', ico('M4 4H18M4 10H13')], ['gta-c', 'Al centro', ta === 'c', ico('M7 4H21M9.5 10H18.5')]]);
 }
+/* ---------- nota della tela ---------- */
+// colore in alto, azioni, Elimina, poi lo stile (testo, peso, corsivo, opacità): vale per tutte le note selezionate
+function noteMenuHtml(nt) {
+  const ns = menuNotes(), n = ns.length, op = Math.round(nopOf(nt) * 100);
+  return title(n > 1 ? `${n} note` : 'Nota', n > 1 ? 'Lo stile vale per tutte' : '') + swatches(hasColor(nt) ? String(nt.color) : '') + SEP +
+    (n > 1 ? '' : item('nedit', 'Modifica', '', 'F2') + SEP) +
+    item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') + item('group', 'Raggruppa', '', 'Ctrl+G') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
+    item('del', n > 1 ? `Elimina ${n} note` : 'Elimina nota', ' dng', 'Canc') + SEP +
+    head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'note' ? item('stpaste', n > 1 ? `Incolla stile su ${n} note` : 'Incolla stile') : '') +
+    stepper('Testo', 'nfs', nfsOf(nt) + ' px', 'vnfs', 'Testo più piccolo', 'Testo più grande') +
+    `<div class="mrow wide"><span>Peso</span><select id="mnfw" aria-label="Peso del testo della nota">${FW.map(([v, l]) => `<option value="${v}"${nfwOf(nt) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>` +
+    italicSeg('nit', nitOf(nt)) +
+    `<div class="mrow"><span>Opacità</span><input type="range" id="mnop" min="10" max="100" step="5" value="${op}" aria-label="Opacità della nota"><span class="val" id="vnop">${op}%</span></div>` +
+    (nt.w || nt.h ? item('nauto', 'Dimensione automatica') : '');
+}
+// note su cui agiscono le regolazioni dello stile: quelle selezionate (almeno quella del menu)
+const menuNotes = () => { const t = curTree(), ids = [...S.sels].filter(id => findNote(t, id)); return ids.length ? ids : [MENU ? MENU.id : S.sel]; };
 // gruppi su cui agiscono le regolazioni dello stile: quelli selezionati (almeno quello del menu)
 const menuGroups = () => { const t = curTree(), ids = [...S.sels].filter(id => findGroup(t, id)); return ids.length ? ids : [MENU.id]; };
 
@@ -121,7 +138,8 @@ function nodeMenuHtml() {
     italicSeg('it', !!prim.it) +
     stepper('Bordo', 'bw', bwOf(prim, pl.depth) + ' px', 'vbw', 'Bordo più sottile', 'Bordo più spesso') +
     `<div class="mrow"><span>Opacità</span><input type="range" id="mop" min="10" max="100" step="5" value="${op}" aria-label="Opacità del blocco"><span class="val" id="vop">${op}%</span></div>` +
-    (nodes.some(n => n.w || n.h) ? item('autosize', 'Dimensione automatica') : '');
+    (nodes.some(isTextBlock) ? item('autosize', 'Adatta al testo', '', '', 'La misura segue il testo · doppio clic sulla maniglia') :
+      nodes.some(n => n.w || n.h) ? item('autosize', 'Dimensione automatica') : '');
   return h;
 }
 const FW = [[300, 'Leggero'], [400, 'Normale'], [500, 'Medio'], [600, 'Semigrassetto'], [700, 'Grassetto']];
@@ -152,6 +170,12 @@ menuEl.addEventListener('input', e => {
     const t = curTree(); menuGroups().forEach(id => { const g = findGroup(t, id); if (g) { if (v === GDEF.fo) delete g.fo; else g.fo = v; } });
     save(); render(); return;
   }
+  if (e.target.id === 'mnop') { // opacità delle note
+    const v = +e.target.value / 100; $('#vnop').textContent = Math.round(v * 100) + '%';
+    if (opArmed) { snapshot(); opArmed = false; }
+    const t = curTree(); menuNotes().forEach(id => { const nt = findNote(t, id); if (nt) { if (v >= 1) delete nt.op; else nt.op = v; } });
+    save(); render(); return;
+  }
   if (e.target.id !== 'mop') return;
   const v = +e.target.value / 100; $('#vop').textContent = Math.round(v * 100) + '%';
   if (opArmed) { snapshot(); opArmed = false; }
@@ -159,8 +183,9 @@ menuEl.addEventListener('input', e => {
   save(); render();
 });
 menuEl.addEventListener('change', e => {
-  if (e.target.id === 'mop' || e.target.id === 'meop' || e.target.id === 'mgfo') opArmed = true;
+  if (e.target.id === 'mop' || e.target.id === 'meop' || e.target.id === 'mgfo' || e.target.id === 'mnop') opArmed = true;
   if (e.target.id === 'mgfw') setGroupStyle({ tfw: +e.target.value }, menuGroups());
+  if (e.target.id === 'mnfw') setNoteStyle({ fw: +e.target.value }, menuNotes());
   // dimensione scritta a mano (9–48 px) e peso del carattere: valgono per tutti i blocchi selezionati
   if (e.target.id === 'mfs') { const v = Math.round(+e.target.value); if (v) { const fs = clamp(v, 9, 48); e.target.value = fs; eachSelected(n => { n.fs = fs; }); } }
   if (e.target.id === 'mfw') { const v = +e.target.value; eachSelected(n => { n.fw = v; }); }
@@ -239,10 +264,8 @@ cv.addEventListener('contextmenu', e => {
       `<div class="mrow"><span>Opacità</span><input type="range" id="meop" min="10" max="100" step="5" value="${Math.round(eopOf(ed) * 100)}" aria-label="Opacità del collegamento"><span class="val" id="veop">${Math.round(eopOf(ed) * 100)}%</span></div>`, { kind: 'edge', id });
   }
   if (cn) {
-    selectOnly(cn.dataset.note); render();
-    return showMenu(e.clientX, e.clientY, title('Nota') + item('nedit', 'Modifica', '', 'F2') + SEP +
-      item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') + item('group', 'Raggruppa', '', 'Ctrl+G') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
-      item('del', 'Elimina nota', ' dng', 'Canc'), { kind: 'note', id: cn.dataset.note });
+    const id = cn.dataset.note; if (!S.sels.has(id)) selectOnly(id); else S.sel = id;
+    render(); return showMenu(e.clientX, e.clientY, noteMenuHtml(findNote(curTree(), id)), { kind: 'note', id });
   }
   if (gr) {
     const id = gr.dataset.grp; if (!S.sels.has(id)) selectOnly(id); else S.sel = id;
@@ -267,6 +290,7 @@ menuEl.addEventListener('click', e => {
       sw.parentNode.querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === sw)); return;
     }
     if (MENU.kind === 'group') { const ids = menuGroups(); closeMenu(); return setGroupStyle({ color: sw.dataset.c === '' ? null : +sw.dataset.c }, ids); }
+    if (MENU.kind === 'note') { const ids = menuNotes(); closeMenu(); return setNoteStyle({ color: sw.dataset.c === '' ? null : +sw.dataset.c }, ids); }
     closeMenu(); return setColor(sw.dataset.c);
   }
   const st = e.target.closest('[data-st]');
@@ -280,6 +304,10 @@ menuEl.addEventListener('click', e => {
       const g = findGroup(curTree(), MENU.id), bw = st.dataset.st === 'gbw';
       const v = bw ? clamp(Math.round((gbwOf(g) + d * 0.5) * 10) / 10, 0.5, 6) : clamp(gfsOf(g) + d, 9, 36);
       setGroupStyle(bw ? { bw: v } : { tfs: v }, menuGroups()); $(bw ? '#vgbw' : '#vgfs').textContent = v + ' px'; return;
+    }
+    if (st.dataset.st === 'nfs') { // dimensione del testo delle note
+      const v = clamp(nfsOf(findNote(curTree(), MENU.id)) + d, 9, 36);
+      setNoteStyle({ fs: v }, menuNotes()); $('#vnfs').textContent = v + ' px'; return;
     }
     if (st.dataset.st === 'lw') { // spessore del collegamento, a passi di mezzo pixel
       const w = clamp(Math.round((linkWidth(MENU.id) + d * 0.5) * 10) / 10, 0.5, 8);
@@ -305,6 +333,11 @@ menuEl.addEventListener('click', e => {
   }
   if (a in ARRANGE) return arrangeSelected(a); // allinea / spazia: il menu resta aperto
   // bordo e posizione del titolo del gruppo: il menu resta aperto
+  if (a === 'nit-on' || a === 'nit-off') { // corsivo delle note (di serie corsivo)
+    setNoteStyle({ it: a === 'nit-on' }, menuNotes());
+    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+    return;
+  }
   if (a === 'it-on' || a === 'it-off') { // corsivo dei blocchi selezionati
     eachSelected(n => { if (a === 'it-on') n.it = true; else delete n.it; });
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
@@ -360,6 +393,7 @@ menuEl.addEventListener('click', e => {
   else if (a === 'enotepos') setEdge(id, { nx: 0, ny: 0 });
   else if (a === 'edel') deleteEdge(id);
   else if (a === 'nedit') startNoteEdit(id);
+  else if (a === 'nauto') mutate(t => (t.notes || []).filter(nt => S.sels.has(nt.id) || nt.id === id).forEach(nt => { delete nt.w; delete nt.h; }));
   else if (a === 'group') groupSelected();
   else if (a === 'gedit') startGroupEdit(id);
   else if (a === 'ungroup') ungroup(id);

@@ -27,7 +27,8 @@ function editorBox() {
     return { x: sx(g.x + 8), y: sy(g.y + (hd - fs - 7) / 2), w: (g.w - 16) * k, h: (fs + 7) * k, font: gFont(g), fs, lh: fs + 5, minW: 160 };
   }
   const l = S.NL.get(id); if (!l) return null;
-  return { x: sx(l.x), y: sy(l.y), w: l.w * k, h: l.h * k, font: CNOTE_FONT, fs: 13, lh: 18, minW: 200 };
+  const nt = findNote(curTree(), id) || {};
+  return { x: sx(l.x), y: sy(l.y), w: l.w * k, h: l.h * k, font: noteFont(nt), fs: nfsOf(nt), lh: l.lh, minW: 200 };
 }
 function placeEditor() {
   if (!editing) return;
@@ -52,6 +53,8 @@ function beginEdit(kind, id, text, selectAll) {
     const g = vp.querySelector(`.mn[data-id="${id}"]`);
     if (g) { g.classList.add('editing'); const box = g.querySelector('.box'); if (box) ed.style.background = getComputedStyle(box).fill; }
   }
+  if (kind === 'note') { const box = vp.querySelector(`[data-note="${id}"] .nbox`); if (box) ed.style.background = getComputedStyle(box).fill; } // nota colorata
+
   // elenchi: testo allineato a sinistra e Invio = nuova voce (Ctrl+Invio o un clic fuori per finire)
   const lst = kind === 'body' || (kind === 'node' && isList((findM(curTree(), id) || {}).n)); // anche il testo dell'espandibile
   if (editing) editing.list = lst;
