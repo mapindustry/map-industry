@@ -10,8 +10,38 @@ let P = null, spaceDown = false;
 const DROP_WAIT = 450; // ms di sosta sopra un blocco prima che diventi la destinazione del rilascio
 const boxEl = $('#box');
 
+// Due dita sulla tela (telefono, tablet) = zoom e spostamento della vista. Il secondo dito annulla quello che il
+// primo stava iniziando (un trascinamento già avviato resta dov'è ed è salvato).
+const TP = new Map(); // dita appoggiate sulla tela: pointerId → { x, y }
+function startPinch() {
+  if (P) {
+    clearTimeout(P.dropT); S.dropOn = null; S.rail = null; boxEl.hidden = true; cv.classList.remove('panning', 'linking');
+    if (P.mode === 'link') S.link = null;
+    if (P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) save();
+    if (P.mode === 'legend') S.legDrag = null;
+  }
+  const [a, b] = [...TP.values()], v = view();
+  P = { mode: 'pinch', d0: Math.hypot(b.x - a.x, b.y - a.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, vx: v.x, vy: v.y, k0: v.k };
+  lastTap = null; render();
+}
+function pinchMove() {
+  const [a, b] = [...TP.values()], v = view();
+  const k = clamp(P.k0 * Math.hypot(b.x - a.x, b.y - a.y) / P.d0, 0.2, 3), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  // il punto della mappa che stava fra le dita all'inizio resta fra le dita
+  v.x = mx - (P.mx - P.vx) / P.k0 * k; v.y = my - (P.my - P.vy) / P.k0 * k; v.k = k; v.fresh = false;
+  applyView(); placeEditor();
+}
+
 cv.addEventListener('pointerdown', e => {
   closeMenu(); hidePreview();
+  if (e.pointerType === 'touch') {
+    TP.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (TP.size >= 2) {
+      e.preventDefault(); if (TP.size === 2) startPinch();
+      try { cv.setPointerCapture(e.pointerId); } catch (err) {} // il dito potrebbe essersi già alzato
+      return;
+    }
+  }
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
   const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), lg = e.target.closest('[data-leg]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
   if (readOnly() && !e.target.closest('[data-fold], [data-gfold], [data-xtog]')) {
@@ -69,6 +99,9 @@ cv.addEventListener('pointerdown', e => {
 let lastMouse = null; // per incollare dove si trova il mouse
 cv.addEventListener('pointermove', e => {
   lastMouse = { x: e.clientX, y: e.clientY };
+  if (TP.has(e.pointerId)) TP.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (P && P.mode === 'pinch') { if (TP.size >= 2) pinchMove(); return; }
+  if (P && P.mode === 'pinchEnd') return;
   if (!P) return;
   const dx = e.clientX - P.sx, dy = e.clientY - P.sy;
   if (!P.moved && Math.hypot(dx, dy) < 4) return;
@@ -156,6 +189,10 @@ function dragBox(e) {
 // e 8 px, valgono un doppio clic (onDouble, dopo il ridisegno: si guarda cosa c'è sotto il puntatore adesso).
 let lastTap = null;
 function endPointer(e) {
+  TP.delete(e.pointerId);
+  // fine dello zoom con due dita: il dito rimasto non fa nulla finché non si alza
+  if (P && P.mode === 'pinch') { P = TP.size ? { mode: 'pinchEnd', moved: true } : null; lastTap = null; return; }
+  if (P && P.mode === 'pinchEnd') { if (!TP.size) P = null; return; }
   const tap = P && !P.moved && e.type === 'pointerup' && P.mode !== 'link' && (e.pointerType !== 'mouse' || e.button === 0);
   endPointerCore(e);
   if (!tap) { lastTap = null; return; }

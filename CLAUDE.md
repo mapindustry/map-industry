@@ -156,6 +156,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Dopo un clic la tela viene ridisegnata: l'elemento premuto sparisce prima del rilascio, quindi i browser recenti non
   mandano `click`/`dblclick` sulla tela. Il doppio clic lo riconosce `endPointer` (due rilasci senza trascinamento entro
   450 ms e 8 px → `onDouble`); lì e in `contextmenu` usa `document.elementFromPoint`, e per le celle `cellAt` (posizione).
+- Touch: un dito sullo sfondo sposta la vista; **due dita = zoom** (`TP` = dita appoggiate, `startPinch`/`pinchMove` in
+  `interactions.js`, il punto fra le dita resta fermo, zoom 0,2–3). Il secondo dito annulla l'azione del primo (un
+  trascinamento già avviato resta e si salva); dopo lo zoom il dito rimasto non fa nulla (`pinchEnd`). `#cv` ha
+  `touch-action:none`, quindi lo zoom del browser non c'è: serve questo.
 - Anteprima dei link (WhatsApp ecc.): `og.png` 1200×630 e tag `og:` in `index.html` con indirizzi completi.
 
 ## Stile
