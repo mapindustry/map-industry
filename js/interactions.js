@@ -293,14 +293,14 @@ function moveSel(key) {
   if (!best) return;
   selectOnly(best);
   const l = S.L.get(best), v = view(), m = 40, x1 = v.x + l.x * v.k, y1 = v.y + l.y * v.k, x2 = x1 + l.w * v.k, y2 = y1 + l.h * v.k;
-  if (x1 < m) v.x += m - x1; else if (x2 > innerWidth - m) v.x -= x2 - (innerWidth - m);
+  if (x1 < m) v.x += m - x1; else if (x2 > viewW() - m) v.x -= x2 - (viewW() - m);
   if (y1 < BAR_H + m) v.y += BAR_H + m - y1; else if (y2 > innerHeight - m) v.y -= y2 - (innerHeight - m);
   v.fresh = false; render();
 }
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (editing) endEdit(true); return saveProject(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !editing) { e.preventDefault(); closeMenu(); return openFind(); }
-  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar, #find'))) return;
+  if (editing || !$('#menu').hidden || (e.target.closest && e.target.closest('.bar, #find, .side'))) return;
   if (e.code === 'Space') { e.preventDefault(); if (!spaceDown) { spaceDown = true; cv.classList.add('grab'); } return; }
   if (readOnly() && !(e.key.startsWith('Arrow') || e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c'))) {
     if (e.key.length === 1 && !(e.ctrlKey || e.metaKey) || ['Delete', 'Backspace', 'Enter', 'Tab', 'F2'].includes(e.key) || (e.ctrlKey || e.metaKey)) { e.preventDefault(); roToast(); }

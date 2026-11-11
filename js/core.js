@@ -12,6 +12,9 @@ const FB = '"Instrument Sans", "Segoe UI", system-ui, sans-serif';
 // E: punti medi dei collegamenti (per le note) · NL: layout delle note sulla tela
 const S = { projects: [], pid: null, root: null, sel: null, sels: new Set(), esel: null, views: {}, undo: [], redo: [], L: null, E: null, NL: null, link: null, clip: null, dropOn: null, rail: null, style: null, legDrag: null, tabs: [] };
 const BAR_H = 48; // altezza della barra dei menu
+// barra laterale dei componenti (js/sidebar.js): quando è aperta la vista utile finisce prima
+const SIDE_W = 184; let SIDE_OPEN = false;
+const viewW = () => innerWidth - (SIDE_OPEN && !document.body.classList.contains('gate') ? SIDE_W : 0);
 const cv = $('#cv'), vp = $('#vp');
 
 /* ---------- misurazione del testo ---------- */

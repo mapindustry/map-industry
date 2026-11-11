@@ -38,6 +38,13 @@
   <input type="file" id="fileIn" accept=".json,application/json" hidden>
 </header>
 
+<aside class="side" id="side" aria-label="Componenti" hidden>
+  <div class="shead"><span>Componenti</span><button class="sx" id="sideX" title="Nascondi i componenti" aria-label="Nascondi i componenti">»</button></div>
+  <div class="slist" id="sideList"></div>
+  <p class="stip">Clic: al centro · Trascina: dove vuoi</p>
+</aside>
+<button class="sopen" id="sideOpen" title="Mostra i componenti" aria-label="Mostra i componenti" hidden>«</button>
+
 <div class="marquee" id="box" hidden></div>
 <textarea id="ed" aria-label="Testo" spellcheck="false" hidden></textarea>
 <div class="menu" id="menu" role="menu" hidden></div>
@@ -56,6 +63,7 @@
 <script src="js/editor.js"></script>
 <script src="js/interactions.js"></script>
 <script src="js/menu.js"></script>
+<script src="js/sidebar.js"></script>
 <script src="js/files.js"></script>
 <script src="js/cloud.js"></script>
 <script src="js/menubar.js"></script>

@@ -43,8 +43,8 @@ function updateCount(hits) {
 function showHit(id) {
   const l = S.L.get(id) || S.NL.get(id); if (!l) return;
   const v = view(), m = 60, x1 = v.x + l.x * v.k, y1 = v.y + l.y * v.k, x2 = x1 + l.w * v.k, y2 = y1 + l.h * v.k;
-  if (x1 < m || y1 < BAR_H + m || x2 > innerWidth - m || y2 > innerHeight - m) {
-    v.x = innerWidth / 2 - (l.x + l.w / 2) * v.k; v.y = (innerHeight + BAR_H) / 2 - (l.y + l.h / 2) * v.k; v.fresh = false;
+  if (x1 < m || y1 < BAR_H + m || x2 > viewW() - m || y2 > innerHeight - m) {
+    v.x = viewW() / 2 - (l.x + l.w / 2) * v.k; v.y = (innerHeight + BAR_H) / 2 - (l.y + l.h / 2) * v.k; v.fresh = false;
   }
 }
 // apre i rami compressi tra il blocco e la radice (un passo di annullamento)

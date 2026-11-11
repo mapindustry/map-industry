@@ -60,10 +60,10 @@ const LMARGIN = 16;
 function legendPos(lo, corner) {
   if (S.legDrag) return S.legDrag;
   const c = corner || 'br', top = BAR_H + LMARGIN + (FIND && c === 'tr' ? 44 : 0);
-  return { x: c[1] === 'l' ? LMARGIN : innerWidth - lo.w - LMARGIN, y: c[0] === 't' ? top : innerHeight - lo.h - LMARGIN };
+  return { x: c[1] === 'l' ? LMARGIN : viewW() - lo.w - LMARGIN, y: c[0] === 't' ? top : innerHeight - lo.h - LMARGIN };
 }
 // angolo più vicino al centro della legenda
-function nearestCorner(x, y, lo) { return (y + lo.h / 2 < innerHeight / 2 ? 't' : 'b') + (x + lo.w / 2 < innerWidth / 2 ? 'l' : 'r'); }
+function nearestCorner(x, y, lo) { return (y + lo.h / 2 < innerHeight / 2 ? 't' : 'b') + (x + lo.w / 2 < viewW() / 2 ? 'l' : 'r'); }
 function setLegendCorner(c) { mutate(t => { if (t.legend) t.legend.corner = c; }); }
 // disegno sulla tela (live) in <g id="lg">; per l'esportazione pos = punto della tela accanto alla mappa
 function renderLegend() { $('#lg').innerHTML = legendMarkup(curTree(), true); }

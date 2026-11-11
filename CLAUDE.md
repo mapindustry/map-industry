@@ -160,6 +160,13 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   `interactions.js`, il punto fra le dita resta fermo, zoom 0,2–3). Il secondo dito annulla l'azione del primo (un
   trascinamento già avviato resta e si salva); dopo lo zoom il dito rimasto non fa nulla (`pinchEnd`). `#cv` ha
   `touch-action:none`, quindi lo zoom del browser non c'è: serve questo.
+- **Barra dei componenti** (`js/sidebar.js`, `<aside id="side">`, richiesta il 2026-11-11): a destra sotto la barra dei
+  menu, larga `SIDE_W`. Voci in `COMPONENTS`: blocchi (testo, elenchi, lista di controllo, tabella, espandibile) e, sulla
+  tela, nota, gruppo, legenda. Clic = al centro della vista utile, scendendo finché c'è spazio libero (`freeSpot`);
+  trascinamento sulla tela = centrato dove si lascia (la legenda va nell'angolo più vicino). `addComponent` crea e apre
+  l'editor (Esc toglie l'elemento appena creato; la tabella no). » la nasconde e resta la linguetta `#sideOpen`; la scelta
+  sta in `localStorage['officina-mappe-side']` (di serie aperta, chiusa sotto i 640 px). Con la barra aperta la vista
+  utile è `viewW()` (core.js): la usano `fit`, la legenda, Cerca e le frecce. In sola lettura le voci sono spente.
 - Anteprima dei link (WhatsApp ecc.): `og.png` 1200×630 e tag `og:` in `index.html` con indirizzi completi.
 
 ## Stile
