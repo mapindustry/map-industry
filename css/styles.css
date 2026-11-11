@@ -99,6 +99,15 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 /* g.tag / g.fold: più specifici di .mn.d0 text, che altrimenti ingrandirebbe il testo oltre il riquadro */
 .mn g.tag text{fill:var(--on-node);font:600 10.5px var(--f-body)}
 .mn.editing g.tag text{visibility:visible}
+/* linguetta della mappa collegata (sotto il bordo, a destra): si apre con un clic */
+.mn g.pref{cursor:pointer}
+.mn g.pref rect{fill:var(--accent)}
+.mn g.pref:hover rect{fill:color-mix(in srgb,var(--accent) 80%,var(--on-accent))}
+.mn g.pref text{fill:var(--on-accent);font:600 10.5px var(--f-body)}
+.mn g.pref .pic{fill:none;stroke:var(--on-accent);stroke-width:1.4;stroke-linecap:round}
+.mn g.pref.gone rect{fill:var(--node-border)}
+.mn g.pref.gone text{fill:var(--on-node);font-style:italic;opacity:.75}
+.mn g.pref.gone .pic{stroke:var(--on-node);opacity:.6}
 .fold{cursor:pointer}
 .fold rect{fill:var(--accent);stroke:var(--canvas);stroke-width:1.5}
 .mn g.fold text{fill:var(--on-accent);font:600 11px var(--f-body)}

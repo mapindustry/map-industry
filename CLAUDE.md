@@ -144,6 +144,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     alla volta (`AUD`), avanzamento aggiornato sugli elementi senza ridisegnare (`audioTick`). Sulla tela indirizzi blob:
     (`mediaUrl`), nell'esportazione il data URL; `takeImages`/`keepImages` (in `render`) rimettono gli `<image>` già
     decodificati, altrimenti a ogni ridisegno lampeggiano. localStorage pieno: `writeStore` lo dice (`quotaWarned`).
+  - **Mappa collegata** (`js/mapref.js`, `n.ref` = id di un altro progetto, richiesta il 2026-11-11): linguetta sotto il
+    bordo in basso a destra (`refMarkup`, evita i pallini in basso) con il nome letto da `S.projects` a ogni disegno; clic
+    (`data-ref`, anche in sola lettura) = `openRef` → `openProject` in una scheda. Progetto eliminato: linguetta spenta
+    (`.gone`). Menu del blocco: Apri, Collega/Cambia (elenco dentro il menu, `REF_OPEN`, `data-refp`), Togli (`setRef`).
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
   - Eliminare un blocco toglie **solo quel blocco** (`removeSelected`): i suoi rami passano al genitore con la stessa
     uscita (A → X → B diventa A → B) o, senza genitore, restano liberi dove sono.

@@ -467,7 +467,7 @@ function treeMarkup(tree, L, NL, live) {
       (folded ? `<rect class="stack" x="5" y="5" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"/>` : '') +
       `<rect class="box" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"${boxSt ? ` style="${boxSt}"` : ''}/>${txt}` +
       (sel && single && n.type !== 'table' ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
-      anchors + fold + `</g>`;
+      refMarkup(n, l, live) + anchors + fold + `</g>`;
   });
   // note sulla tela: appunti, non blocchi
   let cnotes = '';

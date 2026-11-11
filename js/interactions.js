@@ -44,7 +44,7 @@ cv.addEventListener('pointerdown', e => {
   }
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
   const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), lg = e.target.closest('[data-leg]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
-  if (readOnly() && !e.target.closest('[data-fold], [data-gfold], [data-xtog], [data-play], [data-seek]')) {
+  if (readOnly() && !e.target.closest('[data-fold], [data-gfold], [data-xtog], [data-play], [data-seek], [data-ref]')) {
     // sola lettura: trascinando si sposta la vista, con un clic si seleziona (per guardare, cercare, copiare)
     const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y, pick: g ? g.dataset.id : cn ? cn.dataset.note : gr ? gr.dataset.grp : null, ro: true };
   } else if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr && !lg)) {
@@ -55,6 +55,8 @@ cv.addEventListener('pointerdown', e => {
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
   } else if (g && e.target.closest('[data-xtog]')) {
     return toggleExp(g.dataset.id); // blocco espandibile: apre o chiude il testo
+  } else if (g && e.target.closest('[data-ref]')) {
+    return openRef(g.dataset.id); // linguetta della mappa collegata: la apre
   } else if (g && e.target.closest('[data-play]')) {
     return playAudio(g.dataset.id); // audio: ascolta / pausa
   } else if (g && e.target.closest('[data-seek]')) {

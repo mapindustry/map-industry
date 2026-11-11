@@ -94,7 +94,7 @@ function nodeMenuHtml() {
     h += item('edit', isMedia(one) ? (one.type === 'img' ? 'Didascalia' : 'Titolo') : 'Rinomina', '', 'F2') +
       item('tag', one.tag ? 'Modifica etichetta' : 'Aggiungi etichetta') + (one.tag ? item('tagdel', 'Togli etichetta') : '') +
       item('child', 'Aggiungi ramo', '', 'Tab') +
-      item('primary', 'Idea primaria', one.primary ? ' on' : '') + SEP;
+      item('primary', 'Idea primaria', one.primary ? ' on' : '') + SEP + refMenuHtml(one);
     if (one.children.length) h +=
       item('fold', one.fold ? 'Espandi i rami' : 'Comprimi i rami', '', plural(nd, '1 blocco', 'blocchi')) +
       item('selbranch', 'Seleziona il ramo') + SEP;
@@ -218,7 +218,7 @@ cv.addEventListener('contextmenu', e => {
   if (g) {
     MENU_CELL = cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); // cella della tabella sotto il puntatore (anche sul testo)
     if (!S.sels.has(g.dataset.id)) selectOnly(g.dataset.id); else S.sel = g.dataset.id;
-    render(); return showMenu(e.clientX, e.clientY, nodeMenuHtml(), { kind: 'node' });
+    REF_OPEN = false; render(); return showMenu(e.clientX, e.clientY, nodeMenuHtml(), { kind: 'node' });
   }
   if (edge) {
     const id = edge.dataset.edge, ed = edgeData(curTree(), id) || {};
@@ -267,6 +267,8 @@ cv.addEventListener('contextmenu', e => {
 /* ---------- azioni ---------- */
 menuEl.addEventListener('click', e => {
   if (!MENU) return;
+  const rp = e.target.closest('[data-refp]'); // mappa scelta dall'elenco: il blocco si collega a lei
+  if (rp) { const id = S.sel; closeMenu(); REF_OPEN = false; setRef(id, rp.dataset.refp); return toast('Blocco collegato alla mappa'); }
   const sw = e.target.closest('[data-c]');
   if (sw) {
     if (MENU.kind === 'edge') { // colore dei collegamenti: il menu resta aperto, per provarne più d'uno
@@ -322,6 +324,12 @@ menuEl.addEventListener('click', e => {
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     return;
   }
+  if (a === 'refpick') { // elenco delle mappe da collegare: si apre dentro il menu, che resta aperto
+    REF_OPEN = !REF_OPEN; const x = menuEl.style.left, y = menuEl.style.top;
+    menuEl.innerHTML = nodeMenuHtml(); menuEl.style.left = x; menuEl.style.top = y;
+    const r = menuEl.getBoundingClientRect(); if (r.bottom > innerHeight - 8) menuEl.style.top = Math.max(8, innerHeight - 8 - r.height) + 'px';
+    return menuEl.querySelector('[data-a="refpick"]').focus();
+  }
   if (a.startsWith('bt-')) { // tipo di blocco: il menu si ricostruisce (cambiano le voci della tabella)
     setBlockType(a.slice(3)); const x = menuEl.style.left, y = menuEl.style.top;
     menuEl.innerHTML = nodeMenuHtml(); menuEl.style.left = x; menuEl.style.top = y; return;
@@ -339,6 +347,8 @@ menuEl.addEventListener('click', e => {
   closeMenu();
   if (a === 'edit') startEdit(id, true);
   if (a === 'media') pickMedia(id);
+  else if (a === 'refgo') openRef(id);
+  else if (a === 'refdel') setRef(id, null);
   else if (a === 'fit') fit();
   else if (a === 'selbranch') selectBranch(id);
   else if (a === 'child') addChild(id);
