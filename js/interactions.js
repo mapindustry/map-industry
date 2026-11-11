@@ -73,11 +73,15 @@ cv.addEventListener('pointerdown', e => {
     const hit = pinAt(findM(curTree(), id).n, l, toSvg(e.clientX, e.clientY)) || { kind: a.dataset.anc, idx: +a.dataset.idx };
     const { kind, idx } = hit;
     const [px, py] = pinXY(l, pinsOf(findM(curTree(), id).n)[PK[kind]][idx]);
-    S.link = { kind, idx, id, x1: l.x + px, y1: l.y + py, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
+    // Ctrl: trascinato su un altro pallino dello stesso blocco lo fonde con quello (merge); il pallino non scorre sul bordo
+    S.link = { kind, idx, id, merge: e.ctrlKey || e.metaKey, x1: l.x + px, y1: l.y + py, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
     P = { ...base, mode: 'link', id }; cv.classList.add('linking');
   } else if (g && e.target.closest('[data-rsz]')) {
     const id = g.dataset.id, l = S.L.get(id);
     P = { ...base, mode: 'resize', id, w0: l.w, h0: l.h };
+  } else if (cn && e.target.closest('[data-rsz]')) { // nota della tela: maniglia in basso a destra
+    const id = cn.dataset.note, l = S.NL.get(id);
+    P = { ...base, mode: 'resize', id, note: true, w0: l.w, h0: l.h };
   } else if (gr && e.target.closest('[data-rsz]')) {
     const grp = findGroup(curTree(), gr.dataset.grp);
     P = { ...base, mode: 'resize', id: grp.id, grp: true, w0: grp.w, h0: grp.h };
@@ -142,7 +146,7 @@ cv.addEventListener('pointermove', e => {
     const p = toSvg(e.clientX, e.clientY), lk = S.link;
     // vicino al bordo del proprio blocco il pallino scorre lungo il bordo; lontano si disegna un collegamento
     const nb = nearestBorder(S.L.get(lk.id), p);
-    lk.pinMove = !lk.auto && nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
+    lk.pinMove = !lk.auto && !lk.merge && nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
     if (lk.auto) { const sp = autoOutPoint(lk.id, p.x, p.y); lk.x1 = sp.x; lk.y1 = sp.y; } // dal pallino d'uscita più vicino
     lk.x2 = p.x; lk.y2 = p.y; lk.over = null; lk.overAnc = null;
     if (!lk.pinMove) {
@@ -151,7 +155,13 @@ cv.addEventListener('pointermove', e => {
       const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
       lk.over = ok ? g.dataset.id : null;
       // sul pallino più vicino al puntatore (preferendo quello compatibile), non su quello disegnato sopra
-      lk.overAnc = ok && !lk.auto ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
+      if (lk.merge && g && g.dataset.id === lk.id) { // Ctrl su un pallino, sopra il suo blocco: pallino con cui fonderlo
+        const hit = pinAt(findM(curTree(), lk.id).n, S.L.get(lk.id), p, lk.kind);
+        lk.over = lk.id; lk.overAnc = hit && !(hit.kind === lk.kind && hit.idx === lk.idx) ? hit : null;
+        return render();
+      }
+      // sopra un pallino si aggancia a quello, sul corpo del blocco ne nascerà uno nuovo
+      lk.overAnc = ok ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
         || (a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null) : null;
     }
     return render();
@@ -183,8 +193,14 @@ cv.addEventListener('pointermove', e => {
     grp.w = Math.max(GMIN[0], Math.round(P.w0 + dx / v.k)); grp.h = Math.max(GMIN[1], Math.round(P.h0 + dy / v.k));
     return render();
   }
+  if (P.note) {
+    const nt = findNote(curTree(), P.id);
+    nt.w = clamp(Math.round(P.w0 + dx / v.k), 60, 800); nt.h = clamp(Math.round(P.h0 + dy / v.k), 32, 800);
+    return render();
+  }
   const n = findM(curTree(), P.id).n;
-  n.w = clamp(Math.round(P.w0 + dx / v.k), RMIN[0], RMAX[0]); n.h = clamp(Math.round(P.h0 + dy / v.k), RMIN[1], RMAX[1]);
+  n.w = clamp(Math.round(P.w0 + dx / v.k), RMIN[0], RMAX[0]);
+  if (n.type === 'table') delete n.h; else n.h = clamp(Math.round(P.h0 + dy / v.k), RMIN[1], RMAX[1]); // tabella: altezza automatica
   render();
 });
 
@@ -247,22 +263,32 @@ function endPointerCore(e) {
   if (P.mode === 'clink') { const id = P.id; P = null; toggleSel(id); return render(); } // Ctrl + clic senza trascinare
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
-    if (lk.auto) { if (lk.over) return autoLink(lk.id, lk.over); render(); return toast('Rilascia su un altro blocco per collegarli'); }
+    if (lk.auto) { // Ctrl + trascina dal blocco: sopra un ingresso si aggancia a quello, sul blocco ne nasce uno nuovo
+      if (!lk.over) { render(); return toast('Rilascia su un altro blocco per collegarli'); }
+      if (lk.overAnc && lk.overAnc.kind !== 'in') { render(); return toast('Un’uscita va collegata a un ingresso'); }
+      return autoLink(lk.id, lk.over, lk.overAnc && lk.overAnc.idx);
+    }
+    if (lk.merge && moved && lk.over === lk.id) { // Ctrl + pallino su un altro pallino dello stesso blocco: si fondono
+      const oa = lk.overAnc; render();
+      if (!oa) return toast('Rilascia su un altro pallino di questo blocco per fonderli');
+      if (oa.kind !== lk.kind) return toast('Pallini di tipo diverso: cambia prima il tipo di uno dei due');
+      return mergePins(lk.id, lk.kind, lk.idx, oa.idx);
+    }
+    if (lk.merge && moved && !lk.over) { render(); return toast('Con Ctrl: rilascia su un altro pallino per fonderli, o su un blocco per collegarlo'); }
     if (!moved) { selectOnly(lk.id); render(); return showPinMenu(e.clientX, e.clientY, lk.id, lk.kind, lk.idx); } // clic sul pallino
     if (lk.pinMove) return setPin(lk.id, lk.kind, lk.idx, lk.pinMove); // pallino spostato lungo il bordo
     if (lk.over) {
-      // sempre da pallino a pallino: uscita → ingresso, rombo → rombo. Sul corpo del blocco vale il pallino più vicino
-      // del tipo giusto; se il blocco non ne ha, ensurePins ne aggiunge uno sul lato rivolto a questo blocco
+      // sempre da pallino a pallino: uscita → ingresso, rombo → rombo. Sopra un pallino si aggancia a quello; sul corpo
+      // del blocco nasce un pallino nuovo, sul lato rivolto al pallino di partenza
       const oa = lk.overAnc, want = { out: 'in', in: 'out', str: 'str' }[lk.kind];
       if (oa && oa.kind !== want) {
         render();
         return toast({ out: 'Un’uscita va collegata a un ingresso', in: 'Un ingresso va collegato a un’uscita', str: 'Un rombo di struttura va collegato a un altro rombo' }[lk.kind]);
       }
       const target = findM(curTree(), lk.over).n, tl = S.L.get(lk.over);
-      const near = () => { let best = 0, bd = Infinity; pinsOf(target)[PK[want]].forEach((q, i) => { const [qx, qy] = pinXY(tl, q), d = Math.hypot(tl.x + qx - lk.x2, tl.y + qy - lk.y2); if (d < bd) { bd = d; best = i; } }); return best; };
-      const tIdx = oa ? oa.idx : near();
-      if (lk.kind === 'str') return link(lk.id, null, lk.over, null, lk.idx, tIdx);
-      return lk.kind === 'out' ? link(lk.id, lk.idx, lk.over, tIdx) : link(lk.over, tIdx, lk.id, lk.idx);
+      const nw = oa ? null : [PK[want], newPinPos(target, tl, lk.x1, lk.y1)], tIdx = oa ? oa.idx : pinsOf(target)[PK[want]].length;
+      if (lk.kind === 'str') return link(lk.id, null, lk.over, null, lk.idx, tIdx, nw && { to: nw });
+      return lk.kind === 'out' ? link(lk.id, lk.idx, lk.over, tIdx, null, 0, nw && { to: nw }) : link(lk.over, tIdx, lk.id, lk.idx, null, 0, nw && { from: nw });
     }
     if (lk.kind === 'in') { // ingresso nel vuoto: si stacca il collegamento principale, il blocco resta dov'è
       const f = findM(curTree(), lk.id); if (f && f.p) return detach(lk.id);

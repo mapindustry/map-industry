@@ -54,7 +54,7 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   (`n.sub`, tela separata, tolte il 2026-11-10) vengono convertite in rami compressi da `flattenSubs` al caricamento
   e all'apertura di un file .json.
 - **Mappa** = un solo albero (non ci sono più livelli): la radice dei dati fa anche da contenitore per `free`,
-  `links` (blocchi liberi, alberi senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text}`).
+  `links` (blocchi liberi, alberi senza collegamento, con `fx/fy`) e `notes` (note sulla tela `{id,x,y,text,w?,h?}`; `w`/`h` dalla maniglia: il testo va a capo e si ferma lì).
   `curTree()` = `S.root`; `setLevelRoot()` la sostituisce quando la radice cambia (vedi `promoteRoot`).
   La tela può restare vuota: eliminando l'ultimo blocco la radice diventa `{ void: true }` (contenitore invisibile
   che tiene le note, saltato da `walkAll`/`sizeMap`); `mutate` promuove a radice il primo blocco aggiunto.
@@ -95,17 +95,22 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     `autoLayout` una volta per le mappe vecchie con dx/dy/fx/fy).
   - `primary` = **idea primaria**, attributo scelto dall'utente (anche più blocchi). La radice dei dati del livello
     nasce primaria ma è solo un dettaglio di struttura: l'utente non vede "radici", vede blocchi.
-  - `pin = { i: [[lato, pos]], o: [[lato, pos]] }` pallini sul bordo (lati l/r/t/b, pos 0–1); senza `pin` valgono
-    `defaultPins` (primaria: ingresso in alto, uscite l/r; altri: ingresso l e uscita r, scambiati con `flip`).
-    Un pallino si trascina lungo il bordo (`nearestBorder`, entro 16 px) o verso un altro blocco per collegare.
-    Terzo tipo `s` = **struttura** (rombo `--anc-str`): collega il blocco alle sue parti, non a un passo di processo.
-    **Un collegamento parte e arriva SEMPRE su un pallino** (richiesto il 2026-11-11): processo = uscita (`po`) →
-    ingresso (`pi`), struttura = rombo (`sp`) → rombo del figlio (`ts`, `tsIdx`). Al rilascio vale solo l'abbinamento
-    giusto (altrimenti un avviso); sul corpo del blocco il pallino più vicino del tipo giusto. Un tipo può avere zero
-    pallini, ma se un collegamento ne ha bisogno `ensurePins` (in `mindLayout`) ne aggiunge uno sul lato rivolto
-    all'altro blocco (`facePin`), in un punto libero. Clic su un pallino = menu: tipo, duplica, elimina (`editPin`: i
-    collegamenti del pallino tolto o cambiato restano dello stesso tipo e passano a un altro pallino di quel tipo;
-    gli altri indici e i `foldOut` vengono riassegnati).
+  - `pin = { i: [[lato, pos]], o: [[lato, pos]], s: [] }` pallini sul bordo (lati l/r/t/b, pos 0–1).
+    **I pallini esistono solo dove c'è un collegamento** (richiesto il 2026-11-11): non si aggiungono a mano (niente
+    contatori, Duplica, Scambia, posizione standard); nascono collegando e spariscono quando restano senza collegamenti
+    (`tidyPins` in `mindLayout`, dopo `ensurePins`: salva i pallini in ogni blocco con `pinData` — i blocchi vecchi
+    prendono `defaultPins` — e toglie quelli inutilizzati riscrivendo gli indici). Per cambiare pallini e collegamenti
+    insieme si lavora sui riferimenti (`pinEnds`: estremi come array dei pallini) e `pinWrite` riscrive po/pi/sp/ts.
+    Tipi: ingresso `i`, uscita `o`, struttura `s` (rombo `--anc-str`, collega il blocco alle sue parti).
+    **Un collegamento parte e arriva SEMPRE su un pallino**: processo = uscita (`po`) → ingresso (`pi`), struttura = rombo
+    (`sp`) → rombo del figlio (`ts`). Trascinando da un pallino: vicino al bordo scorre (`nearestBorder`, 16 px), lontano
+    collega; al rilascio sopra un pallino del tipo giusto si aggancia a quello (tipo sbagliato = avviso), sul corpo del
+    blocco ne nasce uno nuovo (`newPinPos`, passato a `link(…, add)`). Clic su un pallino = menu: Tipo
+    (`changePinType`: il collegamento cambia verso — un collegamento d'albero che si inverte diventa aggiuntivo con
+    `reverseEnd` — o diventa di struttura; all'altro capo il pallino cambia tipo se serve solo a lui, altrimenti ne
+    nasce uno accanto; niente doppioni) ed Elimina il pallino con i suoi collegamenti (`deletePin`).
+    **Ctrl + trascina un pallino su un altro dello stesso blocco = fonderli** (`S.link.merge`, `mergePins`; tipi diversi:
+    avviso, va cambiato prima il tipo); con Ctrl il pallino non scorre, e su un altro blocco collega come sempre.
   - Rami compressi: `fold` (tutti i rami) o `foldOut` (`['o:1','s:0']`, solo i rami che partono da quei pallini,
     dal menu del pallino). `mindLayout` toglie da `L` i discendenti (`foldedSet`/`isFoldedChild`), quindi non si
     disegnano né loro né i loro collegamenti; "+N" (sull'angolo, o accanto al pallino) per riaprirli, al passaggio
@@ -131,8 +136,9 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     `text` = titolo, anche vuoto). Misure in `listSize`/`tableSize` (chiamate da `sizeMap`), disegno in
     `listMarkup`/`tableMarkup`; le voci degli elenchi partono dall'alto anche in un blocco più alto. Elenchi: ogni riga del testo è una voce, mentre si scrive Invio = nuova voce (Ctrl+Invio
     o clic fuori per finire). Tabella: doppio clic su una cella (editor `cell`, id `blocco|riga|colonna`), Tab = cella
-    successiva (dall'ultima aggiunge una riga); Righe/Colonne nel menu, tasto destro su una cella = elimina riga/colonna;
-    niente maniglia di ridimensionamento. Cerca trova anche il testo delle celle.
+    successiva (dall'ultima aggiunge una riga); Righe/Colonne nel menu, tasto destro su una cella = elimina riga/colonna.
+    Il testo delle celle va a capo e la riga si alza quanto serve (`cells`, `rowY`, `rowHs`); la maniglia cambia solo la
+    larghezza (`n.w`, colonne in proporzione); aggiungendo colonne la tabella cresce della loro misura (`tableNatural`). Cerca trova anche il testo delle celle.
     `exp` = espandibile: titolo (`text`) con freccina (`data-xtog`, `toggleExp`, anche in sola lettura), aperto (`open`)
     mostra il testo `body` più piccolo (`expSize`/`expMarkup`); doppio clic sotto il titolo = editor `body` (Invio a capo).
   - **Immagine e audio** (`js/media.js`, tipi `img`/`audio`, richiesti il 2026-11-11): il file sta nella mappa come data URL
@@ -159,18 +165,19 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   Incolla stile di un collegamento va su tutti. Attenzione: con la barra dei componenti aperta `<body>` ha la classe
   `side`, quindi per la barra si usa `#side` (con `.side` i tasti della mappa si fermavano tutti).
 - **Ctrl + trascina da un blocco a un altro = collegamento** (richiesto il 2026-11-11): `P.mode = 'clink'` al clic, diventa
-  `link` con `S.link.auto` appena il mouse si muove (niente scorrimento del pallino, niente `overAnc`). Al rilascio
-  `autoLink`: uscita del primo più vicina al secondo blocco, ingresso del secondo più vicino a quell'uscita (`nearestPin`;
-  senza pallini li aggiunge `ensurePins`). Ctrl + clic senza trascinare resta la selezione (deciso al rilascio).
+  `link` con `S.link.auto` appena il mouse si muove (niente scorrimento del pallino). Al rilascio `autoLink`: uscita
+  sempre nuova sul primo; sul secondo l'ingresso su cui si rilascia (`overAnc`) o, sul corpo, uno nuovo. I nuovi stanno
+  sui lati che si guardano, all'altezza dell'altro blocco e lontani dagli altri pallini (`newPinPos`), nello stesso passo
+  di annullamento. Ctrl + clic senza trascinare resta la selezione (deciso al rilascio).
 - Maiusc/Ctrl + clic aggiunge o toglie anche i collegamenti (`toggleEdgeSel`; `keepEdge` porta `S.esel` in `S.esels`), e
   Maiusc + riquadro aggiunge. Canc = `removeSelected`: blocchi, note, gruppi e collegamenti selezionati (`selEdges`,
   `cutEdges`) in un solo passo; un solo collegamento → `deleteEdge`.
 - Lo stile di serie dipende dal livello (`sizeMap`: 1 per primo livello e blocchi liberi, 2 sotto): `mutate` confronta
   i livelli prima e dopo (`styleLevels`/`keepLook`) e chi cambia livello tiene fs/fw/bw che aveva (staccare un blocco non
   lo fa diventare grassetto). Primarie e svincoli esclusi.
-- Rami senza `po` seguono il pallino d'uscita a destra (`outIdx`, cercato sui pallini salvati, non su quelli provvisori del
-  trascinamento); `setPin`/`addPin` chiamano `freezeOuts`, che scrive `po`, così spostando i pallini i collegamenti e i
-  rami compressi (`foldOut` 'o:N') restano sullo stesso pallino.
+- Rami senza `po` (dati vecchi, rami nuovi con Tab) seguono il pallino d'uscita a destra (`outIdx`); `setPin` chiama
+  `freezeOuts` e `pinWrite` scrive sempre `po`, così i collegamenti e i rami compressi (`foldOut` 'o:N') restano sullo
+  stesso pallino.
 - Selezione di un collegamento: `S.esel` = chiave. Eliminare il principale = `detach` (il blocco resta libero, stessa
   posizione); un aggiuntivo si toglie da `tree.links`. Appunti: `S.clip` (`cloneFresh` rinomina id e collegamenti).
 - `findM(tree,id)` → `{ n, p, list }` cerca anche tra i blocchi liberi; `walkAll` li visita tutti.
@@ -182,11 +189,11 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     verso l'esterno (resta fermo il bordo destro, `endEdit`); Esc su un elemento appena creato lo toglie (`markFresh`);
   - frecce = selezione al blocco vicino (`moveSel`); Ctrl+V sul blocco appena copiato incolla libero, non dentro
     (`S.clip.src`); "Seleziona il ramo" e "Adatta alla vista" nei menu; forma e tratto lasciano aperto il menu;
-  - menu del blocco: colore, azioni, Elimina, poi Stile e Pallini in fondo; la riga di aiuto sparisce alla prima modifica;
+  - menu del blocco: colore, azioni, Elimina, poi Stile in fondo; la riga di aiuto sparisce alla prima modifica;
 - Menu (riordinati il 2026-11-10): ogni menu del tasto destro apre con il titolo dell'oggetto (`title()` → `.mtitle`),
   poi le azioni con la scorciatoia a destra (`item(a, etichetta, classe, scorciatoia, spiegazione)` → `<kbd>`/`<small>`),
   Elimina, e in fondo le sezioni di stile (`head()` → `.mhead`). Le scelte attive hanno la spunta (`.on`).
-  Pallini = contatori −/+ (`pinsHtml`, `data-st="pin"`); forma e tratto del collegamento = pulsanti con disegno (`seg`).
+  Forma e tratto del collegamento = pulsanti con disegno (`seg`).
   Tutto ciò che si regola lascia aperto il menu. Barra: Progetti ed Esporta, Salva a destra (richiesto il 2026-11-11).
   - la data del progetto cambia solo con una modifica (`dirty`); il bagliore non va nell'esportazione.
 - Cerca (Ctrl+F, `js/find.js`): campo `#find` sotto la barra, solo su richiesta. Trova blocchi (testo, etichetta) e note

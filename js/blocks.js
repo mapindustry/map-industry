@@ -5,7 +5,8 @@
 //   giuste anche se le voci cambiano ordine); clic sulla casella = spunta.
 // - Tabella: n.table = { rows: [[cella, …], …] }, la prima riga è l'intestazione; n.text è il titolo sopra la
 //   tabella (vuoto = niente titolo). Doppio clic su una cella per scriverla, Tab passa alla successiva (dall'ultima
-//   aggiunge una riga). Righe e colonne dal menu. La tabella si misura da sola (niente maniglia di ridimensionamento).
+//   aggiunge una riga). Righe e colonne dal menu. Il testo delle celle va a capo e la riga si alza quanto serve; con la
+//   maniglia si cambia solo la larghezza (n.w), le colonne in proporzione.
 // - Espandibile ('exp'): titolo (n.text) con una freccina; aperto (n.open) mostra sotto il testo (n.body) più piccolo.
 //   Clic sulla freccina = apre/chiude (anche in sola lettura); doppio clic sul testo per scriverlo (Invio = a capo,
 //   Ctrl+Invio o clic fuori per finire).
@@ -29,14 +30,21 @@ function listSize(n, lv, fs, font, lh, padX, padY) {
 const tableRows = n => (n.table && n.table.rows && n.table.rows.length ? n.table.rows : [['Colonna 1', 'Colonna 2'], ['', '']]);
 const cellFont = (n, fs, head) => `${n.it ? 'italic ' : ''}${head ? 600 : 400} ${fs}px ${FB}`;
 function tableSize(n, lv, fs, font, lh) {
-  const rows = tableRows(n), nc = Math.max(...rows.map(r => r.length)), cfs = Math.max(10, fs - 1);
+  const rows = tableRows(n), nc = Math.max(...rows.map(r => r.length)), cfs = Math.max(10, fs - 1), clh = Math.round(cfs * 1.28);
   const colW = [];
   for (let c = 0; c < nc; c++) colW.push(Math.min(240, Math.max(56, ...rows.map((r, i) => tw(r[c] || '', cellFont(n, cfs, i === 0)) + 18))));
-  const rowH = Math.round(cfs * 1.28) + 10, title = n.text ? ell(n.text, 420, font) : '', titleH = title ? lh + 14 : 0;
+  const title = n.text ? ell(n.text, n.w ? Math.max(40, n.w - 28) : 420, font) : '', titleH = title ? lh + 14 : 0;
   let w = colW.reduce((a, b) => a + b, 0);
-  if (title && tw(title, font) + 28 > w) { colW[nc - 1] += tw(title, font) + 28 - w; w = tw(title, font) + 28; }
+  if (title && !n.w && tw(title, font) + 28 > w) { colW[nc - 1] += tw(title, font) + 28 - w; w = tw(title, font) + 28; }
+  // ridimensionata in larghezza con la maniglia (n.w): le colonne si allargano o si stringono in proporzione
+  if (n.w) { const k = n.w / w; for (let c = 0; c < nc; c++) colW[c] = Math.max(28, colW[c] * k); w = colW.reduce((a, b) => a + b, 0); }
   const colX = []; colW.reduce((x, cw, i) => (colX[i] = x) + cw, 0);
-  return { lines: title ? [title] : [], lh, w: Math.ceil(w), h: titleH + rows.length * rowH, tb: { rows, nc, colX, colW, rowH, titleH, cfs } };
+  // il testo delle celle va a capo nella sua colonna e la riga si alza quanto serve per contenerlo tutto
+  const cells = rows.map((r, i) => Array.from({ length: nc }, (_, c) => r[c] ? wrap(r[c], Math.max(10, colW[c] - 18), cellFont(n, cfs, i === 0), 60).map(t => ell(t, Math.max(10, colW[c] - 18), cellFont(n, cfs, i === 0))) : []));
+  const rowHs = cells.map(cr => Math.max(1, ...cr.map(x => x.length)) * clh + 10), rowY = [];
+  rowHs.reduce((y, h, i) => (rowY[i] = y) + h, titleH);
+  const h = titleH + rowHs.reduce((a, b) => a + b, 0);
+  return { lines: title ? [title] : [], lh, w: Math.ceil(w), h, tb: { rows, nc, colX, colW, rowY, rowHs, titleH, cfs, clh, cells } };
 }
 
 /* ---------- disegno ---------- */
@@ -61,16 +69,16 @@ function listMarkup(n, l, live, fsSt) {
 function tableMarkup(n, l, live, fsSt) {
   const T = l.tb, fs = fsOf(n, l.depth);
   let s = l.lines.length ? `<text x="${l.w / 2}" y="${T.titleH / 2 + fs * 0.36}" text-anchor="middle"${fsSt}>${esc(l.lines[0])}</text>` : '';
-  s += `<rect class="thead" x="0.5" y="${T.titleH + 0.5}" width="${l.w - 1}" height="${T.rowH}" rx="${T.titleH ? 0 : 6}"/>`;
+  s += `<rect class="thead" x="0.5" y="${T.titleH + 0.5}" width="${l.w - 1}" height="${T.rowHs[0]}" rx="${T.titleH ? 0 : 6}"/>`;
   let grid = '';
-  for (let r = T.titleH ? 0 : 1; r < T.rows.length; r++) grid += `M0,${T.titleH + r * T.rowH} H${l.w} `;
+  for (let r = T.titleH ? 0 : 1; r < T.rows.length; r++) grid += `M0,${T.rowY[r]} H${l.w} `;
   for (let c = 1; c < T.nc; c++) grid += `M${T.colX[c]},${T.titleH} V${l.h} `;
   s += `<path class="tgrid" d="${grid}"/>`;
   T.rows.forEach((row, r) => {
     for (let c = 0; c < T.nc; c++) {
-      const x = T.colX[c], y = T.titleH + r * T.rowH, v = row[c] || '';
-      if (live) s += `<rect class="tcell" data-cell="${r}:${c}" x="${x}" y="${y}" width="${T.colW[c]}" height="${T.rowH}"/>`;
-      if (v) s += `<text class="tct${r === 0 ? ' th' : ''}" x="${x + 9}" y="${y + T.rowH / 2 + T.cfs * 0.36}" style="font-size:${T.cfs}px${n.it ? ';font-style:italic' : ''}">${esc(ell(v, T.colW[c] - 18, cellFont(n, T.cfs, r === 0)))}</text>`;
+      const x = T.colX[c], y = T.rowY[r], ls = T.cells[r][c];
+      if (live) s += `<rect class="tcell" data-cell="${r}:${c}" x="${x}" y="${y}" width="${T.colW[c]}" height="${T.rowHs[r]}"/>`;
+      ls.forEach((t, i) => { s += `<text class="tct${r === 0 ? ' th' : ''}" x="${x + 9}" y="${y + 5 + (i + 0.78) * T.clh}" style="font-size:${T.cfs}px${n.it ? ';font-style:italic' : ''}">${esc(t)}</text>`; });
     }
   });
   return s;
@@ -92,14 +100,25 @@ function toggleCheck(id, k) {
     if (!n.done.length) delete n.done;
   });
 }
-// righe e colonne: aggiunte o tolte in fondo (almeno l'intestazione e una colonna)
+// misure della tabella senza ridimensionamento (per farla crescere quando si aggiungono righe o colonne)
+function tableNatural(n, depth) {
+  const fs = fsOf(n, depth); return tableSize({ ...n, w: 0, h: 0 }, depth, fs, nodeFont(n, depth), Math.round(fs * 1.28));
+}
+// righe e colonne: aggiunte o tolte in fondo (almeno l'intestazione e una colonna); una tabella ridimensionata
+// cresce o cala della misura della riga o colonna, così le altre restano come sono
 function resizeTable(id, dr, dc) {
+  const d = (S.L.get(id) || {}).depth || 1;
   mutate(t => {
-    const n = findM(t, id).n, rows = (n.table = { rows: tableRows(n).map(r => r.slice()) }).rows, nc = Math.max(...rows.map(r => r.length));
-    rows.forEach(r => { while (r.length < nc) r.push(''); });
-    if (dr > 0) rows.push(Array(nc).fill('')); else if (dr < 0 && rows.length > 1) rows.pop();
-    if (dc > 0) rows.forEach((r, i) => r.push(i === 0 ? `Colonna ${nc + 1}` : '')); else if (dc < 0 && nc > 1) rows.forEach(r => r.pop());
+    const n = findM(t, id).n, before = n.w && tableNatural(n, d);
+    applyTableResize(n, dr, dc);
+    if (before) { const after = tableNatural(n, d); n.w = Math.max(60, Math.round(n.w + after.w - before.w)); }
   });
+}
+function applyTableResize(n, dr, dc) {
+  const rows = (n.table = { rows: tableRows(n).map(r => r.slice()) }).rows, nc = Math.max(...rows.map(r => r.length));
+  rows.forEach(r => { while (r.length < nc) r.push(''); });
+  if (dr > 0) rows.push(Array(nc).fill('')); else if (dr < 0 && rows.length > 1) rows.pop();
+  if (dc > 0) rows.forEach((r, i) => r.push(i === 0 ? `Colonna ${nc + 1}` : '')); else if (dc < 0 && nc > 1) rows.forEach(r => r.pop());
 }
 function deleteTableLine(id, r, c, what) {
   mutate(t => {
@@ -112,7 +131,7 @@ function deleteTableLine(id, r, c, what) {
 function cellAt(id, p) {
   const l = S.L.get(id); if (!l || !l.tb) return null;
   const T = l.tb, y = p.y - l.y - T.titleH, x = p.x - l.x; if (y < 0 || x < 0 || x > l.w) return null;
-  const r = Math.floor(y / T.rowH); if (r >= T.rows.length) return null;
+  const r = T.rowY.findIndex((ry, i) => p.y - l.y >= ry && p.y - l.y < ry + T.rowHs[i]); if (r < 0) return null;
   let c = T.colX.findIndex((cx, i) => x >= cx && x < cx + T.colW[i]); if (c < 0) c = T.nc - 1;
   return [r, c];
 }
@@ -125,8 +144,8 @@ function startCellEdit(id, r, c) {
 function cellEditorBox(sx, sy, k) {
   const { id, r, c } = cellRef(editing.id), l = S.L.get(id), f = findM(curTree(), id); if (!l || !l.tb || !f) return null;
   const T = l.tb; if (c >= T.nc) return null;
-  return { x: sx(l.x + T.colX[c] + 2), y: sy(l.y + T.titleH + r * T.rowH + 2), w: (T.colW[c] - 4) * k, h: (T.rowH - 4) * k,
-    font: cellFont(f.n, T.cfs, r === 0), fs: T.cfs, lh: Math.round(T.cfs * 1.28), minW: 80, left: true };
+  return { x: sx(l.x + T.colX[c] + 2), y: sy(l.y + T.rowY[r] + 2), w: (T.colW[c] - 4) * k, h: (T.rowHs[r] - 4) * k,
+    font: cellFont(f.n, T.cfs, r === 0), fs: T.cfs, lh: T.clh, minW: 80, left: true };
 }
 function commitCell(ref, v) {
   const { id, r, c } = cellRef(ref), f = findM(curTree(), id); if (!f) return;

@@ -122,15 +122,7 @@ function nodeMenuHtml() {
     stepper('Bordo', 'bw', bwOf(prim, pl.depth) + ' px', 'vbw', 'Bordo più sottile', 'Bordo più spesso') +
     `<div class="mrow"><span>Opacità</span><input type="range" id="mop" min="10" max="100" step="5" value="${op}" aria-label="Opacità del blocco"><span class="val" id="vop">${op}%</span></div>` +
     (nodes.some(n => n.w || n.h) ? item('autosize', 'Dimensione automatica') : '');
-  if (one) h += SEP + pinsHtml(one, 0) +
-    (!one.primary ? item('flip', 'Scambia ingresso e uscita') : '') +
-    (one.pin ? item('pinreset', 'Pallini nella posizione standard') : '');
   return h;
-}
-// pallini come contatori: −/+ toglie l'ultimo o ne aggiunge uno (il menu resta aperto); min = minimo per tipo
-function pinsHtml(n, min) {
-  const P = pinsOf(n), row = (k, label, cnt) => stepper(label, 'pin', cnt, 'vp' + k, `Togli un pallino (${label})`, `Aggiungi un pallino (${label})`, ` data-k="${k}"`);
-  return head('Pallini') + row('in', 'Ingressi', P.i.length) + row('out', 'Uscite', P.o.length) + (min ? '' : row('str', 'Struttura', P.s.length));
 }
 const FW = [[300, 'Leggero'], [400, 'Normale'], [500, 'Medio'], [600, 'Semigrassetto'], [700, 'Grassetto']];
 function refreshStyleVals() {
@@ -139,7 +131,6 @@ function refreshStyleVals() {
   const set = (id, v) => { const el = $('#' + id); if (el) el.textContent = v; };
   const fsIn = $('#mfs'); if (fsIn && document.activeElement !== fsIn) fsIn.value = fsOf(f.n, l.depth);
   set('vbw', bwOf(f.n, l.depth) + ' px');
-  const P = pinsOf(f.n); set('vpin', P.i.length); set('vpout', P.o.length); set('vpstr', P.s.length);
 }
 // opacità: un solo passo di annullamento per ogni trascinamento del cursore
 let opArmed = true;
@@ -175,13 +166,12 @@ menuEl.addEventListener('change', e => {
   if (e.target.id === 'mfw') { const v = +e.target.value; eachSelected(n => { n.fw = v; }); }
 });
 
-// svincolo: rami, stacca, elimina (eliminandolo la linea si ricongiunge), pallini in fondo (almeno uno per tipo)
+// svincolo: rami, stacca, elimina (eliminandolo la linea si ricongiunge)
 function hubMenuHtml(one, t) {
   return title('Svincolo', 'Tappa di un collegamento') +
     (one.children.length ? item('fold', one.fold ? 'Espandi i rami' : 'Comprimi i rami', '', plural(countDesc(one), '1 blocco', 'blocchi')) + SEP : '') +
     (findM(t, one.id).p ? item('detach', 'Stacca dal collegamento') : '') +
-    item('del', 'Elimina svincolo', ' dng', 'Canc', 'La linea si ricongiunge') + SEP +
-    pinsHtml(one, 1) + (one.pin ? item('pinreset', 'Pallini nella posizione standard') : '');
+    item('del', 'Elimina svincolo', ' dng', 'Canc', 'La linea si ricongiunge');
 }
 
 /* ---------- pallino (clic o tasto destro) ---------- */
@@ -190,10 +180,11 @@ function showPinMenu(cx, cy, id, kind, idx) {
   const n = findM(curTree(), id).n, key = kind === 'in' ? null : (kind === 'str' ? 's:' : 'o:') + idx, cnt = key ? countPin(n, key) : 0;
   const shut = key && !n.fold && (n.foldOut || []).includes(key);
   const TY = [['ptin', 'Ingresso', 'in'], ['ptout', 'Uscita', 'out'], ['ptstr', 'Struttura', 'str']];
-  showMenu(cx + 14, cy + 14, title('Pallino', 'Trascinalo per collegare o per spostarlo') +
+  const nl = pinEnds(curTree()).filter(x => { const X = pinData(n)[PK[kind]][idx]; return (x.from === n && x.fp === X) || (x.to === n && x.tp === X); }).length;
+  showMenu(cx + 14, cy + 14, title('Pallino', 'Trascinalo per collegare o spostarlo · Ctrl + trascina su un altro pallino: fondili') +
     (cnt && !n.fold ? item('pfold', shut ? 'Espandi i blocchi collegati' : 'Comprimi i blocchi collegati', '', String(cnt)) + SEP : '') +
-    head('Tipo') + TY.map(([a, l, k]) => item(a, l, kind === k ? ' on' : '')).join('') + SEP +
-    item('pdup', 'Duplica') + item('pdel', 'Elimina pallino', ' dng'), { kind: 'pin', id, pk: kind, idx, key });
+    head('Tipo') + TY.map(([a, l, k]) => item(a, l, kind === k ? ' on' : '', '', kind === k || !nl ? '' : k === 'str' ? 'Il collegamento diventa di struttura' : 'Il collegamento cambia verso')).join('') + SEP +
+    item('pdel', nl > 1 ? `Elimina il pallino e i suoi ${nl} collegamenti` : 'Elimina il pallino e il suo collegamento', ' dng'), { kind: 'pin', id, pk: kind, idx, key });
 }
 
 /* ---------- apertura ---------- */
@@ -298,11 +289,6 @@ menuEl.addEventListener('click', e => {
       const g = clamp(gapOf(linkData(MENU.id)) + d, 2, 30);
       setEdgeStyle(MENU.id, { gap: g }); $('#vgap').textContent = g + ' px'; return;
     }
-    if (st.dataset.st === 'pin') { // contatore dei pallini: −/+ toglie l'ultimo o ne aggiunge uno
-      const k = st.dataset.k, n = findM(curTree(), MENU.id || S.sel).n, len = pinsOf(n)[PK[k]].length;
-      if (d > 0) addPin(n.id, k); else if (len > (n.hub ? 1 : 0)) removePin(n.id, k); else return;
-      return refreshStyleVals();
-    }
     if (st.dataset.st === 'fs') eachSelected((n, l) => { n.fs = clamp(fsOf(n, l.depth) + d, 9, 48); });
     else eachSelected((n, l) => { n.bw = clamp(Math.round((bwOf(n, l.depth) + d * 0.5) * 10) / 10, 0, 8); });
     return refreshStyleVals();
@@ -353,16 +339,13 @@ menuEl.addEventListener('click', e => {
   else if (a === 'selbranch') selectBranch(id);
   else if (a === 'child') addChild(id);
   else if (a === 'detach') detach(id);
-  else if (a === 'flip') toggleFlip(id);
   else if (a === 'primary') togglePrimary(id);
   else if (a === 'fold') toggleFold(id);
   else if (a === 'tag') startTagEdit(id);
   else if (a === 'tagdel') mutate(t => { const f = findM(t, id); if (f) delete f.n.tag; });
-  else if (a === 'ptin' || a === 'ptout' || a === 'ptstr') { const nk = a.slice(2); if (nk !== M.pk) editPin(id, M.pk, M.idx, 'type', nk); }
+  else if (a === 'ptin' || a === 'ptout' || a === 'ptstr') { const nk = a.slice(2); if (nk !== M.pk) changePinType(id, M.pk, M.idx, nk); }
   else if (a === 'pfold') toggleFold(id, M.key);
-  else if (a === 'pdup') editPin(id, M.pk, M.idx, 'dup');
-  else if (a === 'pdel') editPin(id, M.pk, M.idx, 'del');
-  else if (a === 'pinreset') resetPins(id);
+  else if (a === 'pdel') deletePin(id, M.pk, M.idx);
   else if (a === 'einsert') insertOnLink(id);
   else if (a === 'ehub') insertOnLink(id, true);
   else if (a === 'autosize') autoSize();

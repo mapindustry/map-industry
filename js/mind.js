@@ -170,6 +170,7 @@ function mindLayout(tree) {
   const SZ2 = changed && tree.primary && !tree.void ? sizeMap(tree) : SZ; // la radice può essere appena diventata primaria
   if (changed) save();
   if (ensurePins(tree, SZ2)) save();
+  if (tidyPins(tree)) save(); // pallini solo dove ci sono collegamenti
   // i rami compressi non hanno posto nel disegno: senza voce in L non si disegnano né loro né i loro collegamenti
   const L = new Map(), hid = foldedSet(tree);
   walkAll(tree, n => { if (!hid.has(n.id)) L.set(n.id, { ...SZ2.get(n.id), x: n.x, y: n.y }); });
@@ -219,8 +220,9 @@ function toggleFold(id, key) {
 function notesLayout(tree) {
   const NL = new Map();
   (tree.notes || []).forEach(nt => {
-    const lines = wrap(nt.text || 'Nota', 220, CNOTE_FONT, 10);
-    NL.set(nt.id, { x: nt.x, y: nt.y, lines, w: Math.max(60, Math.max(...lines.map(s => tw(s, CNOTE_FONT))) + 22), h: lines.length * 18 + 14 });
+    // ridimensionata con la maniglia (nt.w/nt.h): il testo va a capo sulla larghezza e si ferma all'altezza
+    const lines = wrap(nt.text || 'Nota', nt.w ? Math.max(30, nt.w - 22) : 220, CNOTE_FONT, nt.h ? Math.max(1, Math.floor((nt.h - 14) / 18)) : 10);
+    NL.set(nt.id, { x: nt.x, y: nt.y, lines, w: nt.w || Math.max(60, Math.max(...lines.map(s => tw(s, CNOTE_FONT))) + 22), h: nt.h || lines.length * 18 + 14 });
   });
   NL.full = new Map(NL); groupHidden(tree).forEach(id => NL.delete(id)); // note dentro un gruppo compresso
   return NL;
@@ -466,7 +468,7 @@ function treeMarkup(tree, L, NL, live) {
       // blocco con rami compressi: un secondo riquadro sfalsato dietro, come una pila
       (folded ? `<rect class="stack" x="5" y="5" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"/>` : '') +
       `<rect class="box" width="${l.w}" height="${l.h}" rx="${dd === 0 ? 10 : 7}"${boxSt ? ` style="${boxSt}"` : ''}/>${txt}` +
-      (sel && single && n.type !== 'table' ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
+      (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') +
       refMarkup(n, l, live) + anchors + fold + `</g>`;
   });
   // note sulla tela: appunti, non blocchi
@@ -477,7 +479,8 @@ function treeMarkup(tree, L, NL, live) {
     cnotes += `<g class="cnote${sel ? ' sel' : ''}${fcls(nt.id)}${hide ? ' editing' : ''}"${live ? ` data-note="${nt.id}"` : ''} transform="translate(${l.x},${l.y})">` +
       (sel ? `<rect class="ring" x="-4" y="-4" width="${l.w + 8}" height="${l.h + 8}" rx="7"/>` : '') +
       `<rect class="nbox" width="${l.w}" height="${l.h}" rx="4"/><rect class="nbar" width="3" height="${l.h}" rx="1.5"/>` +
-      l.lines.map((s, i) => `<text x="12" y="${20 + i * 18}">${esc(s)}</text>`).join('') + `</g>`;
+      l.lines.map((s, i) => `<text x="12" y="${20 + i * 18}">${esc(s)}</text>`).join('') +
+      (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
   });
   // gruppi: riquadri sotto a tutto; si prendono dal titolo o dal bordo, l'interno lascia passare i clic
   let grps = '';
@@ -612,11 +615,14 @@ function emptyLevel(t) {
 // Se il blocco d'arrivo non ha ancora un genitore diventa suo figlio, altrimenti si aggiunge un collegamento:
 // così un blocco può avere più ingressi.
 // sp (indice di un pallino di struttura) al posto di po/pi = collegamento di struttura: `to` è una parte di `from`
-function link(fromId, po, toId, pi, sp = null, ts = 0) {
+// add = { from: [tipo, [lato, pos]], to: [tipo, [lato, pos]] }: pallini nuovi da aggiungere in fondo all'elenco di quel
+// tipo (gli indici po/pi/sp/ts passati sono già quelli dei pallini nuovi), nello stesso passo di annullamento
+function link(fromId, po, toId, pi, sp = null, ts = 0, add = null) {
   const t = curTree(); if (fromId === toId) return render();
   const a = findM(t, fromId), b = findM(t, toId); if (!a || !b) return render();
   const links = allLinks(t), str = sp != null;
   const same = links.find(L => L.from.id === fromId && L.to.id === toId);
+  if (same && add) { render(); return toast('Sono già collegati'); }
   if (same) {
     // stesso collegamento con pallini diversi (o di altro tipo): si riaggancia
     const moved = str ? !isStr(same.e) || strIdx(a.n, same.e) !== sp || tsIdx(b.n, same.e) !== ts
@@ -629,6 +635,10 @@ function link(fromId, po, toId, pi, sp = null, ts = 0) {
   let inside = false; walk(b.n, n => { if (n.id === fromId) inside = true; });
   const asChild = !b.p && !inside;
   mutate(tt => {
+    if (add) { // pallini nuovi in fondo agli elenchi: gli indici degli altri collegamenti non cambiano
+      if (add.from) pinData(findM(tt, fromId).n)[add.from[0]].push(add.from[1]);
+      if (add.to) pinData(findM(tt, toId).n)[add.to[0]].push(add.to[1]);
+    }
     if (asChild) {
       const f = findM(tt, toId), pp = findM(tt, fromId).n;
       if (f.n === tt) {
@@ -648,25 +658,40 @@ function link(fromId, po, toId, pi, sp = null, ts = 0) {
   });
   selectOnly(toId); render(); toast('Collegati');
 }
-// Ctrl + trascina da un blocco a un altro: pallini scelti da soli. Uscita del primo più vicina al secondo blocco,
-// ingresso del secondo più vicino a quell'uscita (di solito quelli di serie); senza pallini ne aggiunge ensurePins.
+// Ctrl + trascina da un blocco a un altro: ogni volta un pallino d'uscita nuovo sul primo; sul secondo l'ingresso su cui
+// si rilascia o, sul corpo del blocco, uno nuovo. I nuovi stanno sui lati che si guardano, all'altezza dell'altro blocco
+// e lontani dai pallini che ci sono già (newPinPos).
 // Poi si possono cambiare come sempre, trascinando i pallini o dal loro menu.
 function nearestPin(list, l, x, y) {
   let best = -1, bd = Infinity;
   list.forEach((q, i) => { const [qx, qy] = pinXY(l, q), d = Math.hypot(l.x + qx - x, l.y + qy - y); if (d < bd) { bd = d; best = i; } });
   return best;
 }
-// punto da cui parte la linea mentre si trascina: l'uscita più vicina al puntatore, o il centro del blocco
+// punto da cui parte la linea mentre si trascina: dove nascerà il pallino d'uscita nuovo
 function autoOutPoint(id, x, y) {
-  const f = findM(curTree(), id), l = S.L.get(id), P = pinsOf(f.n).o, i = nearestPin(P, l, x, y);
-  if (i < 0) return { x: l.x + l.w / 2, y: l.y + l.h / 2 };
-  const [px, py] = pinXY(l, P[i]); return { x: l.x + px, y: l.y + py };
+  const f = findM(curTree(), id), l = S.L.get(id), [px, py] = pinXY(l, newPinPos(f.n, l, x, y));
+  return { x: l.x + px, y: l.y + py };
 }
-function autoLink(fromId, toId) {
-  const t = curTree(), a = findM(t, fromId), b = findM(t, toId), bl = S.L.get(toId); if (!a || !b || !bl) return render();
-  const po = Math.max(0, nearestPin(pinsOf(a.n).o, S.L.get(fromId), bl.x + bl.w / 2, bl.y + bl.h / 2));
-  const s = autoOutPoint(fromId, bl.x + bl.w / 2, bl.y + bl.h / 2);
-  link(fromId, po, toId, Math.max(0, nearestPin(pinsOf(b.n).i, bl, s.x, s.y)));
+// lato rivolto al punto (x, y) e posizione libera più vicina a quella del punto proiettato sul lato
+function newPinPos(n, l, x, y) {
+  const [side] = facePin(l, x, y), P = pinsOf(n);
+  const want = clamp(side === 'l' || side === 'r' ? (y - l.y) / l.h : (x - l.x) / l.w, 0.15, 0.85);
+  const used = [...P.i, ...P.o, ...P.s].filter(q => q[0] === side).map(q => q[1]);
+  let best = want, bd = Infinity;
+  for (let v = 0.1; v <= 0.901; v += 0.05) {
+    if (used.some(u => Math.abs(u - v) < 0.12)) continue;
+    if (Math.abs(v - want) < bd) { bd = Math.abs(v - want); best = Math.round(v * 100) / 100; }
+  }
+  return [side, best];
+}
+// pi = ingresso esistente su cui si è rilasciato (altrimenti ne nasce uno nuovo); l'uscita è sempre nuova
+function autoLink(fromId, toId, pi) {
+  const t = curTree(), a = findM(t, fromId), b = findM(t, toId), al = S.L.get(fromId), bl = S.L.get(toId); if (!a || !b || !al || !bl) return render();
+  const tgt = pi != null ? pinsOf(b.n).i[pi] : null, [tx, ty] = tgt ? pinXY(bl, tgt) : [bl.w / 2, bl.h / 2];
+  const o = newPinPos(a.n, al, bl.x + tx, bl.y + ty);
+  if (tgt) return link(fromId, pinsOf(a.n).o.length, toId, pi, null, 0, { from: ['o', o] });
+  const [ox, oy] = pinXY(al, o), i = newPinPos(b.n, bl, al.x + ox, al.y + oy);
+  link(fromId, pinsOf(a.n).o.length, toId, pinsOf(b.n).i.length, null, 0, { from: ['o', o], to: ['i', i] });
 }
 // eliminare un collegamento: quello aggiuntivo sparisce; quello principale stacca il blocco, che resta dov'è
 function deleteEdge(key) {
@@ -713,54 +738,142 @@ function toggleFlip(id) { mutate(t => { const f = findM(t, id); if (!f) return; 
 function togglePrimary(id) { mutate(t => { const f = findM(t, id); if (!f) return; if (f.n.primary) { if (f.n === t) f.n.primary = false; else delete f.n.primary; } else f.n.primary = true; }); }
 // pallini: aggiungi / togli / sposta / di serie
 function spreadSide(list, side) { const on = list.filter(p => p[0] === side); on.forEach((p, i) => { p[1] = Math.round((i + 1) / (on.length + 1) * 100) / 100; }); }
-function addPin(id, kind) {
-  mutate(t => {
-    const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[PK[kind]];
-    freezeOuts(t, n);
-    const side = list.length ? list[list.length - 1][0] : { in: 'l', out: 'r', str: 'b' }[kind];
-    list.push([side, 0.5]); spreadSide(list, side); n.pin = P;
+/* ---------- pallini legati ai collegamenti ----------
+// Dal 2026-11-11 i pallini esistono solo dove c'è un collegamento: non si aggiungono a mano, compaiono quando si
+// collega (Ctrl + trascina, o trascinando da un pallino) e spariscono quando non hanno più collegamenti (tidyPins,
+// a ogni disegno). Si può cambiarne il tipo (changePinType: il collegamento cambia verso o diventa di struttura),
+// fonderne due (mergePins, Ctrl + trascina un pallino su un altro) o eliminarli con i loro collegamenti (deletePin).
+// Per cambiare pallini e collegamenti insieme si lavora sui riferimenti ai pallini (pinEnds), poi pinWrite riscrive
+// gli indici (po/pi, sp/ts) di tutti i collegamenti. */
+function pinData(n) { // pallini salvati nel blocco, con i tre elenchi (i blocchi vecchi prendono quelli di serie)
+  if (!n.pin) { const d = defaultPins(n); n.pin = { i: d.i.map(q => [...q]), o: d.o.map(q => [...q]), s: d.s.map(q => [...q]) }; }
+  ['i', 'o', 's'].forEach(k => { if (!n.pin[k]) n.pin[k] = []; });
+  return n.pin;
+}
+function pinEnds(t) {
+  return allLinks(t).map(L => {
+    const str = isStr(L.e), fk = str ? 's' : 'o', tk = str ? 's' : 'i';
+    const fi = str ? strIdx(L.from, L.e) : outIdx(L.from, L.e), ti = str ? tsIdx(L.to, L.e) : inIdx(L.to, L.e);
+    return { L, str, from: L.from, to: L.to, fp: pinData(L.from)[fk][fi] || null, tp: pinData(L.to)[tk][ti] || null };
   });
 }
-function removePin(id, kind) { const n = findM(curTree(), id).n, len = pinsOf(n)[PK[kind]].length; if (len) editPin(id, kind, len - 1, 'del'); }
+function pinWrite(t, ends) {
+  ends.forEach(x => {
+    const e = x.get ? x.get() : x.L.extra ? x.L.e : (x.L.to.edge = x.L.to.edge || {});
+    const ix = (n, k, q) => q ? pinData(n)[k].indexOf(q) : -1;
+    delete e.ps;
+    if (x.str) {
+      e.str = true; delete e.po; delete e.pi;
+      const sp = ix(x.from, 's', x.fp), ts = ix(x.to, 's', x.tp);
+      if (sp > 0) e.sp = sp; else delete e.sp;
+      if (ts > 0) e.ts = ts; else delete e.ts;
+    } else {
+      delete e.str; delete e.sp; delete e.ts;
+      const po = ix(x.from, 'o', x.fp), pi = ix(x.to, 'i', x.tp);
+      if (po >= 0) e.po = po; else delete e.po;
+      if (pi > 0) e.pi = pi; else delete e.pi;
+    }
+  });
+  walkAll(t, n => { if (n.edge && !Object.keys(n.edge).length) delete n.edge; });
+}
+// a ogni disegno: pallini salvati in tutti i blocchi, poi via quelli senza collegamenti (true = dati cambiati)
+function tidyPins(t) {
+  let changed = false;
+  walkAll(t, n => { if (!n.pin || !n.pin.i || !n.pin.o || !n.pin.s) { pinData(n); changed = true; } });
+  const ends = pinEnds(t), used = new Set();
+  ends.forEach(x => { if (x.fp) used.add(x.fp); if (x.tp) used.add(x.tp); });
+  let drop = false;
+  walkAll(t, n => { if (['i', 'o', 's'].some(k => n.pin[k].some(q => !used.has(q)))) drop = true; });
+  if (!drop) return changed;
+  walkAll(t, n => {
+    const fo = (n.foldOut || []).map(key => n.pin[key[0]][+key.slice(2)]); // rami compressi su un pallino: per riferimento
+    ['i', 'o', 's'].forEach(k => { n.pin[k] = n.pin[k].filter(q => used.has(q)); });
+    if (n.foldOut) {
+      n.foldOut = n.foldOut.map((key, j) => { const i = fo[j] ? n.pin[key[0]].indexOf(fo[j]) : -1; return i < 0 ? null : key[0] + ':' + i; }).filter(Boolean);
+      if (!n.foldOut.length) delete n.foldOut;
+    }
+  });
+  pinWrite(t, ends);
+  return true;
+}
+// collegamento d'albero (padre → figlio) che deve cambiare verso: il figlio si stacca (resta dov'è) e il collegamento
+// diventa aggiuntivo, dal figlio al padre, con lo stesso stile e la stessa nota
+function reverseEnd(t, x) {
+  if (x.L.extra) { const lx = x.L.e; [lx.from, lx.to] = [lx.to, lx.from]; x.get = () => lx; return; }
+  const C = x.L.to, Pn = x.L.from, f = findM(t, C.id);
+  const lx = { id: uid(), ...(C.edge || {}), from: C.id, to: Pn.id };
+  f.list.splice(f.list.indexOf(C), 1); delete C.edge; (t.free = t.free || []).push(C);
+  (t.links = t.links || []).push(lx); x.get = () => lx;
+}
+// cambia il tipo di un pallino: i suoi collegamenti lo seguono. Ingresso → uscita (o il contrario): il collegamento
+// cambia verso; verso struttura: diventa di struttura. All'altro capo il pallino cambia tipo anche lui se serve solo
+// a questi collegamenti, altrimenti ne nasce uno nuovo accanto.
+function changePinType(id, kind, idx, nk) {
+  const t0 = curTree(), N0 = findM(t0, id).n, X0 = pinData(N0)[PK[kind]][idx]; if (!X0 || kind === nk) return;
+  const ends0 = pinEnds(t0), touch0 = ends0.filter(x => (x.from === N0 && x.fp === X0) || (x.to === N0 && x.tp === X0));
+  // cambiando verso non deve nascere un doppione
+  const clash = touch0.some(x => {
+    const atFrom = x.from === N0, wantFrom = nk === 'out' ? true : nk === 'in' ? false : atFrom, M = atFrom ? x.to : x.from;
+    return wantFrom !== atFrom && ends0.some(y => y !== x && y.from === (wantFrom ? N0 : M) && y.to === (wantFrom ? M : N0));
+  });
+  if (clash) return toast('Nell’altro verso c’è già un collegamento tra questi blocchi');
+  mutate(t => {
+    const N = findM(t, id).n, P = pinData(N), X = P[PK[kind]][idx]; if (!X) return;
+    const ends = pinEnds(t), touch = ends.filter(x => (x.from === N && x.fp === X) || (x.to === N && x.tp === X));
+    P[PK[kind]].splice(idx, 1); P[PK[nk]].push(X);
+    const moved = new Map();
+    touch.forEach(x => {
+      const atFrom = x.from === N && x.fp === X, wantFrom = nk === 'out' ? true : nk === 'in' ? false : atFrom, str = nk === 'str';
+      const M = atFrom ? x.to : x.from, Q = atFrom ? x.tp : x.fp, qk = x.str ? 's' : atFrom ? 'i' : 'o', mk = str ? 's' : wantFrom ? 'i' : 'o';
+      let Q2 = Q;
+      if (Q && qk !== mk) {
+        if (moved.has(Q)) Q2 = moved.get(Q);
+        else {
+          const MP = pinData(M), shared = ends.some(y => !touch.includes(y) && (y.fp === Q || y.tp === Q));
+          if (!shared) { MP[qk].splice(MP[qk].indexOf(Q), 1); MP[mk].push(Q); }
+          else {
+            const used = [...MP.i, ...MP.o, ...MP.s].filter(q => q[0] === Q[0]).map(q => q[1]);
+            const v = [0.12, -0.12, 0.24, -0.24].map(d => Math.round((Q[1] + d) * 100) / 100).find(v => v >= 0.08 && v <= 0.92 && !used.some(u => Math.abs(u - v) < 0.08));
+            Q2 = [Q[0], v ?? Q[1]]; MP[mk].push(Q2);
+          }
+          moved.set(Q, Q2);
+        }
+      }
+      if (wantFrom !== atFrom) reverseEnd(t, x);
+      x.str = str;
+      if (wantFrom) { x.from = N; x.fp = X; x.to = M; x.tp = Q2; } else { x.to = N; x.tp = X; x.from = M; x.fp = Q2; }
+    });
+    pinWrite(t, ends);
+  });
+}
+// Ctrl + trascina un pallino su un altro dello stesso blocco: i collegamenti del primo passano al secondo
+function mergePins(id, kind, a, b) {
+  mutate(t => {
+    const N = findM(t, id).n, list = pinData(N)[PK[kind]], A = list[a], B = list[b]; if (!A || !B || A === B) return;
+    const ends = pinEnds(t);
+    ends.forEach(x => { if (x.from === N && x.fp === A) x.fp = B; if (x.to === N && x.tp === A) x.tp = B; });
+    if (N.foldOut) { N.foldOut = N.foldOut.filter(k => k !== PK[kind] + ':' + a); if (!N.foldOut.length) delete N.foldOut; }
+    list.splice(list.indexOf(A), 1);
+    pinWrite(t, ends);
+  });
+  toast('Pallini fusi');
+}
+// elimina il pallino con tutti i suoi collegamenti (i blocchi restano dove sono)
+function deletePin(id, kind, idx) {
+  const t0 = curTree(), N0 = findM(t0, id).n, X0 = pinData(N0)[PK[kind]][idx]; if (!X0) return;
+  const keys = pinEnds(t0).filter(x => (x.from === N0 && x.fp === X0) || (x.to === N0 && x.tp === X0)).map(x => x.L.key);
+  mutate(t => keys.forEach(key => {
+    if (key.startsWith('x:')) { t.links = (t.links || []).filter(x => x.id !== key.slice(2)); if (!t.links.length) delete t.links; }
+    else { const g = findM(t, key); if (g && g.p) { g.list.splice(g.list.indexOf(g.n), 1); delete g.n.edge; (t.free = t.free || []).push(g.n); } }
+  }));
+  clearSel(); render(); toast(keys.length === 1 ? 'Collegamento eliminato' : `${keys.length} collegamenti eliminati`);
+}
 function setPin(id, kind, idx, pos) {
   mutate(t => {
     const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n)));
     freezeOuts(t, n); P[PK[kind]][idx] = pos; n.pin = P;
   });
 }
-// Un pallino si duplica, si elimina o cambia tipo. Un collegamento parte e arriva sempre su un pallino del tipo giusto
-// (uscita → ingresso, rombo → rombo): se il suo pallino sparisce o cambia tipo, il collegamento resta com'è e passa
-// al primo pallino rimasto di quel tipo; se non ce ne sono, ensurePins ne aggiunge uno sul lato rivolto all'altro blocco.
-function editPin(id, kind, idx, op, nk) {
-  mutate(t => {
-    const n = findM(t, id).n, k = PK[kind];
-    freezeOuts(t, n); // i rami senza po ricevono l'indice dell'uscita che usano adesso
-    const P = JSON.parse(JSON.stringify(pinsOf(n))), list = P[k], pin = list[idx];
-    if (!pin) return;
-    if (op === 'dup') { list.push([pin[0], Math.round((pin[1] <= 0.75 ? pin[1] + 0.15 : pin[1] - 0.15) * 100) / 100]); n.pin = P; return; }
-    // estremi dei collegamenti su pallini di questo tipo, con l'indice attuale (prima di cambiare i pallini).
-    // Un rombo può essere partenza (sp) o arrivo (ts) di un collegamento di struttura.
-    const ends = [];
-    allLinks(t).forEach(L => {
-      const e = () => L.extra ? L.e : (L.to.edge = L.to.edge || {}), str = isStr(L.e);
-      if (L.from.id === id && kind === 'out' && !str) ends.push({ e: e(), f: 'po', i: outIdx(n, L.e) });
-      if (L.from.id === id && kind === 'str' && str) ends.push({ e: e(), f: 'sp', i: strIdx(n, L.e) });
-      if (L.to.id === id && kind === 'in' && !str) ends.push({ e: e(), f: 'pi', i: inIdx(n, L.e) });
-      if (L.to.id === id && kind === 'str' && str) ends.push({ e: e(), f: 'ts', i: tsIdx(n, L.e) });
-    });
-    // rami compressi su un pallino di questo tipo: seguono il nuovo indice; quelli del pallino tolto si riaprono
-    if (n.foldOut && (k === 'o' || k === 's')) {
-      n.foldOut = n.foldOut.flatMap(x => { if (x[0] !== k) return [x]; const i = +x.slice(2); return i === idx ? [] : [k + ':' + (i > idx ? i - 1 : i)]; });
-      if (!n.foldOut.length) delete n.foldOut;
-    }
-    list.splice(idx, 1);
-    if (op === 'type') P[PK[nk]].push(pin);
-    n.pin = P;
-    ends.forEach(({ e, f, i }) => { if (i === idx) delete e[f]; else if (i > idx) e[f] = i - 1; else e[f] = i; });
-    walkAll(t, x => { if (x.edge && !Object.keys(x.edge).length) delete x.edge; });
-  });
-}
-function resetPins(id) { mutate(t => { delete findM(t, id).n.pin; }); }
 
 /* ---------- duplica, copia, incolla ---------- */
 // copia profonda con id nuovi (anche rami, struttura interna con i suoi blocchi liberi, collegamenti e note)
