@@ -25,21 +25,31 @@ function layOrder(g, its) {
   const pos = (a, b) => g.lay === 'row' ? a.l.x - b.l.x || a.l.y - b.l.y : a.l.y - b.l.y || a.l.x - b.l.x;
   return its.sort((a, b) => k(a) - k(b) || pos(a, b));
 }
+// spazio tra gli elementi (richiesto il 2026-11-17, menu del gruppo): g.gx in orizzontale (tra le colonne, in riga e a
+// griglia), g.gy in verticale (tra le righe, in colonna e a griglia); di serie LYGAP
+const GAP_MAX = 120, gapX = g => g.gx ?? LYGAP, gapY = g => g.gy ?? LYGAP;
 // posizioni dentro l'area del contenuto (dal suo angolo) e misura dell'area
 function layPlace(g, list) {
-  const n = list.length, pos = [];
+  const n = list.length, pos = [], gx = gapX(g), gy = gapY(g);
   if (!n) return { pos, w: 0, h: 0 };
   if (g.lay === 'grid') {
     const k = Math.max(1, Math.ceil(Math.sqrt(n))), cw = Math.max(...list.map(i => i.w)), rh = [];
     list.forEach((it, i) => { const r = Math.floor(i / k); rh[r] = Math.max(rh[r] || 0, it.h); });
-    let y = 0; const ry = rh.map(h => { const v = y; y += h + LYGAP; return v; });
-    list.forEach((it, i) => pos.push([(i % k) * (cw + LYGAP), ry[Math.floor(i / k)]]));
-    return { pos, w: Math.min(n, k) * (cw + LYGAP) - LYGAP, h: y - LYGAP };
+    let y = 0; const ry = rh.map(h => { const v = y; y += h + gy; return v; });
+    list.forEach((it, i) => pos.push([(i % k) * (cw + gx), ry[Math.floor(i / k)]]));
+    return { pos, w: Math.min(n, k) * (cw + gx) - gx, h: y - gy };
   }
-  const col = g.lay === 'col'; let a = 0;
-  list.forEach(it => { pos.push(col ? [0, a] : [a, 0]); a += (col ? it.h : it.w) + LYGAP; });
+  const col = g.lay === 'col', gp = col ? gy : gx; let a = 0;
+  list.forEach(it => { pos.push(col ? [0, a] : [a, 0]); a += (col ? it.h : it.w) + gp; });
   const cross = Math.max(...list.map(i => col ? i.w : i.h));
-  return { pos, w: col ? cross : a - LYGAP, h: col ? a - LYGAP : cross };
+  return { pos, w: col ? cross : a - gp, h: col ? a - gp : cross };
+}
+// spazio dal menu: d = ±1 passo di 4 px (asse 'x' o 'y'), per tutti i gruppi scelti
+function setGroupGap(axis, d, ids = [...S.sels]) {
+  const t = curTree(), g0 = findGroup(t, ids[0]); if (!g0) return LYGAP;
+  const v = clamp((axis === 'x' ? gapX(g0) : gapY(g0)) + d * 4, 0, GAP_MAX), k = axis === 'x' ? 'gx' : 'gy';
+  mutate(tt => ids.forEach(id => { const g = findGroup(tt, id); if (!g) return; if (v === LYGAP) delete g[k]; else g[k] = v; }));
+  return v;
 }
 // sposta un elemento (dati e misure del disegno): un blocco con i rami compressi, un gruppo con tutto il contenuto
 function layShift(t, it, dx, dy, LF, NF) {
@@ -123,7 +133,7 @@ function layDragMove(t, p) {
   if (!T || !LAYS[T.lay] || !D.top.length) { D.target = null; return null; }
   // posizioni come sarebbero senza il posto già aperto (chi viene dopo è spostato della sua misura): così non salta
   const open = D.target === T.id ? D.idx : -1, col = T.lay === 'col';
-  const gap = D.sizes.reduce((a, s) => a + (col ? s.h : s.w) + LYGAP, 0);
+  const gap = D.sizes.reduce((a, s) => a + (col ? s.h + gapY(T) : s.w + gapX(T)), 0);
   const its = layOrder(T, layMembers(t, T, S.L.full || S.L, S.NL.full || S.NL, D.skip, GH)).map((i, k) =>
     open >= 0 && k >= open && T.lay !== 'grid' ? { ...i.l, x: i.l.x - (col ? 0 : gap), y: i.l.y - (col ? gap : 0) } : i.l);
   D.idx = its.filter(l => col ? l.y + l.h / 2 < p.y : T.lay === 'row' ? l.x + l.w / 2 < p.x

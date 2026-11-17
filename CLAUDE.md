@@ -131,7 +131,9 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - **Disposizione automatica dei gruppi** (`js/layout.js`, richiesta il 2026-11-17; usi scelti: fasi di processo e kanban):
   `g.lay` = `col`/`row`/`grid` (menu del gruppo → In fila, `setGroupLay`). Il contenuto diretto (`layMembers`: dentro il
   gruppo, non dentro un suo gruppo interno, niente nascosti) sta in fila nell'ordine `g.ord` (`layOrder`; i nuovi secondo la
-  posizione), spazio `LYGAP`, margine `LYPAD`; il gruppo prende la misura che serve, almeno `g.lw`/`g.lh` (scelte con la
+  posizione), margine `LYPAD`; spazio tra gli elementi `g.gx` (tra le colonne: in riga e a griglia) e `g.gy` (tra le righe:
+  in colonna e a griglia), di serie `LYGAP`, nel menu del gruppo "Tra le righe"/"Tra le colonne" a passi di 4 px (`setGroupGap`,
+  0–`GAP_MAX`; il menu si ricostruisce cambiando In fila); il gruppo prende la misura che serve, almeno `g.lw`/`g.lh` (scelte con la
   maniglia). `layoutGroups` gira in `render` (dal più piccolo; se sposta qualcosa ricalcola L/NL e salva) e `growOuter`
   allarga i gruppi che lo contengono (quelli disposti solo a destra/in basso: l'angolo in alto a sinistra è fermo).
   Trascinando: `S.layDrag` (`layDragStart` al primo movimento, `layDragMove`): ciò che si trascina non conta, nel gruppo

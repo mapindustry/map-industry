@@ -66,7 +66,10 @@ function groupMenuHtml(g) {
     item('group', 'Raggruppa', '', 'Ctrl+G', 'Lo mette dentro un gruppo nuovo') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
     item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + arrangeHtml() + SEP +
     seg('In fila', [['gly-none', 'Libero: ognuno dove lo metti', !g.lay, ico('M5 2.5h6v3.5H5zM14 8h8v3.5h-8z')], ['gly-col', 'In colonna', g.lay === 'col', ico('M9 1h10v3.2H9zM9 5.4h10v3.2H9zM9 9.8h10v3.2H9z')],
-      ['gly-row', 'In riga', g.lay === 'row', ico('M3 4h6v6H3zM11 4h6v6h-6zM19 4h6v6h-6z')], ['gly-grid', 'A griglia', g.lay === 'grid', ico('M7 1h6v5.5H7zM15 1h6v5.5h-6zM7 7.5h6V13H7zM15 7.5h6V13h-6z')]]) + SEP +
+      ['gly-row', 'In riga', g.lay === 'row', ico('M3 4h6v6H3zM11 4h6v6h-6zM19 4h6v6h-6z')], ['gly-grid', 'A griglia', g.lay === 'grid', ico('M7 1h6v5.5H7zM15 1h6v5.5h-6zM7 7.5h6V13H7zM15 7.5h6V13h-6z')]]) +
+    // spazio tra gli elementi in fila: tra le righe (in colonna, a griglia) e tra le colonne (in riga, a griglia)
+    (g.lay && g.lay !== 'row' ? stepper('Tra le righe', 'lgy', gapY(g) + ' px', 'vlgy', 'Righe più vicine', 'Righe più distanti') : '') +
+    (g.lay && g.lay !== 'col' ? stepper('Tra le colonne', 'lgx', gapX(g) + ' px', 'vlgx', 'Colonne più vicine', 'Colonne più distanti') : '') + SEP +
     head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'group' ? item('stpaste', gs > 1 ? `Incolla stile su ${gs} gruppi` : 'Incolla stile') : '') +
     seg('Bordo', [['gl-solid', 'Continuo', ln === 'solid', box('')], ['gl-dash', 'Tratteggiato', ln === 'dash', box('4 3')],
       ['gl-dot', 'A puntini', ln === 'dot', box('0.1 3')], ['gl-none', 'Nessun bordo', ln === 'none', box('0 40')]]) +
@@ -336,6 +339,9 @@ menuEl.addEventListener('click', e => {
     if (st.dataset.st === 'gbw' || st.dataset.st === 'gfs') { // gruppo: spessore del bordo (½ px) e dimensione del titolo
       const g = findGroup(curTree(), MENU.id), bw = st.dataset.st === 'gbw';
       const v = bw ? clamp(Math.round((gbwOf(g) + d * 0.5) * 10) / 10, 0.5, 6) : clamp(gfsOf(g) + d, 9, 36);
+    if (st.dataset.st === 'lgx' || st.dataset.st === 'lgy') { // gruppo in fila: spazio tra colonne o tra righe (4 px)
+      const x = st.dataset.st === 'lgx', v = setGroupGap(x ? 'x' : 'y', d, menuGroups()); $(x ? '#vlgx' : '#vlgy').textContent = v + ' px'; return;
+    }
       setGroupStyle(bw ? { bw: v } : { tfs: v }, menuGroups()); $(bw ? '#vgbw' : '#vgfs').textContent = v + ' px'; return;
     }
     if (st.dataset.st === 'nfs') { // dimensione del testo delle note
@@ -396,7 +402,7 @@ menuEl.addEventListener('click', e => {
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); return;
   }
   if (a === 'gct') { const ids = menuGroups(); closeMenu(); return toggleGroupCt(ids); }
-  if (a.startsWith('gly-')) { // disposizione del contenuto: il menu resta aperto
+  if (a.startsWith('gly-')) { // disposizione del contenuto: il menu resta aperto e si ricostruisce (cambiano gli spazi)
     setGroupLay(a.slice(4), menuGroups());
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); return;
   }
