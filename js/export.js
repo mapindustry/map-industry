@@ -1,6 +1,6 @@
 // Esportazione del livello visibile: SVG autonomo e PDF (tramite la stampa del browser)
 const SVGNS = 'http://www.w3.org/2000/svg', XPAD = 28;
-const XSHAPES = new Set(['rect', 'path', 'line', 'circle', 'polygon', 'text']);
+const XSHAPES = new Set(['rect', 'path', 'line', 'circle', 'polygon', 'text', 'tspan']);
 const XFONT_URL = 'https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap';
 const xctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
 const xcolors = {};
@@ -27,7 +27,8 @@ function inlineStyles(src, dst) {
       if (cs.strokeDasharray !== 'none') set('stroke-dasharray', cs.strokeDasharray);
       if (cs.strokeLinecap !== 'butt') set('stroke-linecap', cs.strokeLinecap);
       if (cs.opacity !== '1') set('opacity', cs.opacity);
-      if (tag === 'text') { set('font-family', cs.fontFamily); set('font-size', cs.fontSize); set('font-weight', cs.fontWeight); if (cs.fontStyle !== 'normal') set('font-style', cs.fontStyle); }
+      if (tag === 'text' || tag === 'tspan') { set('font-family', cs.fontFamily); set('font-size', cs.fontSize); set('font-weight', cs.fontWeight); if (cs.fontStyle !== 'normal') set('font-style', cs.fontStyle); }
+      if (tag === 'tspan' && cs.textDecorationLine !== 'none') set('text-decoration', cs.textDecorationLine); // parti del testo sottolineate o barrate
     }
     d.removeAttribute('class');
   }

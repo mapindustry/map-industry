@@ -33,7 +33,7 @@
   --glow:#58b8d8; --find:#f2c14e; --win:#5cc98a;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
-  --grp:#93a1ae; --grp-title:#b9c4ce;
+  --grp:#93a1ae; --grp-title:var(--on-node);
   --ro-stripe:#1c252d;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; } }
@@ -47,7 +47,7 @@
   --glow:#58b8d8; --find:#f2c14e; --win:#5cc98a;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
-  --grp:#93a1ae; --grp-title:#b9c4ce;
+  --grp:#93a1ae; --grp-title:var(--on-node);
   --ro-stripe:#1c252d;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; }
@@ -160,9 +160,11 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .grp .ghit{fill:none;stroke:transparent;stroke-width:12;pointer-events:stroke;cursor:move}
 .grp .ghead{fill:transparent;cursor:move}
 .grp .gtitle{fill:var(--grp-title);font-size:13px;font-weight:600;pointer-events:none}
-.grp.cc .gtitle{fill:color-mix(in srgb,var(--cc) 70%,var(--grp-title))}
 .grp:hover .gbox{stroke-opacity:1}
 .grp.gfold .gbox{stroke-opacity:.8}
+/* parti del testo con un colore scelto (js/rich.js): mescolato al colore del testo, si legge su ogni sfondo */
+.tc{fill:color-mix(in srgb,var(--cc) 72%,var(--on-node))}
+.grp .gtitle .tc{fill:color-mix(in srgb,var(--cc) 80%,var(--grp-title))}
 .grp.drop .gbox{stroke:var(--accent);stroke-opacity:1;stroke-width:3px!important;fill:var(--accent);fill-opacity:.16!important}
 .grp g.fold{cursor:pointer}
 .grp g.fold text{fill:var(--on-accent);font:600 11px var(--f-body)}

@@ -91,7 +91,10 @@ function sizeMap(tree) {
     if (n.type === 'exp') { M.set(n.id, { ...expSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
     if (isMedia(n)) { M.set(n.id, { ...(n.type === 'img' ? imgSize : audioSize)(n, lv, fs, font, lh), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; } // js/media.js
     const lines = wrap(n.text || 'Senza titolo', maxW, font, maxL);
-    const w = n.w || Math.max(Math.max(...lines.map(l => tw(l, font))) + padX, lv === 0 ? 120 : 48);
+    // parti del testo con uno stile proprio (js/rich.js): il grassetto è più largo
+    const RX = n.fmt && n.text ? { ix: lineIdx(n.text, lines), ch: fmtChars(n.text, n.fmt) } : null;
+    const lws = lines.map((l, i) => RX ? richLineW(l, RX.ix[i], RX.ch, fs, fwOf(n, lv), n.it) : tw(l, font));
+    const w = n.w || Math.max(Math.max(...lws) + padX, lv === 0 ? 120 : 48);
     M.set(n.id, { lines, lh, w, h: n.h || lines.length * lh + padY, depth: lv });
     n.children.forEach(c => size(c, depth + 1));
   }
@@ -490,7 +493,7 @@ function treeMarkup(tree, L, NL, live) {
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
     const txt = n.type === 'table' && l.tb ? tableMarkup(n, l, live, fsSt) : isList(n) && l.rows ? listMarkup(n, l, live, fsSt) : n.type === 'exp' && l.ex ? expMarkup(n, l, live, fsSt)
       : l.im ? imgMarkup(n, l, live, fsSt) : l.au ? audioMarkup(n, l, live, fsSt)
-      : l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${esc(s)}</text>`).join('');
+      : richText(n, l, pad, fsSt);
     // ramo compresso: etichetta "+N" sull'angolo in alto a sinistra; con un clic si riapre, passandoci sopra l'anteprima
     const folded = n.fold && n.children.length;
     const badge = (key, bx, by, k, title) => `<g class="fold"${live ? ` data-fold="${key}"` : ''}>${live ? `<title>${title}</title>` : ''}` +
@@ -547,7 +550,7 @@ function treeMarkup(tree, L, NL, live) {
       (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
   });
   // gruppi: riquadri sotto a tutto; si prendono dal titolo o dal bordo, l'interno lascia passare i clic
-  let grps = '', ganc = '';
+  let grps = '', ganc = '', gtl = '';
   const GH = groupHidden(tree);
   // i più grandi sotto: un gruppo annidato si disegna sopra quello che lo contiene
   const garea = g => { const r = gRect(g); return r.w * r.h; };
@@ -566,10 +569,12 @@ function treeMarkup(tree, L, NL, live) {
     const right = (g.fold ? bw + 10 : 0) + (lock ? 24 : 0), cx = g.ta === 'c', rx = g.ta === 'r';
     const tx = cx ? (r.w - right) / 2 : rx ? r.w - right - 14 : 14, tmax = r.w - 28 - right;
     const gdrop = (lk && lk.over === g.id && !lk.overAnc) || (live && S.dropGrp === g.id);
+    // titolo: in uno strato sopra collegamenti, gruppi interni e blocchi (sempre in primo piano)
+    gtl += `<g class="grp gtl${hasColor(g) ? ' cc c' + g.color : ''}${hide ? ' editing' : ''}" transform="translate(${g.x},${g.y})">` +
+      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : rx ? ' text-anchor="end"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${gTitleMarkup(g, tmax)}</text></g>`;
     grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}${gdrop ? ' drop' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
       `<rect class="gbox" width="${r.w}" height="${r.h}" rx="12" style="${boxSt}"/>` +
       (live ? `<rect class="ghit" width="${r.w}" height="${r.h}" rx="12"/><rect class="ghead" width="${r.w}" height="${hd}" rx="12"><title>${g.lock ? 'Gruppo bloccato' : 'Trascina per spostare il gruppo con il suo contenuto'} · Doppio clic: rinomina</title></rect>` : '') +
-      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : rx ? ' text-anchor="end"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${esc(ell(gTitle(g), tmax, gFont(g)))}</text>` +
       badge + lock +
       (sel ? `<rect class="ring" x="-5" y="-5" width="${r.w + 10}" height="${r.h + 10}" rx="15"/>` : '') +
       (sel && single && !g.fold && !g.lock ? `<rect class="rsz" data-rsz="1" x="${r.w - 4}" y="${r.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
@@ -581,9 +586,20 @@ function treeMarkup(tree, L, NL, live) {
   const rubber = lk && lk.x2 != null && !lk.pinMove ? `<path class="rubber" d="M${lk.x1},${lk.y1} L${lk.x2},${lk.y2}"/>` : '';
   // binario (Maiusc + trascina): linea guida lungo la direzione in cui scorre il blocco
   const rl = live && S.rail, rail = rl ? `<path class="rail" d="${rl.dir === 'h' ? `M${rl.x - 1e4},${rl.y} H${rl.x + 1e4}` : `M${rl.x},${rl.y - 1e4} V${rl.y + 1e4}`}"/>` : '';
-  return `<g>${grps}</g>${rail}<g>${edges}${ganc}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
+  return `<g>${grps}</g>${rail}<g>${edges}${ganc}</g><g>${nodes}</g><g>${gtl}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
 }
 
+// testo di un blocco: una riga per <text>; le parti con uno stile proprio in <tspan> (js/rich.js)
+function richText(n, l, pad, fsSt) {
+  const RX = n.fmt && n.text && isTextBlock(n) ? { ix: lineIdx(n.text, l.lines), ch: fmtChars(n.text, n.fmt) } : null;
+  return l.lines.map((s, i) => `<text x="${l.w / 2}" y="${pad + (i + 0.76) * l.lh}" text-anchor="middle"${fsSt}>${RX ? richLine(s, RX.ix[i], RX.ch, fwOf(n, l.depth)) : esc(s)}</text>`).join('');
+}
+// titolo del gruppo (una riga, con "…" se non ci sta), con le parti che hanno uno stile proprio
+function gTitleMarkup(g, tmax) {
+  const line = ell(gTitle(g), tmax, gFont(g));
+  if (!g.fmt || !g.text) return esc(line);
+  return richLine(line, lineIdx(g.text, [line])[0], fmtChars(g.text, g.fmt), gfwOf(g));
+}
 function render() {
   if (noTab()) return renderBar(); // pagina vuota: niente mappa da disegnare
   const tree = curTree(), L = mindLayout(tree), NL = notesLayout(tree); S.L = L; S.NL = NL;

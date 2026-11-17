@@ -81,6 +81,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   membri: contiene ciò che vi sta tutto dentro (`within`), e `dragMovers` lo porta con sé. Si prendono dal titolo o
   dal bordo; l'interno lascia passare i clic. Raggruppa (menu o Ctrl+G), Sciogli = toglie solo il riquadro. Il titolo può essere vuoto
   (gruppo senza nome; `gTitle`: senza il campo `text` vale "Gruppo").
+  Il **titolo** sta in uno strato a parte sopra collegamenti, gruppi interni e blocchi (`gtl` in `treeMarkup`, `<g class="grp gtl">`
+  senza `data-grp`: i clic passano alla barra sotto; richiesto il 2026-11-17). Colore di serie `--grp-title`, nel tema
+  scuro = `--on-node` (bianco come il testo dei blocchi), anche nei gruppi colorati: niente contorno né tinta del gruppo
+  (l'utente regola l'opacità dello sfondo); le parti colorate a mano (`fmt`) restano.
   - contenuto: `groupItems(t, g)` (usa `S.L.full`/`S.NL.full`, cioè anche gli elementi nascosti dai gruppi compressi; un
     gruppo interno conta per il riquadro visibile, `gRect`: compresso basta la barra). `dragMovers` porta con un gruppo
     anche ciò che nascondono i gruppi compressi al suo interno;
@@ -191,6 +195,15 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     (`data-ref`, anche in sola lettura) = `openRef` → `openProject` in una scheda. Progetto eliminato: linguetta spenta
     (`.gone`). Menu del blocco: Apri, Collega/Cambia (elenco dentro il menu, `REF_OPEN`, `data-refp`), Togli (`setRef`).
   - `w/h`, `color`, `fs`, `fw` (peso del carattere, `fwOf`), `it` (corsivo, in `nodeFont`), `bw`, `op`. Nel menu la dimensione si può anche scrivere.
+  - **Stile di una parte del testo** (`js/rich.js`, richiesto il 2026-11-17): mentre si scrive in un blocco di testo o
+    nel titolo di un gruppo, tasto destro sulle parole selezionate = menu (`kind: 'fmt'`, `keep`: l'editor resta aperto)
+    con colore, grassetto, corsivo, sottolineato, barrato, Togli lo stile (niente dimensione: cambierebbe le righe).
+    Dati: `fmt = [{ s, e, b?, i?, u?, x?, c? }]` (caratteri del testo, e escluso) sul blocco o sul gruppo. `endEdit` usa
+    `normMap` (stesso testo salvato e posizione di ogni carattere scritto) e `keepFmt` → `fmtRemap` (allineamento
+    carattere per carattere) fa seguire gli stili alle modifiche del testo. Disegno: `lineIdx` (posizione nel testo di
+    ogni carattere delle righe di `wrap`/`ell`) e `richLine` (`<tspan>`, colore = classe `tc cN`); `sizeMap` misura le
+    righe con il grassetto (`richLineW`). L'esportazione copia gli stili anche dei `tspan`. Altri testi (note, elenchi,
+    tabelle, etichette) hanno il menu del browser.
   - **Adatta al testo** (menu del blocco, sempre presente per i blocchi di testo, o doppio clic sulla maniglia; `autoSize`
     → `fitText`): mostra tutto il testo senza "…". Tiene la larghezza scelta a mano (mai più stretta della parola più
     lunga) e la stringe alla riga più lunga; se basta la misura di serie (fino a 4 righe) toglie `w/h`. Con `flip` resta

@@ -87,8 +87,8 @@ function endEdit(commit) {
   if (!editing) return;
   const { kind, id, orig, fresh, back } = editing; editing = null; ed.hidden = true;
   // blocchi e note della tela tengono gli a capo (Maiusc+Invio); gli altri testi stanno su una riga
-  const multi = kind === 'node' || kind === 'note' || kind === 'body', one = s => s.replace(/\s+/g, ' ').trim();
-  const v = multi ? ed.value.split('\n').map(one).filter(Boolean).join('\n') : one(ed.value), t = curTree();
+  const multi = kind === 'node' || kind === 'note' || kind === 'body';
+  const v = normMap(ed.value, multi).text, t = curTree(); // spazi uniti, righe vuote tolte (js/rich.js)
   if (!commit && fresh) {
     undo(); S.redo.pop();
     if (back && findM(curTree(), back)) selectOnly(back);
@@ -100,7 +100,7 @@ function endEdit(commit) {
     else if (kind === 'cell') commitCell(id, v);
     else if (kind === 'body') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.body = v; else delete f.n.body; save(); } }
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
-    else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); g.text = v; if (v) g.w = Math.max(g.w, Math.ceil(tw(v, gFont(g))) + 28); save(); } } // titolo vuoto = gruppo senza nome; il riquadro si allarga per il titolo
+    else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); keepFmt(g, v); g.text = v; if (v) g.w = Math.max(g.w, Math.ceil(tw(v, gFont(g))) + 28); save(); } } // titolo vuoto = gruppo senza nome; il riquadro si allarga per il titolo
     else if (kind === 'note') {
       const nt = findNote(t, id);
       if (nt) { snapshot(); if (v) nt.text = v; else { t.notes.splice(t.notes.indexOf(nt), 1); clearSel(); } save(); }
@@ -110,7 +110,7 @@ function endEdit(commit) {
         snapshot();
         // blocco con l'ingresso a destra (sta a sinistra del genitore): resta fermo il bordo destro, cresce verso l'esterno
         const w0 = f.n.flip && !f.n.w && hasPos(f.n) ? sizeMap(t).get(id).w : null;
-        f.n.text = v;
+        keepFmt(f.n, v); f.n.text = v;
         if (w0 !== null) f.n.x = Math.round(f.n.x - (sizeMap(t).get(id).w - w0));
         save();
       } else if (f && (f.n.type === 'table' || isMedia(f.n))) { snapshot(); f.n.text = ''; save(); } // tabella senza titolo, immagine senza didascalia, audio col nome del file
@@ -119,6 +119,8 @@ function endEdit(commit) {
   }
   render();
 }
+// le parti del testo con uno stile proprio (js/rich.js) seguono le modifiche del testo
+function keepFmt(o, v) { if (!o.fmt) return; const f = fmtRemap(o.text || '', v, o.fmt); if (f) o.fmt = f; else delete o.fmt; }
 ed.addEventListener('input', placeEditor);
 ed.addEventListener('keydown', e => {
   e.stopPropagation();

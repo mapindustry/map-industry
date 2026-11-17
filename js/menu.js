@@ -9,7 +9,8 @@ function showMenu(cx, cy, html, ctx) {
   const r = menuEl.getBoundingClientRect();
   menuEl.style.left = Math.max(8, Math.min(cx, innerWidth - r.width - 8)) + 'px';
   menuEl.style.top = Math.max(8, Math.min(cy, innerHeight - r.height - 8)) + 'px';
-  const first = menuEl.querySelector('.it'); if (first) first.focus({ preventScroll: true });
+  // keep = l'editor del testo resta aperto con la sua selezione (menu dello stile di una parte del testo, js/rich.js)
+  const first = menuEl.querySelector('.it'); if (first && !ctx.keep) first.focus({ preventScroll: true });
 }
 function closeMenu() { menuEl.hidden = true; MENU = null; }
 // voce: etichetta, a destra la scorciatoia o un conteggio (k), sotto una spiegazione breve (sub)
@@ -282,6 +283,7 @@ cv.addEventListener('contextmenu', e => {
 /* ---------- azioni ---------- */
 menuEl.addEventListener('click', e => {
   if (!MENU) return;
+  if (MENU.kind === 'fmt') return fmtClick(e); // stile di una parte del testo (js/rich.js)
   const rp = e.target.closest('[data-refp]'); // mappa scelta dall'elenco: il blocco si collega a lei
   if (rp) { const id = S.sel; closeMenu(); REF_OPEN = false; setRef(id, rp.dataset.refp); return toast('Blocco collegato alla mappa'); }
   const sw = e.target.closest('[data-c]');
