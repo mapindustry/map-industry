@@ -16,7 +16,7 @@
   /* note dei collegamenti: etichette chiare a pillola */
   --enote-bg:#e4e9ee; --enote-border:#9aa5b0; --enote-ink:#26323d;
   /* gruppi: riquadro tenue con titolo */
-  --grp:#5d6b79; --grp-title:#3d4a56;
+  --grp:#5d6b79; --grp-title:#3d4a56; --shadow:rgba(15,23,42,.16);
   /* sola lettura: righe diagonali sullo sfondo della tela */
   --ro-stripe:#dfe4ea;
   /* colori a scelta per i blocchi */
@@ -33,7 +33,7 @@
   --glow:#58b8d8; --find:#f2c14e; --win:#5cc98a;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
-  --grp:#93a1ae; --grp-title:var(--on-node);
+  --grp:#93a1ae; --grp-title:var(--on-node); --shadow:rgba(0,0,0,.45);
   --ro-stripe:#1c252d;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; } }
@@ -47,7 +47,7 @@
   --glow:#58b8d8; --find:#f2c14e; --win:#5cc98a;
   --note-bg:#2e2a19; --note-bar:#d9b53a; --note-ink:#efe4b8;
   --enote-bg:#dfe5ea; --enote-border:#f4f7f9; --enote-ink:#1d2731;
-  --grp:#93a1ae; --grp-title:var(--on-node);
+  --grp:#93a1ae; --grp-title:var(--on-node); --shadow:rgba(0,0,0,.45);
   --ro-stripe:#1c252d;
   --c0:#5fb4e6; --c1:#f08a4b; --c2:#5cc48a; --c3:#b58be6; --c4:#e66d9f; --c5:#d9b53a;
   color-scheme:dark; }
@@ -170,6 +170,14 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .grp g.fold text{fill:var(--on-accent);font:600 11px var(--f-body)}
 .grp .glock{fill:none;stroke:var(--grp-title);stroke-width:1.4;stroke-linecap:round;pointer-events:all}
 .grp.editing .gtitle{visibility:hidden}
+/* contenitore: ombra, fondo pieno sotto la tinta, etichetta del titolo piena */
+.grp .gshadow{fill:var(--shadow);pointer-events:none}
+.grp .gsurf{fill:var(--canvas);pointer-events:none}
+.grp.gct .gbox{stroke-opacity:.9}
+.grp .gpill{fill:var(--gc-pill,var(--accent));pointer-events:none}
+.grp.cc{--gc-pill:var(--cc)}
+.grp .gtitle.gpt{fill:var(--on-accent)}
+.grp.editing .gpill{visibility:hidden}
 
 /* tipi di blocco: elenchi (segno a sinistra, voci allineate) e tabelle (intestazione, griglia, celle) */
 .mn .litem{text-anchor:start}
@@ -222,6 +230,8 @@ body.ro .mn .tgrips{display:none}
 .mn text.calm{font-weight:600}
 .mn .calnav path{stroke-width:1.6}
 .mn text.caldow{font-size:10px;font-weight:600;opacity:.5}
+.mn text.calmm{font-weight:600;opacity:.8}
+.mn text.calmm.now{fill:var(--accent);opacity:1}
 .mn .cald{cursor:pointer}
 .mn .calhit{fill:transparent}
 .mn .cald text{font-weight:400}

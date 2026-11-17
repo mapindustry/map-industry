@@ -147,6 +147,11 @@ function layAdopt(t, id, box, p) {
   layBring(t, T, [id], [box]);
 }
 // disposizione scelta dal menu del gruppo ('none' = libera)
+// aspetto da contenitore (bordo spesso, ombra, titolo su etichetta): dal menu del gruppo
+function toggleGroupCt(ids = [...S.sels]) {
+  const t = curTree(), on = !ids.every(id => (findGroup(t, id) || {}).ct);
+  mutate(tt => ids.forEach(id => { const g = findGroup(tt, id); if (!g) return; if (on) g.ct = true; else delete g.ct; }));
+}
 function setGroupLay(v, ids = [...S.sels]) {
   mutate(t => ids.forEach(id => {
     const g = findGroup(t, id); if (!g) return;
@@ -156,7 +161,7 @@ function setGroupLay(v, ids = [...S.sels]) {
 }
 
 /* ---------- componenti: Contenitore, Kanban, Fasi ---------- */
-const CONT = (text, x, y, w = 220) => ({ id: uid(), x: Math.round(x), y: Math.round(y), w, h: 120, text, lay: 'col', lw: w, line: 'solid', fo: 0.14 });
+const CONT = (text, x, y, w = 220) => ({ id: uid(), x: Math.round(x), y: Math.round(y), w, h: 120, text, lay: 'col', lw: w, line: 'solid', fo: 0.14, ct: true });
 function layComponent(k, x, y) {
   const hd = GHEAD, add = [], links = [], cards = [];
   if (k === 'cont') add.push(CONT('Contenitore', x - 110, y - 60));

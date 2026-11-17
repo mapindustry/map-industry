@@ -141,7 +141,10 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   `growStart` salta i gruppi disposti. Un blocco aggiunto dalla barra dentro un gruppo disposto entra al posto (`layAdopt`).
   Componenti (Tela): Contenitore (gruppo in colonna, bordo continuo), Kanban (gruppo in riga con tre contenitori Da fare / In
   corso / Fatto alti uguali e una prima attività), Fasi (tre contenitori collegati Fase 1 → 2 → 3 con pallini `g.pin`):
-  `layComponent`.
+  `layComponent`. **Aspetto da contenitore** (`g.ct`, richiesto il 2026-11-17; di serie nei contenitori di Contenitore, Kanban
+  e Fasi, interruttore nel menu del gruppo, `toggleGroupCt`): bordo di serie 2,6 px (`gbwOf`), ombra (`.gshadow`,
+  `--shadow`) su fondo pieno (`.gsurf`), titolo su un'etichetta piena a cavallo del bordo in alto (`.gpill`, colore del
+  gruppo o `--accent`, testo `--on-accent`; l'editor del titolo si apre lì).
 - Blocco: il modello completo è descritto in testa a `js/mind.js`. In breve:
   - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco; trascinare
     sposta solo i selezionati (i figli restano). Posizioni mancanti: `ensurePositions` (`placeNew` per i nuovi,
@@ -214,7 +217,9 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   - **Calendario e avanzamento** (richiesti il 2026-11-17). Calendario (`js/calendar.js`, tipo `cal`): un mese,
     settimana da lunedì; `n.cal` = 'AAAA-MM' (di serie il mese corrente), ‹ › (`data-calnav`, `calNav`, anche in sola
     lettura), `n.days` = giorni segnati 'AAAA-MM-GG': clic su un giorno (`data-day`) = `toggleDay`, deciso al rilascio
-    (`P.day`) così il blocco si trascina anche dai giorni; oggi cerchiato. `n.text` = titolo facoltativo. Menu: Vai al
+    (`P.day`) così il blocco si trascina anche dai giorni; oggi cerchiato. `n.text` = titolo facoltativo. **Vista** (`n.view`, menu Vista, `setCalView`): 1 mese (di serie), 3 mesi affiancati (da
+    `n.cal`, le frecce scorrono di un mese), 12 = anno di `n.cal` in 4×3 (le frecce cambiano anno); `calMonths`/`calLabel`, ogni
+    mese col suo nome (`calmm`, il corrente in `--accent`), mesi di una riga alti uguali; cambiando vista si toglie `n.w`. Menu: Vai al
     mese corrente, Togli i segni del mese, Segni = colore di serie dei segni (`n.dcol`). Tasto destro su un giorno = menu
     `kind: 'day'` (`dayMenuHtml`): colore di quel giorno (`n.dayc[giorno]`, `setDayColor`, lo segna anche) e Segna/Togli;
     pallini colorati con `data-dc` (non `data-c`, che colora il blocco). Avanzamento (`js/progress.js`, tipo `prog`): titolo + barra, `n.pct` 0–100

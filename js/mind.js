@@ -573,9 +573,17 @@ function treeMarkup(tree, L, NL, live) {
     const tx = cx ? (r.w - right) / 2 : rx ? r.w - right - 14 : 14, tmax = r.w - 28 - right;
     const gdrop = (lk && lk.over === g.id && !lk.overAnc) || (live && S.dropGrp === g.id);
     // titolo: in uno strato sopra collegamenti, gruppi interni e blocchi (sempre in primo piano)
-    gtl += `<g class="grp gtl${hasColor(g) ? ' cc c' + g.color : ''}${hide ? ' editing' : ''}" transform="translate(${g.x},${g.y})">` +
-      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : rx ? ' text-anchor="end"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${gTitleMarkup(g, tmax)}</text></g>`;
-    grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}${gdrop ? ' drop' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
+    const tst = `font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}`;
+    let ttl;
+    if (g.ct) { // contenitore: etichetta piena a cavallo del bordo in alto, larga quanto il titolo
+      const tt = gTitle(g), pw = Math.min(tmax + 14, Math.ceil(tw(tt, gFont(g))) + 22), ph = fs + 12;
+      const px = cx ? (r.w - right - pw) / 2 : rx ? r.w - right - 12 - pw : 12;
+      ttl = tt ? `<rect class="gpill" x="${px}" y="${-ph / 2}" width="${pw}" height="${ph}" rx="${ph / 2}"/>` +
+        `<text class="gtitle gpt" x="${px + pw / 2}" y="${Math.round(fs * 0.36)}" text-anchor="middle" style="${tst}">${gTitleMarkup(g, pw - 22)}</text>` : '';
+    } else ttl = `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : rx ? ' text-anchor="end"' : ''} style="${tst}">${gTitleMarkup(g, tmax)}</text>`;
+    gtl += `<g class="grp gtl${hasColor(g) ? ' cc c' + g.color : ''}${g.ct ? ' gct' : ''}${hide ? ' editing' : ''}" transform="translate(${g.x},${g.y})">${ttl}</g>`;
+    grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.ct ? ' gct' : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}${gdrop ? ' drop' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
+      (g.ct ? `<rect class="gshadow" x="3" y="5" width="${r.w}" height="${r.h}" rx="12"/><rect class="gsurf" width="${r.w}" height="${r.h}" rx="12"/>` : '') +
       `<rect class="gbox" width="${r.w}" height="${r.h}" rx="12" style="${boxSt}"/>` +
       (live ? `<rect class="ghit" width="${r.w}" height="${r.h}" rx="12"/><rect class="ghead" width="${r.w}" height="${hd}" rx="12"><title>${g.lock ? 'Gruppo bloccato' : 'Trascina per spostare il gruppo con il suo contenuto'} · Doppio clic: rinomina</title></rect>` : '') +
       badge + lock +
@@ -1260,7 +1268,8 @@ const findGroup = (tree, id) => (tree.groups || []).find(g => g.id === id);
 // titolo del gruppo: può essere vuoto (gruppo senza nome); i gruppi vecchi senza il campo si chiamano "Gruppo"
 const gTitle = g => g.text == null ? 'Gruppo' : g.text;
 const GLINE = { solid: 'none', dash: '6 4', dot: '0.1 4.5' };
-const glineOf = g => g.line || 'dash', gbwOf = g => g.bw ?? 1.2, gfoOf = g => g.fo ?? 0.08;
+// contenitore (g.ct): bordo più spesso di serie, ombra e titolo su un'etichetta piena a cavallo del bordo
+const glineOf = g => g.line || 'dash', gbwOf = g => g.bw ?? (g.ct ? 2.6 : 1.2), gfoOf = g => g.fo ?? 0.08;
 const gfsOf = g => g.tfs || 13, gfwOf = g => g.tfw || 600, gFont = g => `${g.ti ? 'italic ' : ''}${gfwOf(g)} ${gfsOf(g)}px ${FB}`; // ti = titolo in corsivo
 const gHead = g => Math.max(GHEAD, Math.round(gfsOf(g) + 15)); // la barra del titolo cresce con il titolo
 // riquadro visibile: compresso = solo la barra, larga almeno quanto titolo, "+N" e lucchetto
@@ -1287,7 +1296,7 @@ const GDEF = { line: 'dash', bw: 1.2, fo: 0.08, tfs: 13, tfw: 600, ta: 'l', colo
 function setGroupStyle(patch, ids = [...S.sels]) {
   mutate(t => ids.forEach(id => {
     const g = findGroup(t, id); if (!g) return;
-    Object.entries(patch).forEach(([k, v]) => { if (v === null || v === undefined || v === '' || v === GDEF[k]) delete g[k]; else g[k] = v; });
+    Object.entries(patch).forEach(([k, v]) => { if (v === null || v === undefined || v === '' || (v === GDEF[k] && !(k === 'bw' && g.ct))) delete g[k]; else g[k] = v; });
   }));
 }
 function toggleGroupFold(id) {

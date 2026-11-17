@@ -62,6 +62,7 @@ function groupMenuHtml(g) {
     item('gfold', g.fold ? 'Espandi il gruppo' : 'Comprimi il gruppo', '', plural(cnt, '1 elemento', 'elementi'), g.fold ? '' : 'Resta solo la barra del titolo') +
     (g.fold ? '' : item('gsel', 'Seleziona il contenuto')) + item('gfit', 'Adatta al contenuto') +
     item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') +
+    item('gct', 'Aspetto da contenitore', g.ct ? ' on' : '', '', 'Bordo spesso, ombra e titolo su un’etichetta') +
     item('group', 'Raggruppa', '', 'Ctrl+G', 'Lo mette dentro un gruppo nuovo') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
     item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + arrangeHtml() + SEP +
     seg('In fila', [['gly-none', 'Libero: ognuno dove lo metti', !g.lay, ico('M5 2.5h6v3.5H5zM14 8h8v3.5h-8z')], ['gly-col', 'In colonna', g.lay === 'col', ico('M9 1h10v3.2H9zM9 5.4h10v3.2H9zM9 9.8h10v3.2H9z')],
@@ -124,7 +125,9 @@ function nodeMenuHtml() {
       stepper('Colonne', 'tcol', nc, 'vtcol', 'Togli l’ultima colonna', 'Aggiungi una colonna') + SEP;
   }
   if (one && one.type === 'cal') { const mk = calMarks(one); h += `<div class="mrow"><span>Segni</span></div>` + swatches(one.dcol != null ? String(one.dcol) : '').replace(/data-c=/g, 'data-dc=').replace('title="Nessun colore" aria-label="Nessun colore"', 'title="Colore di serie" aria-label="Colore di serie"') +
-      item('caltoday', 'Vai al mese corrente') + (mk ? item('calclr', 'Togli i segni del mese', '', plural(mk, '1 giorno', 'giorni')) : '') + SEP; }
+      seg('Vista', [['cv-1', 'Un mese', calView(one) === 1, '<span class="sgt">1</span>'], ['cv-3', 'Tre mesi', calView(one) === 3, '<span class="sgt">3</span>'], ['cv-12', 'Anno', calView(one) === 12, '<span class="sgt">12</span>']]) +
+      item('caltoday', calView(one) === 12 ? 'Vai all’anno corrente' : 'Vai al mese corrente') +
+      (mk ? item('calclr', { 1: 'Togli i segni del mese', 3: 'Togli i segni dei tre mesi', 12: 'Togli i segni dell’anno' }[calView(one)], '', plural(mk, '1 giorno', 'giorni')) : '') + SEP; }
   if (one && one.type === 'prog') { const pc = pctOf(one); h += `<div class="mrow"><span>Fatto</span><input type="range" id="mpct" min="0" max="100" step="5" value="${pc}" aria-label="Avanzamento dell’attività"><span class="val" id="vpct">${pc}%</span></div>` + SEP; }
   if (one && isMedia(one)) h += item('media', one.type === 'img' ? (one.img ? 'Cambia immagine…' : 'Scegli un’immagine…') : (one.audio ? 'Cambia audio…' : 'Scegli un audio…')) + SEP;
   if (one) {
@@ -388,6 +391,11 @@ menuEl.addEventListener('click', e => {
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     return;
   }
+  if (a.startsWith('cv-')) { // vista del calendario: il menu resta aperto
+    setCalView(S.sel, +a.slice(3));
+    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); return;
+  }
+  if (a === 'gct') { const ids = menuGroups(); closeMenu(); return toggleGroupCt(ids); }
   if (a.startsWith('gly-')) { // disposizione del contenuto: il menu resta aperto
     setGroupLay(a.slice(4), menuGroups());
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); return;
