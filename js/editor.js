@@ -1,6 +1,6 @@
 // Modifica del testo sul posto (textarea sovrapposta): blocchi, etichette, note dei collegamenti, note della tela
 const ed = $('#ed');
-let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle' | 'cell' | 'body', id, orig }
+let editing = null; // { kind: 'node' | 'tag' | 'edge' | 'note' | 'group' | 'legrow' | 'legtitle' | 'cell' | 'body' | 'dnote', id, orig }
 
 function editorBox() {
   const v = view(), k = v.k, sx = x => v.x + x * k, sy = y => v.y + y * k, id = editing.id;
@@ -23,6 +23,7 @@ function editorBox() {
   if (editing.kind === 'legrow' || editing.kind === 'legtitle') return legendEditorBox();
   if (editing.kind === 'cell') return cellEditorBox(sx, sy, k);
   if (editing.kind === 'body') return bodyEditorBox(sx, sy, k);
+  if (editing.kind === 'dnote') return dnoteEditorBox(sx, sy, k); // nota di un giorno del calendario
   if (editing.kind === 'group') {
     const g = findGroup(curTree(), id); if (!g) return null;
     const fs = gfsOf(g), hd = gHead(g), y0 = g.ct ? -(fs + 7) / 2 : (hd - fs - 7) / 2; // contenitore: sull'etichetta
@@ -102,6 +103,7 @@ function endEdit(commit) {
     if (kind === 'edge') { if (edgeData(t, id)) return setEdge(id, { note: v }); }
     else if (kind === 'legrow' || kind === 'legtitle') commitLegendEdit(kind, id, v);
     else if (kind === 'cell') commitCell(id, v);
+    else if (kind === 'dnote') return setDayNote(id, v);
     else if (kind === 'body') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.body = v; else delete f.n.body; save(); } }
     else if (kind === 'tag') { const f = findM(t, id); if (f) { snapshot(); if (v) f.n.tag = v; else delete f.n.tag; save(); } }
     else if (kind === 'group') { const g = findGroup(t, id); if (g) { snapshot(); keepFmt(g, v); g.text = v; if (v) g.w = Math.max(g.w, Math.ceil(tw(v, gFont(g))) + 28); save(); } } // titolo vuoto = gruppo senza nome; il riquadro si allarga per il titolo

@@ -29,10 +29,41 @@ function listSize(n, lv, fs, font, lh, padX, padY) {
 }
 const tableRows = n => (n.table && n.table.rows && n.table.rows.length ? n.table.rows : [['Colonna 1', 'Colonna 2'], ['', '']]);
 const cellFont = (n, fs, head) => `${n.it ? 'italic ' : ''}${head ? 600 : 400} ${fs}px ${FB}`;
+// Tabella agganciata al calendario (richiesta il 2026-11-17): una tabella collegata a uno o più calendari (in qualsiasi
+// verso, anche con un collegamento aggiuntivo) mostra i loro giorni segnati in ordine di data: Data | Nota (con più
+// calendari anche la colonna Calendario), con un pallino del colore del segno. Le righe si ricalcolano a ogni disegno
+// (CALTAB, preparato da sizeMap per la mappa che misura) e non si scrivono a mano: niente editor delle celle, linguette,
+// righe e colonne. n.table resta com'era e torna visibile togliendo il collegamento.
+let CALTAB = new Map(); // id della tabella → { rows, tint } (tint[riga] = colore del segno, null = --accent, false = niente)
+function calTables(tree) {
+  const src = new Map(), out = new Map();
+  if (!tree || tree.void && !(tree.free || []).length) return out;
+  allLinks(tree).forEach(k => [[k.from, k.to], [k.to, k.from]].forEach(([a, b]) => {
+    if (a.type !== 'table' || b.type !== 'cal') return;
+    if (!src.has(a.id)) src.set(a.id, []);
+    if (!src.get(a.id).includes(b)) src.get(a.id).push(b);
+  }));
+  src.forEach((cals, id) => {
+    const many = cals.length > 1, list = [];
+    cals.forEach(c => (c.days || []).forEach(d => list.push({ d, c })));
+    list.sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : 0));
+    const rows = [many ? ['Data', 'Calendario', 'Nota'] : ['Data', 'Nota']], tint = [false];
+    list.forEach(({ d, c }) => {
+      const nt = (c.dnote || {})[d] || '';
+      rows.push(many ? [dayName(d), c.text || 'Calendario', nt] : [dayName(d), nt]); tint.push(dayColor(c, d));
+    });
+    if (rows.length === 1) { rows.push(many ? ['Nessun giorno segnato', '', ''] : ['Nessun giorno segnato', '']); tint.push(false); }
+    out.set(id, { rows, tint, empty: !list.length });
+  });
+  return out;
+}
+const calLinked = id => CALTAB.has(id);
+const TDOT = 14; // spazio del pallino colorato nella colonna Data
 function tableSize(n, lv, fs, font, lh) {
-  const rows = tableRows(n), nc = Math.max(...rows.map(r => r.length)), cfs = Math.max(10, fs - 1), clh = Math.round(cfs * 1.28);
+  const ct = CALTAB.get(n.id), rows = ct ? ct.rows : tableRows(n), nc = Math.max(...rows.map(r => r.length)), cfs = Math.max(10, fs - 1), clh = Math.round(cfs * 1.28);
+  const dp = c => (ct && c === 0 ? TDOT : 0);
   const colW = [];
-  for (let c = 0; c < nc; c++) colW.push(Math.min(240, Math.max(56, ...rows.map((r, i) => tw(r[c] || '', cellFont(n, cfs, i === 0)) + 18))));
+  for (let c = 0; c < nc; c++) colW.push(Math.min(240 + dp(c), Math.max(56, ...rows.map((r, i) => tw(r[c] || '', cellFont(n, cfs, i === 0)) + 18 + (i ? dp(c) : 0)))));
   const title = n.text ? ell(n.text, n.w ? Math.max(40, n.w - 28) : 420, font) : '', titleH = title ? lh + 14 : 0;
   let w = colW.reduce((a, b) => a + b, 0);
   if (title && !n.w && tw(title, font) + 28 > w) { colW[nc - 1] += tw(title, font) + 28 - w; w = tw(title, font) + 28; }
@@ -40,11 +71,12 @@ function tableSize(n, lv, fs, font, lh) {
   if (n.w) { const k = n.w / w; for (let c = 0; c < nc; c++) colW[c] = Math.max(28, colW[c] * k); w = colW.reduce((a, b) => a + b, 0); }
   const colX = []; colW.reduce((x, cw, i) => (colX[i] = x) + cw, 0);
   // il testo delle celle va a capo nella sua colonna e la riga si alza quanto serve per contenerlo tutto
-  const cells = rows.map((r, i) => Array.from({ length: nc }, (_, c) => r[c] ? wrap(r[c], Math.max(10, colW[c] - 18), cellFont(n, cfs, i === 0), 60).map(t => ell(t, Math.max(10, colW[c] - 18), cellFont(n, cfs, i === 0))) : []));
+  const cw = (c, i) => Math.max(10, colW[c] - 18 - (i ? dp(c) : 0));
+  const cells = rows.map((r, i) => Array.from({ length: nc }, (_, c) => r[c] ? wrap(r[c], cw(c, i), cellFont(n, cfs, i === 0), 60).map(t => ell(t, cw(c, i), cellFont(n, cfs, i === 0))) : []));
   const rowHs = cells.map(cr => Math.max(1, ...cr.map(x => x.length)) * clh + 10), rowY = [];
   rowHs.reduce((y, h, i) => (rowY[i] = y) + h, titleH);
   const h = titleH + rowHs.reduce((a, b) => a + b, 0);
-  return { lines: title ? [title] : [], lh, w: Math.ceil(w), h, tb: { rows, nc, colX, colW, rowY, rowHs, titleH, cfs, clh, cells } };
+  return { lines: title ? [title] : [], lh, w: Math.ceil(w), h, tb: { rows, nc, colX, colW, rowY, rowHs, titleH, cfs, clh, cells, cal: ct || null } };
 }
 
 /* ---------- disegno ---------- */
@@ -78,12 +110,15 @@ function tableMarkup(n, l, live, fsSt) {
   s += `<path class="tgrid" d="${grid}"/>`;
   T.rows.forEach((row, r) => {
     for (let c = 0; c < T.nc; c++) {
-      const x = T.colX[c], y = T.rowY[r], ls = T.cells[r][c];
+      const x = T.colX[c], y = T.rowY[r], ls = T.cells[r][c], K = T.cal, tn = K && r > 0 && c === 0 ? K.tint[r] : false;
       if (live) s += `<rect class="tcell" data-cell="${r}:${c}" x="${x}" y="${y}" width="${T.colW[c]}" height="${T.rowHs[r]}"/>`;
-      ls.forEach((t, i) => { s += `<text class="tct${r === 0 ? ' th' : ''}" x="${x + 9}" y="${y + 5 + (i + 0.78) * T.clh}" style="font-size:${T.cfs}px${n.it ? ';font-style:italic' : ''}">${esc(t)}</text>`; });
+      // tabella agganciata al calendario: pallino del colore del segno prima della data
+      if (tn !== false) s += `<circle class="tdot${tn != null ? ' cc c' + tn : ''}" cx="${x + 13}" cy="${y + 5 + 0.5 * T.clh}" r="4.5"/>`;
+      const tx = x + 9 + (K && r > 0 && c === 0 && !K.empty ? TDOT : 0), none = K && K.empty && r === 1;
+      ls.forEach((t, i) => { s += `<text class="tct${r === 0 ? ' th' : ''}${none ? ' tnone' : ''}" x="${tx}" y="${y + 5 + (i + 0.78) * T.clh}" style="font-size:${T.cfs}px${n.it ? ';font-style:italic' : ''}">${esc(t)}</text>`; });
     }
   });
-  return live ? s + tableGrips(n, l) : s;
+  return live && !T.cal ? s + tableGrips(n, l) : s;
 }
 // Linguette per spostare colonne e righe (richieste il 2026-11-17): passando sulla prima riga compaiono sopra le
 // colonne, sulla prima colonna a sinistra delle righe (TGH = { id, kind: 'col'|'row' }, tableHover). Tenendo premuta una
@@ -198,6 +233,7 @@ function cellAt(id, p) {
 const cellRef = s => { const [id, r, c] = s.split('|'); return { id, r: +r, c: +c }; };
 function startCellEdit(id, r, c) {
   const f = findM(curTree(), id); if (!f) return;
+  if (calLinked(id)) return toast('La tabella segue il calendario collegato: segna i giorni e scrivi le note sul calendario');
   selectOnly(id); beginEdit('cell', `${id}|${r}|${c}`, (tableRows(f.n)[r] || [])[c] || '', true);
 }
 function cellEditorBox(sx, sy, k) {

@@ -9,6 +9,10 @@
 //   blocco: Vista. Con più mesi ognuno ha il suo nome sopra e le caselle sono più piccole; i mesi di una riga sono alti
 //   uguali.
 // - La maniglia cambia solo la larghezza: le caselle seguono, l'altezza è automatica.
+// - Nota di un giorno (richiesta il 2026-11-17): n.dnote = { 'AAAA-MM-GG': testo }. Tasto destro sul giorno → Scrivi una
+//   nota (editor 'dnote', id "blocco|giorno"; lo segna anche). Sul calendario un triangolino nell'angolo del giorno e il
+//   testo al passaggio del mouse. Togliere il segno toglie anche colore e nota. Una tabella collegata al calendario
+//   mostra i giorni segnati con colore e nota (js/blocks.js, calTables).
 const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 const GSET = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
 const p2 = v => String(v).padStart(2, '0');
@@ -65,10 +69,13 @@ function calMarkup(n, l, live, fsSt) {
     GSET.forEach((g, i) => { s += `<text class="caldow${i > 4 ? ' we' : ''}" x="${M.x + C.cw * (i + 0.5)}" y="${M.gridY - 4}" text-anchor="middle"${C.multi ? ' style="font-size:9px"' : ''}>${g}</text>`; });
     for (let d = 1; d <= M.nd; d++) {
       const k = M.first + d - 1, c = k % 7, cx = M.x + C.cw * (c + 0.5), cy = M.gridY + C.ch * (Math.floor(k / 7) + 0.5);
-      const key = `${M.y}-${p2(M.m)}-${p2(d)}`, on = days.has(key), dc = on ? dayColor(n, key) : null;
+      const key = `${M.y}-${p2(M.m)}-${p2(d)}`, on = days.has(key), dc = on ? dayColor(n, key) : null, nt = on && n.dnote ? n.dnote[key] : '';
+      const tz = Math.max(4, Math.min(7, C.cw * 0.22)), tx = cx + C.cw / 2 - 1, ty = cy - C.ch / 2 + 1; // triangolino della nota
       s += `<g class="cald${on ? ' on' : ''}${dc != null ? ' cc c' + dc : ''}${key === today ? ' today' : ''}${c > 4 ? ' we' : ''}"${live ? ` data-day="${key}"` : ''}>` +
+        (live && nt ? `<title>${esc(dayName(key))}: ${esc(nt)}</title>` : '') +
         (live ? `<rect class="calhit" x="${cx - C.cw / 2}" y="${cy - C.ch / 2}" width="${C.cw}" height="${C.ch}"/>` : '') +
         (on || key === today ? `<circle cx="${cx}" cy="${cy}" r="${r}"/>` : '') +
+        (nt ? `<path class="calnt" d="M${tx},${ty} h${-tz} L${tx},${ty + tz} Z"/>` : '') +
         `<text x="${cx}" y="${cy + C.dfs * 0.35}" text-anchor="middle" style="font-size:${C.dfs}px">${d}</text></g>`;
     }
   });
@@ -79,10 +86,38 @@ const dayColor = (n, key) => n.dayc && n.dayc[key] != null ? n.dayc[key] : n.dco
 const dayName = key => { const [y, m, d] = key.split('-').map(Number); return `${d} ${MESI[m - 1].toLowerCase()} ${y}`; };
 // tasto destro su un giorno: colore del segno (sceglierlo segna anche il giorno) e segna/togli
 function dayMenuHtml(n, key) {
-  const on = (n.days || []).includes(key), own = n.dayc && n.dayc[key] != null ? String(n.dayc[key]) : '';
+  const on = (n.days || []).includes(key), own = n.dayc && n.dayc[key] != null ? String(n.dayc[key]) : '', nt = n.dnote ? n.dnote[key] : '';
   return title(dayName(key), on ? 'Giorno segnato' : 'Scegli un colore per segnarlo') +
     swatches(on ? own : null).replace(/data-c=/g, 'data-dc=').replace('title="Nessun colore" aria-label="Nessun colore"', 'title="Colore del calendario" aria-label="Colore del calendario"') + SEP +
-    item('daytog', on ? 'Togli il segno' : 'Segna il giorno');
+    item('daynote', nt ? 'Modifica la nota' : 'Scrivi una nota', '', '', nt ? '' : 'Segna anche il giorno') + (nt ? item('daynotedel', 'Togli la nota') : '') + SEP +
+    item('daytog', on ? 'Togli il segno' : 'Segna il giorno', '', '', on && nt ? 'Toglie anche la nota' : '');
+}
+// nota di un giorno: editor sotto la casella del giorno
+const dnoteRef = s => { const [id, day] = s.split('|'); return { id, day }; };
+function startDayNote(id, day) {
+  const f = findM(curTree(), id); if (!f) return;
+  selectOnly(id); beginEdit('dnote', `${id}|${day}`, (f.n.dnote || {})[day] || '', true);
+}
+// casella di un giorno nel blocco (coordinate del blocco), se il suo mese è mostrato
+function calDayRect(l, day) {
+  const C = l.cal, [y, m, d] = day.split('-').map(Number), M = C && C.months.find(x => x.y === y && x.m === m); if (!M) return null;
+  const k = M.first + d - 1;
+  return { x: M.x + C.cw * (k % 7), y: M.gridY + C.ch * Math.floor(k / 7), w: C.cw, h: C.ch };
+}
+function dnoteEditorBox(sx, sy, k) {
+  const { id, day } = dnoteRef(editing.id), l = S.L.get(id); if (!l || !l.cal) return null;
+  const r = calDayRect(l, day) || { x: 0, y: l.h, w: l.w, h: 0 };
+  return { x: sx(l.x + r.x + r.w / 2) - 110 * k, y: sy(l.y + r.y + r.h + 3), w: 220 * k, h: 24 * k, font: `400 12px ${FB}`, fs: 12, lh: 16, minW: 220, left: true };
+}
+function setDayNote(ref, v) {
+  const { id, day } = dnoteRef(ref);
+  mutate(t => {
+    const f = findM(t, id); if (!f) return; const n = f.n;
+    if (v) {
+      if (!(n.days || []).includes(day)) n.days = (n.days || []).concat(day).sort(); // scrivere la nota segna il giorno
+      n.dnote = n.dnote || {}; n.dnote[day] = v;
+    } else if (n.dnote) { delete n.dnote[day]; if (!Object.keys(n.dnote).length) delete n.dnote; }
+  });
 }
 function setDayColor(id, key, c) {
   mutate(t => {
@@ -94,7 +129,8 @@ function setDayColor(id, key, c) {
 }
 // colore di serie dei segni (menu del blocco): vale per i giorni senza un colore proprio
 function setMarkColor(id, c) { mutate(t => { const f = findM(t, id); if (!f) return; if (c === null) delete f.n.dcol; else f.n.dcol = c; }); }
-const dropDayc = (n, keep) => { if (!n.dayc) return; Object.keys(n.dayc).forEach(k => { if (!keep(k)) delete n.dayc[k]; }); if (!Object.keys(n.dayc).length) delete n.dayc; };
+// giorni non più segnati: perdono colore e nota
+const dropDayc = (n, keep) => ['dayc', 'dnote'].forEach(f => { if (!n[f]) return; Object.keys(n[f]).forEach(k => { if (!keep(k)) delete n[f][k]; }); if (!Object.keys(n[f]).length) delete n[f]; });
 // ‹ › : mese precedente o successivo (vista annuale: anno)
 function calNav(id, d) {
   if (readOnly()) { S.roOk = true; try { return calNav(id, d); } finally { S.roOk = false; } }

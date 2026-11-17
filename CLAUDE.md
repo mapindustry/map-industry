@@ -224,7 +224,13 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     mese col suo nome (`calmm`, il corrente in `--accent`), mesi di una riga alti uguali; cambiando vista si toglie `n.w`. Menu: Vai al
     mese corrente, Togli i segni del mese, Segni = colore di serie dei segni (`n.dcol`). Tasto destro su un giorno = menu
     `kind: 'day'` (`dayMenuHtml`): colore di quel giorno (`n.dayc[giorno]`, `setDayColor`, lo segna anche) e Segna/Togli;
-    pallini colorati con `data-dc` (non `data-c`, che colora il blocco). Avanzamento (`js/progress.js`, tipo `prog`): titolo + barra, `n.pct` 0–100
+    pallini colorati con `data-dc` (non `data-c`, che colora il blocco). **Nota di un giorno** (`n.dnote[giorno]`, menu del
+    giorno → Scrivi una nota, editor `dnote` con id `blocco|giorno`, `setDayNote`; la scrive e segna il giorno): triangolino
+    `.calnt` nell'angolo, testo al passaggio; togliere il segno toglie colore e nota (`dropDayc`). **Tabella agganciata**:
+    una tabella collegata (qualsiasi verso) a uno o più calendari mostra i giorni segnati in ordine di data, Data | Nota
+    (con più calendari anche Calendario), pallino del colore del segno (`.tdot`). `calTables` (in `sizeMap`) prepara
+    `CALTAB`, `tableSize` usa quelle righe; niente editor delle celle, linguette, righe/colonne; `n.table` resta e torna
+    togliendo il collegamento. Avanzamento (`js/progress.js`, tipo `prog`): titolo + barra, `n.pct` 0–100
     (`pctOf`, a passi di 5): clic o trascinamento sulla barra (`data-pbar`, `P.mode = 'pbar'`, un passo di annullamento)
     o cursore Fatto nel menu (`#mpct`); a 100% verde (`--win`). Per entrambi la maniglia cambia solo la larghezza.
   - **Mappa collegata** (`js/mapref.js`, `n.ref` = id di un altro progetto, richiesta il 2026-11-11): linguetta sotto il

@@ -121,7 +121,8 @@ function nodeMenuHtml() {
   const ty = one ? (one.type || 'text') : null;
   let h = title(one ? (BTYPES.find(b => b[0] === ty) || BTYPES[0])[3] : `${nodes.length} blocchi`) + swatches(cur) +
     seg('Tipo', BTYPES.map(([k, l, ic]) => ['bt-' + k, l, ty === k, ic])) + SEP;
-  if (one && one.type === 'table') {
+  if (one && one.type === 'table' && calLinked(one.id)) h += `<div class="mrow"><span>Segue il calendario collegato</span></div>` + SEP; // righe dal calendario
+  else if (one && one.type === 'table') {
     const rows = tableRows(one), nc = Math.max(...rows.map(r => r.length)), cl = MENU_CELL;
     h += (cl ? (rows.length > 1 ? item('trdel', 'Elimina questa riga') : '') + (nc > 1 ? item('tcdel', 'Elimina questa colonna') : '') : '') +
       stepper('Righe', 'trow', rows.length, 'vtrow', 'Togli l’ultima riga', 'Aggiungi una riga') +
@@ -319,6 +320,8 @@ menuEl.addEventListener('click', e => {
     return M0.kind === 'day' ? setDayColor(M0.id, M0.day, c) : setMarkColor(S.sel, c);
   }
   if (MENU.kind === 'day' && e.target.closest('[data-a="daytog"]')) { const M0 = MENU; closeMenu(); return toggleDay(M0.id, M0.day); }
+  if (MENU.kind === 'day' && e.target.closest('[data-a="daynote"]')) { const M0 = MENU; closeMenu(); return startDayNote(M0.id, M0.day); }
+  if (MENU.kind === 'day' && e.target.closest('[data-a="daynotedel"]')) { const M0 = MENU; closeMenu(); return setDayNote(`${M0.id}|${M0.day}`, ''); }
   const sw = e.target.closest('[data-c]');
   if (sw) {
     if (MENU.kind === 'edge') { // colore dei collegamenti: il menu resta aperto, per provarne più d'uno
@@ -336,12 +339,12 @@ menuEl.addEventListener('click', e => {
       const r = st.dataset.st === 'trow'; resizeTable(S.sel, r ? d : 0, r ? 0 : d);
       const rows = tableRows(findM(curTree(), S.sel).n); $('#vtrow').textContent = rows.length; $('#vtcol').textContent = Math.max(...rows.map(x => x.length)); return;
     }
-    if (st.dataset.st === 'gbw' || st.dataset.st === 'gfs') { // gruppo: spessore del bordo (½ px) e dimensione del titolo
-      const g = findGroup(curTree(), MENU.id), bw = st.dataset.st === 'gbw';
-      const v = bw ? clamp(Math.round((gbwOf(g) + d * 0.5) * 10) / 10, 0.5, 6) : clamp(gfsOf(g) + d, 9, 36);
     if (st.dataset.st === 'lgx' || st.dataset.st === 'lgy') { // gruppo in fila: spazio tra colonne o tra righe (4 px)
       const x = st.dataset.st === 'lgx', v = setGroupGap(x ? 'x' : 'y', d, menuGroups()); $(x ? '#vlgx' : '#vlgy').textContent = v + ' px'; return;
     }
+    if (st.dataset.st === 'gbw' || st.dataset.st === 'gfs') { // gruppo: spessore del bordo (½ px) e dimensione del titolo
+      const g = findGroup(curTree(), MENU.id), bw = st.dataset.st === 'gbw';
+      const v = bw ? clamp(Math.round((gbwOf(g) + d * 0.5) * 10) / 10, 0.5, 6) : clamp(gfsOf(g) + d, 9, 36);
       setGroupStyle(bw ? { bw: v } : { tfs: v }, menuGroups()); $(bw ? '#vgbw' : '#vgfs').textContent = v + ' px'; return;
     }
     if (st.dataset.st === 'nfs') { // dimensione del testo delle note
@@ -404,7 +407,8 @@ menuEl.addEventListener('click', e => {
   if (a === 'gct') { const ids = menuGroups(); closeMenu(); return toggleGroupCt(ids); }
   if (a.startsWith('gly-')) { // disposizione del contenuto: il menu resta aperto e si ricostruisce (cambiano gli spazi)
     setGroupLay(a.slice(4), menuGroups());
-    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); return;
+    const g = findGroup(curTree(), MENU.id), x = menuEl.style.left, y = menuEl.style.top;
+    if (g) { menuEl.innerHTML = groupMenuHtml(g); menuEl.style.left = x; menuEl.style.top = y; } return;
   }
   if (a.startsWith('gl-') || a.startsWith('gta-') || a.startsWith('gti-')) {
     setGroupStyle(a.startsWith('gl-') ? { line: a.slice(3) } : a.startsWith('gti-') ? { ti: a === 'gti-on' } : { ta: a.slice(4) }, menuGroups());

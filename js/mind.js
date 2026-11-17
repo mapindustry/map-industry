@@ -77,6 +77,7 @@ function keepLook(t, before) {
 // livello di stile: 0 = idea primaria, poi 1 e 2 secondo la profondità nell'albero
 function sizeMap(tree) {
   const M = new Map();
+  CALTAB = calTables(tree); // tabelle agganciate ai calendari (js/blocks.js)
   function size(n, depth) {
     // svincolo: un punto senza testo, tappa di un collegamento
     if (n.hub) { M.set(n.id, { lines: [], lh: 0, w: HUB, h: HUB, depth: 2 }); n.children.forEach(c => size(c, depth + 1)); return; }
