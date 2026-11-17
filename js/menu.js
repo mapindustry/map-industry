@@ -58,7 +58,8 @@ function groupMenuHtml(g) {
     item('gedit', 'Rinomina', '', 'F2') +
     item('gfold', g.fold ? 'Espandi il gruppo' : 'Comprimi il gruppo', '', plural(cnt, '1 elemento', 'elementi'), g.fold ? '' : 'Resta solo la barra del titolo') +
     (g.fold ? '' : item('gsel', 'Seleziona il contenuto')) + item('gfit', 'Adatta al contenuto') +
-    item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
+    item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') +
+    item('group', 'Raggruppa', '', 'Ctrl+G', 'Lo mette dentro un gruppo nuovo') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
     item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + SEP +
     head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'group' ? item('stpaste', gs > 1 ? `Incolla stile su ${gs} gruppi` : 'Incolla stile') : '') +
     seg('Bordo', [['gl-solid', 'Continuo', ln === 'solid', box('')], ['gl-dash', 'Tratteggiato', ln === 'dash', box('4 3')],
@@ -68,7 +69,7 @@ function groupMenuHtml(g) {
     head('Titolo') + stepper('Testo', 'gfs', gfsOf(g) + ' px', 'vgfs', 'Titolo più piccolo', 'Titolo più grande') +
     `<div class="mrow wide"><span>Peso</span><select id="mgfw" aria-label="Peso del titolo">${FW.map(([v, l]) => `<option value="${v}"${gfwOf(g) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>` +
     italicSeg('gti', !!g.ti) +
-    seg('Posizione', [['gta-l', 'A sinistra', ta === 'l', ico('M4 4H18M4 10H13')], ['gta-c', 'Al centro', ta === 'c', ico('M7 4H21M9.5 10H18.5')]]);
+    seg('Posizione', [['gta-l', 'A sinistra', ta === 'l', ico('M4 4H18M4 10H13')], ['gta-c', 'Al centro', ta === 'c', ico('M7 4H21M9.5 10H18.5')], ['gta-r', 'A destra', ta === 'r', ico('M10 4H24M15 10H24')]]);
 }
 /* ---------- nota della tela ---------- */
 // colore in alto, azioni, Elimina, poi lo stile (testo, peso, corsivo, opacità): vale per tutte le note selezionate
@@ -202,7 +203,7 @@ function hubMenuHtml(one, t) {
 /* ---------- pallino (clic o tasto destro) ---------- */
 function showPinMenu(cx, cy, id, kind, idx) {
   // uscita o struttura: si possono comprimere i blocchi che ne partono
-  const n = findM(curTree(), id).n, key = kind === 'in' ? null : (kind === 'str' ? 's:' : 'o:') + idx, cnt = key ? countPin(n, key) : 0;
+  const n = endOf(curTree(), id), key = kind === 'in' || isGrp(n) ? null : (kind === 'str' ? 's:' : 'o:') + idx, cnt = key ? countPin(n, key) : 0; // gruppo: niente rami da comprimere
   const shut = key && !n.fold && (n.foldOut || []).includes(key);
   const TY = [['ptin', 'Ingresso', 'in'], ['ptout', 'Uscita', 'out'], ['ptstr', 'Struttura', 'str']];
   const nl = pinEnds(curTree()).filter(x => { const X = pinData(n)[PK[kind]][idx]; return (x.from === n && x.fp === X) || (x.to === n && x.tp === X); }).length;
@@ -225,12 +226,12 @@ cv.addEventListener('contextmenu', e => {
   }
   const el = document.elementFromPoint(e.clientX, e.clientY) || e.target;
   const g = el.closest('.mn[data-id]'), edge = el.closest('[data-edge]'), cn = el.closest('[data-note]'), gr = el.closest('[data-grp]');
-  const an = g && el.closest('[data-anc]'), lg = el.closest('[data-leg]');
+  const an = (g || gr) && el.closest('[data-anc]'), lg = el.closest('[data-leg]');
   if (lg) { // legenda: opzioni della riga sotto il puntatore e della legenda
     const row = el.closest('[data-lrow]'); selectOnly(LEG); render();
     return showMenu(e.clientX, e.clientY, legendMenuHtml(row && row.dataset.lrow), { kind: 'legend', id: LEG, row: row && row.dataset.lrow });
   }
-  if (an) { selectOnly(g.dataset.id); render(); return showPinMenu(e.clientX, e.clientY, g.dataset.id, an.dataset.anc, +an.dataset.idx); }
+  if (an) { const aid = g ? g.dataset.id : gr.dataset.grp; selectOnly(aid); render(); return showPinMenu(e.clientX, e.clientY, aid, an.dataset.anc, +an.dataset.idx); }
   if (g) {
     MENU_CELL = cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); // cella della tabella sotto il puntatore (anche sul testo)
     if (!S.sels.has(g.dataset.id)) selectOnly(g.dataset.id); else S.sel = g.dataset.id;

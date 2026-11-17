@@ -85,13 +85,42 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     gruppo interno conta per il riquadro visibile, `gRect`: compresso basta la barra). `dragMovers` porta con un gruppo
     anche ciò che nascondono i gruppi compressi al suo interno;
   - stile (`groupMenuHtml`, `setGroupStyle`, valori di serie in `GDEF` tolti dai dati): `color`, `line` (`GLINE`), `bw`,
-    `fo` (opacità dello sfondo), `tfs`/`tfw`/`ti` (titolo, `ti` = corsivo; la barra `gHead` cresce con lui), `ta: 'c'`; copia/incolla stile;
+    `fo` (opacità dello sfondo), `tfs`/`tfw`/`ti` (titolo, `ti` = corsivo; la barra `gHead` cresce con lui), `ta` (`'c'` al
+    centro, `'r'` a destra, di serie a sinistra); copia/incolla stile;
   - Adatta al contenuto (`fitGroup`), Seleziona il contenuto, Blocca (`lock`: `lockedSet` ferma trascinamenti e Disponi,
     niente maniglia; lucchetto nella barra);
   - Comprimi (`toggleGroupFold`): `fold` + `hide` = id presi al momento; resta la barra (`gRect`) con "+N"
     (`data-gfold`: clic espande, passaggio = contenuto in trasparenza, `showGroupPreview`). `mindLayout`/`notesLayout`
     tolgono i nascosti (`groupHidden`) e tengono tutto in `.full`; i collegamenti verso i nascosti arrivano alla barra
     (`L.px`). Cerca (`revealHit`) espande il gruppo che nasconde il risultato.
+  - **si allarga col contenuto** (richiesto il 2026-11-17): trascinando un elemento del gruppo verso il bordo il gruppo
+    cresce per tenerlo dentro (margine `GPAD`), finché l'elemento tocca il riquadro che il gruppo aveva all'inizio del
+    trascinamento; portato tutto fuori esce e il gruppo torna com'era. `growStart` (all'inizio, in `pointermove`) e
+    `growApply` (a ogni movimento); prima i gruppi più piccoli, così cresce anche quello che li contiene. Non con Alt
+    (copie), né per gruppi compressi, bloccati o trascinati anche loro.
+  - **entrare in un gruppo trascinando** (richiesto il 2026-11-17): con blocchi, note o gruppi trascinati sopra un gruppo
+    (il più interno sotto il puntatore, non compresso né bloccato, che non li contiene già tutti) quel gruppo si illumina
+    (`S.dropGrp` → classe `.drop`, `--accent`) e al rilascio ci entrano: `dropIntoGroup` lo allarga quanto serve (`growTo`),
+    e con lui i gruppi che lo contengono. `dragSizes`/`dragBoxes` = misure prese all'inizio. Rilasciare su un blocco dopo
+    la sosta (`S.dropOn`, `foldInto`) viene prima. Non con Alt.
+  - **Alt + trascina = copia solo i blocchi selezionati** (con i loro rami compressi e i collegamenti tra loro:
+    `altCopies` → `withFolded`/`copyNodes`); **Alt + Ctrl + trascina** = copia anche tutti i rami che ne partono
+    (`P.altTree`, `looseCopy`; corretto il 2026-11-17, prima Alt copiava sempre i rami). Con Alt, Ctrl non avvia il collegamento.
+  - **Alt + trascina un gruppo = copia** (`groupCopies`, chiamata da `altCopies`): copia il gruppo con tutto il contenuto
+    (blocchi come sono collegati tra loro, rami compressi, note, gruppi interni anche nascosti, `hide` rimappato) e i
+    collegamenti aggiuntivi che restano dentro la copia; un blocco selezionato a parte non si copia due volte.
+  - **gruppi annidati** (richiesti il 2026-11-17): un gruppo dentro un altro conta come suo contenuto (solo la posizione).
+    Raggruppa (Ctrl+G, anche nel menu del gruppo) prende blocchi, note **e gruppi** selezionati (`groupSelected`, riquadri
+    da `S.L.g`); si disegnano dal più grande al più piccolo (`garea`), così l'interno sta sopra. Il componente Gruppo
+    lasciato dentro un gruppo ci sta tutto dentro, sotto la barra (`addComponent`). Un gruppo trascinato sopra un blocco
+    non lo prende come destinazione (`DROP_WAIT` vale solo con blocchi selezionati).
+  - **collegamenti con i gruppi** (richiesti il 2026-11-17): un gruppo può essere capo di un collegamento aggiuntivo
+    (`tree.links` con `from`/`to` = id del gruppo; mai legame d'albero). `endOf(t, id)` = blocco o gruppo, `isGrp`,
+    `layOf(id)` = riquadro (blocchi in `L`, gruppi visibili in `L.g`, compresso = la barra, con `gid` così non si disegnano
+    i collegamenti con il suo contenuto). Il gruppo ha i suoi pallini `g.pin` (di serie nessuno, `tidyPins` li toglie con
+    `eachEnd`), disegnati sopra i collegamenti (`.ganc`, con `data-grp`). Si collega con Ctrl + trascina o dai pallini,
+    rilasciando sul bordo o anche dentro il gruppo (`groupAt`; un blocco sotto il puntatore vince). Eliminare o sciogliere
+    il gruppo toglie i suoi collegamenti (`cleanLinks`).
 - Blocco: il modello completo è descritto in testa a `js/mind.js`. In breve:
   - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco; trascinare
     sposta solo i selezionati (i figli restano). Posizioni mancanti: `ensurePositions` (`placeNew` per i nuovi,

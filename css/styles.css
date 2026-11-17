@@ -163,6 +163,7 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .grp.cc .gtitle{fill:color-mix(in srgb,var(--cc) 70%,var(--grp-title))}
 .grp:hover .gbox{stroke-opacity:1}
 .grp.gfold .gbox{stroke-opacity:.8}
+.grp.drop .gbox{stroke:var(--accent);stroke-opacity:1;stroke-width:3px!important;fill:var(--accent);fill-opacity:.16!important}
 .grp g.fold{cursor:pointer}
 .grp g.fold text{fill:var(--on-accent);font:600 11px var(--f-body)}
 .grp .glock{fill:none;stroke:var(--grp-title);stroke-width:1.4;stroke-linecap:round;pointer-events:all}

@@ -47,6 +47,15 @@ function addComponent(k, x, y, corner, avoid) {
   if (k === 'img' || k === 'audio') return addMediaBlock(k, x, y); // prima si sceglie il file
   if (k === 'group') {
     const g = { id: uid(), x: Math.round(x - 140), y: Math.round(y - 90), w: 280, h: 180, text: 'Gruppo' };
+    // lasciato dentro un gruppo: ci sta tutto dentro, sotto la barra del titolo (gruppo annidato)
+    const pr = !avoid && groupAt({ x, y }) && S.L.g.get(groupAt({ x, y }));
+    if (pr && !pr.fold) {
+      const top = pr.y + gHead(pr) + GPAD / 2, w = Math.min(g.w, pr.w - GPAD), h = Math.min(g.h, pr.y + pr.h - GPAD / 2 - top);
+      if (w >= GMIN[0] && h >= GMIN[1]) {
+        g.w = Math.round(w); g.h = Math.round(h);
+        g.x = Math.round(clamp(x - w / 2, pr.x + GPAD / 2, pr.x + pr.w - GPAD / 2 - w)); g.y = Math.round(clamp(y - h / 2, top, pr.y + pr.h - GPAD / 2 - h));
+      }
+    }
     mutate(t => (t.groups = t.groups || []).push(g));
     selectOnly(g.id); render(); startGroupEdit(g.id); markFresh(); return;
   }

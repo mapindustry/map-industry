@@ -15,7 +15,7 @@ const boxEl = $('#box');
 const TP = new Map(); // dita appoggiate sulla tela: pointerId → { x, y }
 function startPinch() {
   if (P) {
-    clearTimeout(P.dropT); S.dropOn = null; S.rail = null; boxEl.hidden = true; cv.classList.remove('panning', 'linking');
+    clearTimeout(P.dropT); S.dropOn = null; S.dropGrp = null; S.rail = null; boxEl.hidden = true; cv.classList.remove('panning', 'linking');
     if (P.mode === 'link') S.link = null;
     if (P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) save();
     if (P.mode === 'legend') S.legDrag = null;
@@ -68,11 +68,11 @@ cv.addEventListener('pointerdown', e => {
   } else if (g && e.target.closest('[data-fold]')) {
     const k = e.target.closest('[data-fold]').dataset.fold; // etichetta "+N": riapre i rami compressi (tutti o di un pallino)
     hidePreview(); return toggleFold(g.dataset.id, k === 'all' ? null : k);
-  } else if (g && e.target.closest('[data-anc]')) {
-    const id = g.dataset.id, a = e.target.closest('[data-anc]'), l = S.L.get(id);
-    const hit = pinAt(findM(curTree(), id).n, l, toSvg(e.clientX, e.clientY)) || { kind: a.dataset.anc, idx: +a.dataset.idx };
+  } else if ((g || gr) && e.target.closest('[data-anc]')) { // pallino di un blocco o di un gruppo
+    const id = g ? g.dataset.id : gr.dataset.grp, a = e.target.closest('[data-anc]'), l = layOf(id), N = endOf(curTree(), id);
+    const hit = pinAt(N, l, toSvg(e.clientX, e.clientY)) || { kind: a.dataset.anc, idx: +a.dataset.idx };
     const { kind, idx } = hit;
-    const [px, py] = pinXY(l, pinsOf(findM(curTree(), id).n)[PK[kind]][idx]);
+    const [px, py] = pinXY(l, pinsOf(N)[PK[kind]][idx]);
     // Ctrl: trascinato su un altro pallino dello stesso blocco lo fonde con quello (merge); il pallino non scorre sul bordo.
     // Ctrl con un collegamento selezionato che usa questo pallino: si sposta solo quel collegamento (split)
     const ctrl = e.ctrlKey || e.metaKey, split = ctrl && S.esel && !S.esels.size && edgeOnPin(S.esel, id, kind, idx) ? S.esel : null;
@@ -94,16 +94,16 @@ cv.addEventListener('pointerdown', e => {
   } else if (g || cn || gr) {
     const id = g ? g.dataset.id : cn ? cn.dataset.note : gr.dataset.grp;
     if (e.ctrlKey || e.metaKey || e.shiftKey) keepEdge();
-    if (e.ctrlKey || e.metaKey) {
-      // Ctrl + trascina da un blocco: collegamento con i pallini scelti da soli; Ctrl + clic: selezione (al rilascio)
-      if (g && !readOnly()) { P = { ...base, mode: 'clink', id }; cv.setPointerCapture(e.pointerId); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) { // Alt + Ctrl: copia con i rami (sotto, come trascinamento)
+      // Ctrl + trascina da un blocco o da un gruppo: collegamento con i pallini scelti da soli; Ctrl + clic: selezione (al rilascio)
+      if ((g || gr) && !readOnly()) { P = { ...base, mode: 'clink', id }; cv.setPointerCapture(e.pointerId); return; }
       toggleSel(id); render(); return;
     }
     // Maiusc: con un clic aggiunge o toglie dalla selezione; trascinando, la selezione scorre su un binario
     const wasSel = S.sels.has(id), wasMulti = !e.shiftKey && wasSel && S.sels.size > 1;
     if (e.shiftKey) { if (!wasSel) toggleSel(id); else S.sel = id; render(); }
     else if (!wasSel) selectOnly(id); else S.sel = id;
-    P = { ...base, mode: 'drag', id, movers: dragMovers(curTree()), wasMulti, alt: e.altKey, shiftOff: e.shiftKey && wasSel };
+    P = { ...base, mode: 'drag', id, movers: dragMovers(curTree()), wasMulti, alt: e.altKey, altTree: e.altKey && (e.ctrlKey || e.metaKey), shiftOff: e.shiftKey && wasSel };
     const lockS = lockedSet(curTree()); P.locked = P.movers.some(m => lockS.has(m.o)); // gruppo bloccato: non si sposta
   } else {
     // sfondo o collegamento: trascinando si disegna il riquadro, con un clic su un collegamento lo si seleziona
@@ -125,13 +125,14 @@ cv.addEventListener('pointermove', e => {
   if (!P.moved && Math.hypot(dx, dy) < 4) return;
   if (P.mode === 'drag' && P.locked) { if (!P.warned) { P.warned = true; toast('Gruppo bloccato: sbloccalo dal menu per spostarlo'); } return; }
   if (P.mode === 'clink') { // Ctrl tenuto e il mouse si è mosso: parte un collegamento dal blocco
-    const l = S.L.get(P.id); if (!l) { P = null; return; }
+    const l = layOf(P.id); if (!l) { P = null; return; }
     S.link = { kind: 'out', idx: null, id: P.id, auto: true, x1: l.x + l.w / 2, y1: l.y + l.h / 2, x2: null, y2: null, over: null, overAnc: null, pinMove: null };
     P.mode = 'link'; cv.classList.add('linking');
   }
   if (!P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) {
     snapshot();
-    if (P.mode === 'drag' && P.alt) P.movers = altCopies(curTree()); // Alt + trascina: si sposta la copia
+    if (P.mode === 'drag' && P.alt) P.movers = altCopies(curTree(), P.altTree); // Alt + trascina: si sposta la copia (Alt + Ctrl: con i rami)
+    if (P.mode === 'drag' && !P.alt) { P.grow = growStart(curTree(), P.movers); P.sz = dragSizes(curTree(), P.movers); } // gruppi che si allargano; misure per entrare in un gruppo
   }
   P.moved = true;
   const v = view();
@@ -147,23 +148,25 @@ cv.addEventListener('pointermove', e => {
   if (P.mode === 'link') {
     const p = toSvg(e.clientX, e.clientY), lk = S.link;
     // vicino al bordo del proprio blocco il pallino scorre lungo il bordo; lontano si disegna un collegamento
-    const nb = nearestBorder(S.L.get(lk.id), p);
+    const nb = nearestBorder(layOf(lk.id), p);
     lk.pinMove = !lk.auto && !lk.merge && !lk.split && nb.dist <= 16 / v.k ? [nb.side, nb.t] : null;
     if (lk.auto) { const sp = autoOutPoint(lk.id, p.x, p.y); lk.x1 = sp.x; lk.y1 = sp.y; } // dal pallino d'uscita più vicino
     lk.x2 = p.x; lk.y2 = p.y; lk.over = null; lk.overAnc = null;
     if (!lk.pinMove) {
       lk.pinMove = null; render(); // il disegno va aggiornato prima di cercare cosa c'è sotto il puntatore
-      const el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]');
-      const ok = g && g.dataset.id !== lk.id, a = ok && el.closest('[data-anc]');
-      lk.over = ok ? g.dataset.id : null;
+      // sotto il puntatore: un blocco, altrimenti il gruppo (anche dentro, dove il riquadro lascia passare i clic)
+      const el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('.mn[data-id]'), gr = !g && el && el.closest('[data-grp]');
+      const over = g ? g.dataset.id : gr ? gr.dataset.grp : groupAt(p);
+      const ok = over && over !== lk.id, a = ok && el && el.closest('[data-anc]');
+      lk.over = ok ? over : null;
       // sul pallino più vicino al puntatore (preferendo quello compatibile), non su quello disegnato sopra
-      if ((lk.merge || lk.split) && g && g.dataset.id === lk.id) { // Ctrl su un pallino, sopra il suo blocco: pallino su cui portarlo
-        const hit = pinAt(findM(curTree(), lk.id).n, S.L.get(lk.id), p, lk.kind);
+      if ((lk.merge || lk.split) && over === lk.id) { // Ctrl su un pallino, sopra il suo blocco: pallino su cui portarlo
+        const hit = pinAt(endOf(curTree(), lk.id), layOf(lk.id), p, lk.kind);
         lk.over = lk.id; lk.overAnc = hit && !(hit.kind === lk.kind && hit.idx === lk.idx) ? hit : null;
         return render();
       }
       // sopra un pallino si aggancia a quello, sul corpo del blocco ne nascerà uno nuovo
-      lk.overAnc = ok ? pinAt(findM(curTree(), lk.over).n, S.L.get(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
+      lk.overAnc = ok ? pinAt(endOf(curTree(), lk.over), layOf(lk.over), p, { out: 'in', in: 'out', str: 'str' }[lk.kind])
         || (a ? { kind: a.dataset.anc, idx: +a.dataset.idx } : null) : null;
     }
     return render();
@@ -173,6 +176,10 @@ cv.addEventListener('pointermove', e => {
     const rail = e.shiftKey ? (Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v') : null;
     const mx = rail === 'v' ? 0 : dx, my = rail === 'h' ? 0 : dy;
     P.movers.forEach(m => { m.o.x = Math.round(m.ox + mx / v.k); m.o.y = Math.round(m.oy + my / v.k); });
+    // sopra un gruppo: si illumina e, al rilascio, la selezione ci entra
+    const tg = P.sz ? dropGroup(curTree(), toSvg(e.clientX, e.clientY), P.movers, P.sz) : null;
+    S.dropGrp = tg ? tg.id : null;
+    if (P.grow) growApply(P.grow, tg);
     const pl = S.L.get(P.id) || S.NL.get(P.id) || findGroup(curTree(), P.id);
     S.rail = rail && pl ? { dir: rail, x: pl.x + pl.w / 2 + mx / v.k, y: pl.y + pl.h / 2 + my / v.k } : null;
     // sopra un altro blocco: dopo una breve sosta (DROP_WAIT) quello diventa la destinazione e, rilasciando,
@@ -181,7 +188,7 @@ cv.addEventListener('pointermove', e => {
     if (!P.alt) {
       const p = toSvg(e.clientX, e.clientY), t = curTree();
       S.L.forEach((l, id) => { if (!S.sels.has(id) && p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h) cand = id; });
-      if (cand && !canFoldInto(t, cand)) cand = null;
+      if (cand && (!canFoldInto(t, cand) || !topSelected(t).length)) cand = null; // solo blocchi entrano in un blocco (un gruppo trascinato no)
     }
     if (cand !== P.cand) {
       P.cand = cand; S.dropOn = null; clearTimeout(P.dropT);
@@ -266,7 +273,7 @@ function endPointerCore(e) {
   if (P.mode === 'link') {
     const lk = S.link, moved = P.moved; S.link = null; P = null; cv.classList.remove('linking');
     if (lk.auto) { // Ctrl + trascina dal blocco: sopra un ingresso si aggancia a quello, sul blocco ne nasce uno nuovo
-      if (!lk.over) { render(); return toast('Rilascia su un altro blocco per collegarli'); }
+      if (!lk.over) { render(); return toast('Rilascia su un altro blocco o su un gruppo per collegarli'); }
       if (lk.overAnc && lk.overAnc.kind !== 'in') { render(); return toast('Un’uscita va collegata a un ingresso'); }
       return autoLink(lk.id, lk.over, lk.overAnc && lk.overAnc.idx);
     }
@@ -274,7 +281,7 @@ function endPointerCore(e) {
       const key = lk.split, oa = lk.overAnc; render();
       if (lk.over !== lk.id) { selectEdge(key); render(); return toast('Rilascia su questo blocco: sul bordo nasce un pallino nuovo, su un pallino si aggancia lì'); }
       if (oa && oa.kind !== lk.kind) { selectEdge(key); render(); return toast('Pallino di tipo diverso: cambia prima il tipo'); }
-      const nb = nearestBorder(S.L.get(lk.id), { x: lk.x2, y: lk.y2 });
+      const nb = nearestBorder(layOf(lk.id), { x: lk.x2, y: lk.y2 });
       return splitEnd(key, lk.id, lk.kind, lk.idx, oa ? { idx: oa.idx } : { pos: [nb.side, Math.round(clamp(nb.t, 0.05, 0.95) * 100) / 100] });
     }
     if (lk.merge && moved && lk.over === lk.id) { // Ctrl + pallino su un altro pallino dello stesso blocco: si fondono
@@ -294,7 +301,7 @@ function endPointerCore(e) {
         render();
         return toast({ out: 'Un’uscita va collegata a un ingresso', in: 'Un ingresso va collegato a un’uscita', str: 'Un rombo di struttura va collegato a un altro rombo' }[lk.kind]);
       }
-      const target = findM(curTree(), lk.over).n, tl = S.L.get(lk.over);
+      const target = endOf(curTree(), lk.over), tl = layOf(lk.over);
       const nw = oa ? null : [PK[want], newPinPos(target, tl, lk.x1, lk.y1)], tIdx = oa ? oa.idx : pinsOf(target)[PK[want]].length;
       if (lk.kind === 'str') return link(lk.id, null, lk.over, null, lk.idx, tIdx, nw && { to: nw });
       return lk.kind === 'out' ? link(lk.id, lk.idx, lk.over, tIdx, null, 0, nw && { to: nw }) : link(lk.over, tIdx, lk.id, lk.idx, null, 0, nw && { from: nw });
@@ -315,7 +322,11 @@ function endPointerCore(e) {
     if (P.mode === 'drag' && P.shiftOff) { toggleSel(P.id); render(); } // Maiusc+clic su un selezionato: lo toglie
     if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel || hadES !== S.esels.size) render();
   } else if (P.mode === 'drag' && S.dropOn) {
-    const id = S.dropOn; S.dropOn = null; foldInto(id, P.movers);
+    const id = S.dropOn; S.dropOn = null; S.dropGrp = null; foldInto(id, P.movers);
+  } else if (P.mode === 'drag' && S.dropGrp) { // rilasciato sopra un gruppo: ci entra (il gruppo si allarga quanto serve)
+    const t = curTree(), g = findGroup(t, S.dropGrp); S.dropGrp = null;
+    if (g) dropIntoGroup(t, g, dragBoxes(P.movers, P.sz));
+    save(); render(); if (g) toast('Nel gruppo «' + ell(gTitle(g) || 'Gruppo', 160, `500 13px ${FB}`) + '»');
   } else if (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote') {
     save(); if (P.alt && P.mode === 'drag') toast(S.sels.size > 1 ? `${S.sels.size} copie create` : 'Copia creata');
   }
@@ -339,7 +350,7 @@ function onDouble(e) {
   if (g && !el.closest('[data-anc]')) { const n = (findM(curTree(), g.dataset.id) || {}).n; if (isMedia(n) && !n[n.type]) return pickMedia(n.id); } // immagine o audio ancora da scegliere
   if (g && !el.closest('[data-anc], [data-xtog]') && inExpBody(g.dataset.id, toSvg(e.clientX, e.clientY))) return startBodyEdit(g.dataset.id);
   if (g && !el.closest('[data-anc], [data-xtog]')) return startEdit(g.dataset.id, true);
-  const gr = el.closest('[data-grp]'); if (gr && !el.closest('[data-rsz]')) startGroupEdit(gr.dataset.grp);
+  const gr = el.closest('[data-grp]'); if (gr && !el.closest('[data-rsz], [data-anc]')) startGroupEdit(gr.dataset.grp);
 }
 cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 cv.addEventListener('wheel', e => {

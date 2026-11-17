@@ -15,12 +15,14 @@
 //          str = collegamento di struttura (il blocco è una parte del genitore, non un passo): parte dal pallino
 //          di struttura sp e arriva sul lato rivolto al genitore, linea a puntini
 // Collegamenti aggiuntivi (più ingressi per blocco), in tree.links: { id, from, to, po?, pi?, str?, sp?, note?, dash?, nx?, ny? }
+//   from/to possono essere anche l'id di un gruppo: il gruppo ha i suoi pallini (g.pin) sul bordo del riquadro
+//   (compresso: sulla barra) e si collega solo con collegamenti aggiuntivi (endOf, layOf).
 //   Nelle selezioni e nei menu un collegamento si indica con una chiave: id del blocco figlio, oppure 'x:' + id.
 // Nota sulla tela (in tree.notes): { id, x, y, text }
 // Gruppo (in tree.groups): { id, x, y, w, h, text } riquadro con titolo. Contiene ciò che vi sta tutto dentro:
 //   trascinato dal titolo o dal bordo si sposta con il contenuto; un blocco portato dentro o fuori entra o esce.
 //   Stile: color, line ('dash' di serie | 'solid' | 'dot' | 'none'), bw (bordo), fo (opacità dello sfondo),
-//   tfs/tfw (dimensione e peso del titolo), ta ('c' = titolo al centro).
+//   tfs/tfw (dimensione e peso del titolo), ta ('c' = titolo al centro, 'r' = a destra).
 //   fold + hide = compresso: resta la barra del titolo, gli elementi in `hide` (id presi al momento) non si vedono;
 //   lock = bloccato: né il gruppo né il suo contenuto si spostano.
 const DEF_FS = [16, 14, 13];
@@ -191,9 +193,12 @@ function mindLayout(tree) {
     const bar = gRect(g), all = new Set();
     const rec = h => (h.hide || []).forEach(id => { if (all.has(id)) return; all.add(id); const k = findGroup(tree, id); if (k && k.fold) rec(k); });
     rec(g);
-    all.forEach(id => { const l = L.full.get(id); if (l) L.px.set(id, { ...bar, depth: l.depth, gid: g.id }); });
+    all.forEach(id => { const l = L.full.get(id); if (l || findGroup(tree, id)) L.px.set(id, { ...bar, depth: l ? l.depth : 1, gid: g.id }); });
   });
   GH.forEach(id => L.delete(id));
+  // gruppi visibili come estremi dei collegamenti (compresso: la barra; gid = non disegnare i collegamenti con il suo contenuto)
+  L.g = new Map();
+  (tree.groups || []).forEach(g => { if (!GH.has(g.id)) L.g.set(g.id, { ...gRect(g), depth: 1, gid: g.fold ? g.id : undefined }); });
   return L;
 }
 // Ramo compresso (fold sul blocco): i discendenti restano nei dati con le loro posizioni, ma non si vedono;
@@ -255,6 +260,7 @@ const shiftTree = (n, dx, dy) => walk(n, d => { if (hasPos(d)) { d.x = Math.roun
 // Ogni tipo può avere zero pallini: un blocco può avere solo ingressi, solo uscite o nessuno dei due.
 const PK = { in: 'i', out: 'o', str: 's' };
 function defaultPins(n) {
+  if (isGrp(n)) return { i: [], o: [], s: [] }; // gruppo: pallini solo dove c'è un collegamento
   if (n.primary && !n.hub) return { i: [['t', 0.5]], o: [['l', 0.5], ['r', 0.5]], s: [] };
   return n.flip ? { i: [['r', 0.5]], o: [['l', 0.5]], s: [] } : { i: [['l', 0.5]], o: [['r', 0.5]], s: [] };
 }
@@ -343,7 +349,7 @@ function nearestBorder(l, p) {
 // uno sul lato rivolto all'altro blocco, in un punto libero di quel lato.
 function ensurePins(t, SZ) {
   let changed = false;
-  const box = n => { const s = SZ.get(n.id) || { w: 0, h: 0 }; return { x: n.x || 0, y: n.y || 0, w: s.w, h: s.h }; };
+  const box = n => { if (isGrp(n)) return gRect(n); const s = SZ.get(n.id) || { w: 0, h: 0 }; return { x: n.x || 0, y: n.y || 0, w: s.w, h: s.h }; };
   allLinks(t).forEach(L => {
     const str = isStr(L.e);
     [[L.from, str ? 's' : 'o', L.to], [L.to, str ? 's' : 'i', L.from]].forEach(([n, k, other]) => {
@@ -395,13 +401,26 @@ function edgeArrow(pts, skip, w, op) {
   const P = (dx, dy) => `${(cx + ux * dx - uy * dy).toFixed(1)},${(cy + uy * dx + ux * dy).toFixed(1)}`;
   return `<path class="earr"${op ? ` style="fill-opacity:${op}"` : ''} d="M${P(a, 0)} L${P(-a, b)} L${P(-a * .45, 0)} L${P(-a, -b)} Z"/>`;
 }
+// estremo di un collegamento: un blocco o un gruppo (i gruppi non hanno children e si collegano solo con collegamenti aggiuntivi)
+const isGrp = o => !!o && !o.children;
+function endOf(tree, id) { const f = findM(tree, id); return f ? f.n : findGroup(tree, id) || null; }
+// riquadro sulla tela di un estremo: blocco (L) o gruppo visibile (L.g)
+const layOf = (id, L = S.L) => (L && (L.get(id) || (L.g && L.g.get(id)))) || null;
+// blocchi e gruppi (cioè tutto ciò che può avere pallini)
+function eachEnd(t, fn) { walkAll(t, n => fn(n)); (t.groups || []).forEach(g => fn(g)); }
+// gruppo visibile sotto il punto p (coordinate della tela): il più piccolo, se uno sta dentro l'altro
+function groupAt(p) {
+  let best = null, ba = Infinity;
+  ((S.L && S.L.g) || new Map()).forEach((r, id) => { if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h && r.w * r.h < ba) { ba = r.w * r.h; best = id; } });
+  return best;
+}
 // tutti i collegamenti di un livello: { key, from, to, e (dati: stile, nota, pallini), extra }
 function allLinks(tree) {
   const out = [];
   walkAll(tree, (n, p) => { if (p) out.push({ key: n.id, from: p, to: n, e: n.edge || {}, extra: false }); });
   (tree.links || []).forEach(x => {
-    const a = findM(tree, x.from), b = findM(tree, x.to);
-    if (a && b) out.push({ key: 'x:' + x.id, from: a.n, to: b.n, e: x, extra: true });
+    const a = endOf(tree, x.from), b = endOf(tree, x.to);
+    if (a && b) out.push({ key: 'x:' + x.id, from: a, to: b, e: x, extra: true });
   });
   return out;
 }
@@ -419,13 +438,29 @@ const TIP = {
 };
 const PIN_TIP = ' · Clic: tipo, duplica, elimina';
 
+// pallini di un blocco o di un gruppo (l = riquadro sulla tela)
+function anchorsMarkup(n, l, lk) {
+  let out = '';
+  const P = pinsOf(n);
+  [['in', P.i], ['out', P.o], ['str', P.s]].forEach(([kind, list]) => list.forEach((pin, idx) => {
+    const [x, y] = pinXY(l, pin);
+    const hot = lk && lk.over === n.id && lk.overAnc && lk.overAnc.kind === kind && lk.overAnc.idx === idx;
+    const moving = lk && lk.pinMove && lk.id === n.id && lk.kind === kind && lk.idx === idx;
+    // il pallino di struttura è un rombo, per distinguerlo da ingressi e uscite
+    const dot = kind === 'str' ? `<rect class="adot" x="${x - 4}" y="${y - 4}" width="8" height="8" transform="rotate(45 ${x} ${y})"/>`
+      : `<circle class="adot" cx="${x}" cy="${y}" r="4"/>`;
+    out += `<g class="anc ${kind}${hot ? ' hot' : ''}${moving ? ' moving' : ''}" data-anc="${kind}" data-idx="${idx}"><title>${TIP[kind] + PIN_TIP}</title>` +
+      `<circle class="ahit" cx="${x}" cy="${y}" r="${n.hub ? 6 : 10}"/>${dot}</g>`;
+  }));
+  return out;
+}
 // markup SVG della mappa; live = tela interattiva (selezione, pallini, maniglie), altrimenti anteprima/esportazione
 function treeMarkup(tree, L, NL, live) {
   const single = live && S.sels.size === 1 && !editing, lk = live ? S.link : null;
   const F = live ? findMarks(tree, L) : null, fcls = id => !F || !F.on ? '' : (F.hit.has(id) ? ' hit' : '') + (F.cur === id ? ' cur' : '') + (F.inside.has(id) ? ' hitin' : '');
   const E = new Map(); let edges = '', notes = '', nodes = '';
   allLinks(tree).forEach(({ key, from, to, e }) => {
-    const PX = L.px || new Map(), pl = L.get(from.id) || PX.get(from.id), cl = L.get(to.id) || PX.get(to.id);
+    const PX = L.px || new Map(), pl = layOf(from.id, L) || PX.get(from.id), cl = layOf(to.id, L) || PX.get(to.id);
     if (!pl || !cl || (pl.gid && pl.gid === cl.gid)) return; // dentro lo stesso gruppo compresso: non si vede
     const g = linkGeom(from, pl, to, cl, e);
     // la nota sta al centro del collegamento, spostata di nx/ny se l'utente l'ha trascinata
@@ -474,20 +509,7 @@ function treeMarkup(tree, L, NL, live) {
     const tag = tb && !(editing && editing.kind === 'tag' && editing.id === n.id)
       ? `<g class="tag"${live ? ' data-tag="1"' : ''}>${live ? '<title>Doppio clic: modifica l’etichetta</title>' : ''}<rect x="${tb.x}" y="${-tb.h}" width="${tb.w}" height="${tb.h}" rx="5"/>` +
         tb.lines.map((s, i) => `<text x="${tb.x + tb.w / 2}" y="${-tb.h + 12 + i * TAG_LH}" text-anchor="middle">${esc(s)}</text>`).join('') + '</g>' : '';
-    let anchors = '';
-    if (live) {
-      const P = pinsOf(n);
-      [['in', P.i], ['out', P.o], ['str', P.s]].forEach(([kind, list]) => list.forEach((pin, idx) => {
-        const [x, y] = pinXY(l, pin);
-        const hot = lk && lk.over === n.id && lk.overAnc && lk.overAnc.kind === kind && lk.overAnc.idx === idx;
-        const moving = lk && lk.pinMove && lk.id === n.id && lk.kind === kind && lk.idx === idx;
-        // il pallino di struttura è un rombo, per distinguerlo da ingressi e uscite
-        const dot = kind === 'str' ? `<rect class="adot" x="${x - 4}" y="${y - 4}" width="8" height="8" transform="rotate(45 ${x} ${y})"/>`
-          : `<circle class="adot" cx="${x}" cy="${y}" r="4"/>`;
-        anchors += `<g class="anc ${kind}${hot ? ' hot' : ''}${moving ? ' moving' : ''}" data-anc="${kind}" data-idx="${idx}"><title>${TIP[kind] + PIN_TIP}</title>` +
-          `<circle class="ahit" cx="${x}" cy="${y}" r="${n.hub ? 6 : 10}"/>${dot}</g>`;
-      }));
-    }
+    const anchors = live ? anchorsMarkup(n, l, lk) : '';
     if (n.hub) {
       // svincolo: un punto sulla linea; il centro si trascina, i pallini sul bordo collegano o diramano
       const c = HUB / 2, P = pinsOf(n);
@@ -525,9 +547,11 @@ function treeMarkup(tree, L, NL, live) {
       (sel && single ? `<rect class="rsz" data-rsz="1" x="${l.w - 4}" y="${l.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
   });
   // gruppi: riquadri sotto a tutto; si prendono dal titolo o dal bordo, l'interno lascia passare i clic
-  let grps = '';
+  let grps = '', ganc = '';
   const GH = groupHidden(tree);
-  (tree.groups || []).forEach(g => {
+  // i più grandi sotto: un gruppo annidato si disegna sopra quello che lo contiene
+  const garea = g => { const r = gRect(g); return r.w * r.h; };
+  [...(tree.groups || [])].sort((a, b) => garea(b) - garea(a)).forEach(g => {
     if (GH.has(g.id)) return; // dentro un gruppo compresso
     const sel = live && S.sels.has(g.id), hide = editing && editing.kind === 'group' && editing.id === g.id;
     const r = gRect(g), hd = gHead(g), ln = glineOf(g), fs = gfsOf(g);
@@ -538,21 +562,26 @@ function treeMarkup(tree, L, NL, live) {
     const badge = g.fold ? `<g class="fold"${live ? ` data-gfold="${g.id}"` : ''}>${live ? '<title>Clic: espandi il gruppo</title>' : ''}<rect x="${bx}" y="${by}" width="${bw}" height="18" rx="9"/>` +
       `<text x="${bx + bw / 2}" y="${by + 13}" text-anchor="middle">+${cnt}</text></g>` : '';
     const lx = (g.fold ? bx : r.w) - 22, lock = g.lock && live ? `<g class="glock" transform="translate(${lx},${Math.round((hd - 13) / 2)})"><title>Gruppo bloccato</title><rect x="0.5" y="5.5" width="10" height="7" rx="1.5"/><path d="M2.8 5.5V3.8a2.7 2.7 0 0 1 5.4 0V5.5"/></g>` : '';
-    const right = (g.fold ? bw + 10 : 0) + (lock ? 24 : 0), cx = g.ta === 'c';
-    const tx = cx ? (r.w - right) / 2 : 14, tmax = r.w - 28 - right;
-    grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
+    // titolo a sinistra (di serie), al centro (ta 'c') o a destra (ta 'r', prima di "+N" e lucchetto)
+    const right = (g.fold ? bw + 10 : 0) + (lock ? 24 : 0), cx = g.ta === 'c', rx = g.ta === 'r';
+    const tx = cx ? (r.w - right) / 2 : rx ? r.w - right - 14 : 14, tmax = r.w - 28 - right;
+    const gdrop = (lk && lk.over === g.id && !lk.overAnc) || (live && S.dropGrp === g.id);
+    grps += `<g class="grp${hasColor(g) ? ' cc c' + g.color : ''}${g.fold ? ' gfold' : ''}${sel ? ' sel' : ''}${hide ? ' editing' : ''}${gdrop ? ' drop' : ''}"${live ? ` data-grp="${g.id}"` : ''} transform="translate(${g.x},${g.y})">` +
       `<rect class="gbox" width="${r.w}" height="${r.h}" rx="12" style="${boxSt}"/>` +
       (live ? `<rect class="ghit" width="${r.w}" height="${r.h}" rx="12"/><rect class="ghead" width="${r.w}" height="${hd}" rx="12"><title>${g.lock ? 'Gruppo bloccato' : 'Trascina per spostare il gruppo con il suo contenuto'} · Doppio clic: rinomina</title></rect>` : '') +
-      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${esc(ell(gTitle(g), tmax, gFont(g)))}</text>` +
+      `<text class="gtitle" x="${tx}" y="${Math.round(hd / 2 + fs * 0.36)}"${cx ? ' text-anchor="middle"' : rx ? ' text-anchor="end"' : ''} style="font-size:${fs}px;font-weight:${gfwOf(g)}${g.ti ? ';font-style:italic' : ''}">${esc(ell(gTitle(g), tmax, gFont(g)))}</text>` +
       badge + lock +
       (sel ? `<rect class="ring" x="-5" y="-5" width="${r.w + 10}" height="${r.h + 10}" rx="15"/>` : '') +
       (sel && single && !g.fold && !g.lock ? `<rect class="rsz" data-rsz="1" x="${r.w - 4}" y="${r.h - 4}" width="9" height="9" rx="2"><title>Trascina per ridimensionare</title></rect>` : '') + `</g>`;
+    // pallini del gruppo: sopra i collegamenti (che arrivano proprio lì), altrimenti la linea li coprirebbe
+    const ga = live ? anchorsMarkup(g, r, lk) : '';
+    if (ga) ganc += `<g class="ganc" data-grp="${g.id}" transform="translate(${g.x},${g.y})">${ga}</g>`;
   });
   if (live) S.E = E;
   const rubber = lk && lk.x2 != null && !lk.pinMove ? `<path class="rubber" d="M${lk.x1},${lk.y1} L${lk.x2},${lk.y2}"/>` : '';
   // binario (Maiusc + trascina): linea guida lungo la direzione in cui scorre il blocco
   const rl = live && S.rail, rail = rl ? `<path class="rail" d="${rl.dir === 'h' ? `M${rl.x - 1e4},${rl.y} H${rl.x + 1e4}` : `M${rl.x},${rl.y - 1e4} V${rl.y + 1e4}`}"/>` : '';
-  return `<g>${grps}</g>${rail}<g>${edges}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
+  return `<g>${grps}</g>${rail}<g>${edges}${ganc}</g><g>${nodes}</g><g>${notes}</g><g>${cnotes}</g>${rubber}`;
 }
 
 function render() {
@@ -589,7 +618,7 @@ function addCanvasNote(x, y) {
   selectOnly(nt.id); render(); startNoteEdit(nt.id); markFresh();
 }
 // toglie i collegamenti aggiuntivi che puntano a blocchi non più presenti
-function cleanLinks(t) { if (t.links) { t.links = t.links.filter(x => findM(t, x.from) && findM(t, x.to)); if (!t.links.length) delete t.links; } }
+function cleanLinks(t) { if (t.links) { t.links = t.links.filter(x => endOf(t, x.from) && endOf(t, x.to)); if (!t.links.length) delete t.links; } }
 // collegamenti selezionati: quello cliccato (S.esel) e quelli presi col riquadro o con Maiusc (S.esels)
 function selEdges() { return [...new Set([...S.esels, ...(S.esel ? [S.esel] : [])])]; }
 // toglie dei collegamenti dentro una modifica: un aggiuntivo sparisce, il principale si stacca (il blocco resta libero)
@@ -661,25 +690,26 @@ function emptyLevel(t) {
 // tipo (gli indici po/pi/sp/ts passati sono già quelli dei pallini nuovi), nello stesso passo di annullamento
 function link(fromId, po, toId, pi, sp = null, ts = 0, add = null) {
   const t = curTree(); if (fromId === toId) return render();
-  const a = findM(t, fromId), b = findM(t, toId); if (!a || !b) return render();
+  const a = endOf(t, fromId), b = endOf(t, toId); if (!a || !b) return render();
   const links = allLinks(t), str = sp != null;
   const same = links.find(L => L.from.id === fromId && L.to.id === toId);
   if (same && add) { render(); return toast('Sono già collegati'); }
   if (same) {
     // stesso collegamento con pallini diversi (o di altro tipo): si riaggancia
-    const moved = str ? !isStr(same.e) || strIdx(a.n, same.e) !== sp || tsIdx(b.n, same.e) !== ts
-      : isStr(same.e) || outIdx(a.n, same.e) !== po || inIdx(b.n, same.e) !== pi;
+    const moved = str ? !isStr(same.e) || strIdx(a, same.e) !== sp || tsIdx(b, same.e) !== ts
+      : isStr(same.e) || outIdx(a, same.e) !== po || inIdx(b, same.e) !== pi;
     if (moved) { setEdge(same.key, str ? { str: true, sp, ts, po: undefined, pi: undefined } : { po, pi, str: false, sp: undefined, ts: undefined }); return toast('Collegamento spostato'); }
     render(); return toast('Sono già collegati');
   }
   const ends = str ? { str: true, sp, ts } : { po, pi };
   if (links.some(L => L.from.id === toId && L.to.id === fromId)) { render(); return toast('Esiste già il collegamento opposto'); }
-  let inside = false; walk(b.n, n => { if (n.id === fromId) inside = true; });
-  const asChild = !b.p && !inside;
+  // con un gruppo a un capo il collegamento è sempre aggiuntivo
+  let inside = false; if (!isGrp(b)) walk(b, n => { if (n.id === fromId) inside = true; });
+  const asChild = !isGrp(a) && !isGrp(b) && !findM(t, toId).p && !inside;
   mutate(tt => {
     if (add) { // pallini nuovi in fondo agli elenchi: gli indici degli altri collegamenti non cambiano
-      if (add.from) pinData(findM(tt, fromId).n)[add.from[0]].push(add.from[1]);
-      if (add.to) pinData(findM(tt, toId).n)[add.to[0]].push(add.to[1]);
+      if (add.from) pinData(endOf(tt, fromId))[add.from[0]].push(add.from[1]);
+      if (add.to) pinData(endOf(tt, toId))[add.to[0]].push(add.to[1]);
     }
     if (asChild) {
       const f = findM(tt, toId), pp = findM(tt, fromId).n;
@@ -711,7 +741,7 @@ function nearestPin(list, l, x, y) {
 }
 // punto da cui parte la linea mentre si trascina: dove nascerà il pallino d'uscita nuovo
 function autoOutPoint(id, x, y) {
-  const f = findM(curTree(), id), l = S.L.get(id), [px, py] = pinXY(l, newPinPos(f.n, l, x, y));
+  const n = endOf(curTree(), id), l = layOf(id), [px, py] = pinXY(l, newPinPos(n, l, x, y));
   return { x: l.x + px, y: l.y + py };
 }
 // lato rivolto al punto (x, y) e posizione libera più vicina a quella del punto proiettato sul lato
@@ -728,12 +758,12 @@ function newPinPos(n, l, x, y) {
 }
 // pi = ingresso esistente su cui si è rilasciato (altrimenti ne nasce uno nuovo); l'uscita è sempre nuova
 function autoLink(fromId, toId, pi) {
-  const t = curTree(), a = findM(t, fromId), b = findM(t, toId), al = S.L.get(fromId), bl = S.L.get(toId); if (!a || !b || !al || !bl) return render();
-  const tgt = pi != null ? pinsOf(b.n).i[pi] : null, [tx, ty] = tgt ? pinXY(bl, tgt) : [bl.w / 2, bl.h / 2];
-  const o = newPinPos(a.n, al, bl.x + tx, bl.y + ty);
-  if (tgt) return link(fromId, pinsOf(a.n).o.length, toId, pi, null, 0, { from: ['o', o] });
-  const [ox, oy] = pinXY(al, o), i = newPinPos(b.n, bl, al.x + ox, al.y + oy);
-  link(fromId, pinsOf(a.n).o.length, toId, pinsOf(b.n).i.length, null, 0, { from: ['o', o], to: ['i', i] });
+  const t = curTree(), a = endOf(t, fromId), b = endOf(t, toId), al = layOf(fromId), bl = layOf(toId); if (!a || !b || !al || !bl) return render();
+  const tgt = pi != null ? pinsOf(b).i[pi] : null, [tx, ty] = tgt ? pinXY(bl, tgt) : [bl.w / 2, bl.h / 2];
+  const o = newPinPos(a, al, bl.x + tx, bl.y + ty);
+  if (tgt) return link(fromId, pinsOf(a).o.length, toId, pi, null, 0, { from: ['o', o] });
+  const [ox, oy] = pinXY(al, o), i = newPinPos(b, bl, al.x + ox, al.y + oy);
+  link(fromId, pinsOf(a).o.length, toId, pinsOf(b).i.length, null, 0, { from: ['o', o], to: ['i', i] });
 }
 // eliminare un collegamento: quello aggiuntivo sparisce; quello principale stacca il blocco, che resta dov'è
 function deleteEdge(key) {
@@ -749,7 +779,8 @@ function detach(id, msg = 'Blocco staccato') {
 // hub = svincolo: un punto senza testo che fa solo da tappa; i pallini guardano verso i due blocchi
 function insertOnLink(key, hub) {
   const t = curTree(), Lk = allLinks(t).find(L => L.key === key); if (!Lk) return;
-  const fl = S.L.get(Lk.from.id), tl = S.L.get(Lk.to.id), g = linkGeom(Lk.from, fl, Lk.to, tl, Lk.e);
+  const fl = layOf(Lk.from.id), tl = layOf(Lk.to.id); if (!fl || !tl) return;
+  const g = linkGeom(Lk.from, fl, Lk.to, tl, Lk.e);
   const n = hub ? { ...mk(''), hub: true } : mk('Nuova idea'), pi = Math.max(0, inIdx(Lk.to, Lk.e)), po = Math.max(0, outIdx(Lk.from, Lk.e));
   const SZ = sizeMap({ id: 'tmp', text: '', children: [n] }), s = SZ.get(n.id);
   n.x = Math.round(g.mx - s.w / 2); n.y = Math.round(g.my - s.h / 2);
@@ -760,7 +791,15 @@ function insertOnLink(key, hub) {
   }
   const keep = { note: Lk.e.note, dash: Lk.e.dash, line: Lk.e.line, shape: Lk.e.shape };
   mutate(tt => {
-    if (Lk.extra) {
+    if (Lk.extra && isGrp(Lk.from)) {
+      // dal gruppo: il nuovo blocco resta libero, con un collegamento aggiuntivo dal gruppo e uno verso il secondo
+      tt.links = tt.links.filter(x => x.id !== key.slice(2));
+      (tt.free = tt.free || []).push(n);
+      const a = { id: uid(), from: Lk.from.id, to: n.id, po, ...keep }, b = { id: uid(), from: n.id, to: Lk.to.id, po: 0, pi };
+      if (hub && Lk.e.shape) b.shape = Lk.e.shape;
+      [a, b].forEach(x => Object.keys(x).forEach(k => { if (x[k] === undefined || (k === 'pi' && !x[k])) delete x[k]; }));
+      tt.links.push(a, b);
+    } else if (Lk.extra) {
       // il nuovo blocco diventa figlio del primo blocco, poi un collegamento aggiuntivo verso il secondo
       tt.links = tt.links.filter(x => x.id !== key.slice(2)); if (!tt.links.length) delete tt.links;
       n.edge = { po, ...keep }; findM(tt, Lk.from.id).n.children.push(n);
@@ -772,7 +811,7 @@ function insertOnLink(key, hub) {
       f.n.edge = { pi }; if (hub && Lk.e.shape) f.n.edge.shape = Lk.e.shape; // il tratto dopo lo svincolo resta dello stesso tipo
       if (!f.n.edge.pi) delete f.n.edge.pi; if (!Object.keys(f.n.edge).length) delete f.n.edge;
     }
-    Object.keys(n.edge).forEach(k => { if (n.edge[k] === undefined) delete n.edge[k]; });
+    if (n.edge) Object.keys(n.edge).forEach(k => { if (n.edge[k] === undefined) delete n.edge[k]; });
   });
   selectOnly(n.id); render(); if (!hub) { startEdit(n.id, true); markFresh(); }
 }
@@ -825,11 +864,13 @@ function tidyPins(t) {
   const ends = pinEnds(t), used = new Set();
   ends.forEach(x => { if (x.fp) used.add(x.fp); if (x.tp) used.add(x.tp); });
   let drop = false;
-  walkAll(t, n => { if (['i', 'o', 's'].some(k => n.pin[k].some(q => !used.has(q)))) drop = true; });
+  eachEnd(t, n => { if (n.pin && ['i', 'o', 's'].some(k => (n.pin[k] || []).some(q => !used.has(q)))) drop = true; });
   if (!drop) return changed;
-  walkAll(t, n => {
+  eachEnd(t, n => {
+    if (!n.pin) return; // gruppo senza collegamenti
     const fo = (n.foldOut || []).map(key => n.pin[key[0]][+key.slice(2)]); // rami compressi su un pallino: per riferimento
-    ['i', 'o', 's'].forEach(k => { n.pin[k] = n.pin[k].filter(q => used.has(q)); });
+    ['i', 'o', 's'].forEach(k => { n.pin[k] = (n.pin[k] || []).filter(q => used.has(q)); });
+    if (isGrp(n) && !n.pin.i.length && !n.pin.o.length && !n.pin.s.length) delete n.pin;
     if (n.foldOut) {
       n.foldOut = n.foldOut.map((key, j) => { const i = fo[j] ? n.pin[key[0]].indexOf(fo[j]) : -1; return i < 0 ? null : key[0] + ':' + i; }).filter(Boolean);
       if (!n.foldOut.length) delete n.foldOut;
@@ -851,7 +892,7 @@ function reverseEnd(t, x) {
 // cambia verso; verso struttura: diventa di struttura. All'altro capo il pallino cambia tipo anche lui se serve solo
 // a questi collegamenti, altrimenti ne nasce uno nuovo accanto.
 function changePinType(id, kind, idx, nk) {
-  const t0 = curTree(), N0 = findM(t0, id).n, X0 = pinData(N0)[PK[kind]][idx]; if (!X0 || kind === nk) return;
+  const t0 = curTree(), N0 = endOf(t0, id), X0 = pinData(N0)[PK[kind]][idx]; if (!X0 || kind === nk) return;
   const ends0 = pinEnds(t0), touch0 = ends0.filter(x => (x.from === N0 && x.fp === X0) || (x.to === N0 && x.tp === X0));
   // cambiando verso non deve nascere un doppione
   const clash = touch0.some(x => {
@@ -860,7 +901,7 @@ function changePinType(id, kind, idx, nk) {
   });
   if (clash) return toast('Nell’altro verso c’è già un collegamento tra questi blocchi');
   mutate(t => {
-    const N = findM(t, id).n, P = pinData(N), X = P[PK[kind]][idx]; if (!X) return;
+    const N = endOf(t, id), P = pinData(N), X = P[PK[kind]][idx]; if (!X) return;
     const ends = pinEnds(t), touch = ends.filter(x => (x.from === N && x.fp === X) || (x.to === N && x.tp === X));
     P[PK[kind]].splice(idx, 1); P[PK[nk]].push(X);
     const moved = new Map();
@@ -891,7 +932,7 @@ function changePinType(id, kind, idx, nk) {
 // Ctrl + trascina un pallino su un altro dello stesso blocco: i collegamenti del primo passano al secondo
 function mergePins(id, kind, a, b) {
   mutate(t => {
-    const N = findM(t, id).n, list = pinData(N)[PK[kind]], A = list[a], B = list[b]; if (!A || !B || A === B) return;
+    const N = endOf(t, id), list = pinData(N)[PK[kind]], A = list[a], B = list[b]; if (!A || !B || A === B) return;
     const ends = pinEnds(t);
     ends.forEach(x => { if (x.from === N && x.fp === A) x.fp = B; if (x.to === N && x.tp === A) x.tp = B; });
     if (N.foldOut) { N.foldOut = N.foldOut.filter(k => k !== PK[kind] + ':' + a); if (!N.foldOut.length) delete N.foldOut; }
@@ -910,7 +951,7 @@ function edgeOnPin(key, id, kind, idx) {
 // un altro pallino dello stesso tipo (to.idx) o su uno nuovo nel punto del bordo dove si rilascia (to.pos)
 function splitEnd(key, id, kind, idx, to) {
   mutate(t => {
-    const ends = pinEnds(t), x = ends.find(y => y.L.key === key), N = findM(t, id).n; if (!x || !N) return;
+    const ends = pinEnds(t), x = ends.find(y => y.L.key === key), N = endOf(t, id); if (!x || !N) return;
     const list = pinData(N)[PK[kind]], X = list[idx]; let Q = to.idx != null ? list[to.idx] : null;
     if (!Q) { Q = to.pos; list.push(Q); }
     if (x.from === N && x.fp === X) x.fp = Q; else if (x.to === N && x.tp === X) x.tp = Q;
@@ -920,7 +961,7 @@ function splitEnd(key, id, kind, idx, to) {
 }
 // elimina il pallino con tutti i suoi collegamenti (i blocchi restano dove sono)
 function deletePin(id, kind, idx) {
-  const t0 = curTree(), N0 = findM(t0, id).n, X0 = pinData(N0)[PK[kind]][idx]; if (!X0) return;
+  const t0 = curTree(), N0 = endOf(t0, id), X0 = pinData(N0)[PK[kind]][idx]; if (!X0) return;
   const keys = pinEnds(t0).filter(x => (x.from === N0 && x.fp === X0) || (x.to === N0 && x.tp === X0)).map(x => x.L.key);
   mutate(t => keys.forEach(key => {
     if (key.startsWith('x:')) { t.links = (t.links || []).filter(x => x.id !== key.slice(2)); if (!t.links.length) delete t.links; }
@@ -930,7 +971,7 @@ function deletePin(id, kind, idx) {
 }
 function setPin(id, kind, idx, pos) {
   mutate(t => {
-    const n = findM(t, id).n, P = JSON.parse(JSON.stringify(pinsOf(n)));
+    const n = endOf(t, id), P = JSON.parse(JSON.stringify(pinsOf(n)));
     freezeOuts(t, n); P[PK[kind]][idx] = pos; n.pin = P;
   });
 }
@@ -941,7 +982,7 @@ function cloneFresh(n) {
   const c = JSON.parse(JSON.stringify(n)), map = {}, conts = [];
   (function re(x) {
     map[x.id] = uid(); x.id = map[x.id]; if (x.links) conts.push(x);
-    x.children.forEach(re); (x.free || []).forEach(re); (x.notes || []).forEach(nt => { nt.id = uid(); }); (x.groups || []).forEach(g => { g.id = uid(); });
+    x.children.forEach(re); (x.free || []).forEach(re); (x.notes || []).forEach(nt => { nt.id = uid(); }); (x.groups || []).forEach(g => { map[g.id] = uid(); g.id = map[g.id]; });
   })(c);
   conts.forEach(x => x.links.forEach(L => { L.id = uid(); L.from = map[L.from] || L.from; L.to = map[L.to] || L.to; }));
   return c;
@@ -992,17 +1033,59 @@ function pasteClip(at, inside = !at) {
   });
   selectMany(ids); render();
 }
-// Alt + trascina: le copie nascono staccate nel punto degli originali (senza passare da mutate: lo snapshot è già fatto)
-function altCopies(t) {
-  const ids = [], movers = [];
-  topSelected(t).forEach(n => {
-    const c = looseCopy(n); (t.free = t.free || []).push(c); ids.push(c.id);
-    walk(c, d => movers.push({ o: d, ox: d.x, oy: d.y }));
+// Alt + trascina: le copie nascono staccate nel punto degli originali (senza passare da mutate: lo snapshot è già fatto).
+// Solo i blocchi selezionati (con i rami compressi, che fanno parte del blocco) e i collegamenti tra loro;
+// con Alt + Ctrl (branches) anche tutti i rami che partono dai blocchi selezionati.
+function altCopies(t, branches) {
+  const ids = [], movers = [], map = {}, mv = o => movers.push({ o, ox: o.x, oy: o.y }), done = new Set();
+  if (branches) topSelected(t).forEach(n => {
+    const c = looseCopy(n); (t.free = t.free || []).push(c); ids.push(c.id); walk(c, mv); walk(n, d => done.add(d.id));
   });
+  else {
+    const nodes = new Set(); walkAll(t, d => { if (S.sels.has(d.id)) nodes.add(d.id); });
+    withFolded(t, nodes); copyNodes(t, nodes, map, mv);
+    nodes.forEach(id => { if (S.sels.has(id)) ids.push(map[id]); });
+  }
   (t.notes || []).filter(nt => S.sels.has(nt.id)).forEach(nt => {
-    const c = { ...nt, id: uid() }; t.notes.push(c); ids.push(c.id); movers.push({ o: c, ox: c.x, oy: c.y });
+    const c = { ...nt, id: uid() }; map[nt.id] = c.id; t.notes.push(c); ids.push(c.id); mv(c);
   });
+  groupCopies(t, ids, mv, map, done);
+  // collegamenti aggiuntivi con entrambi i capi copiati (anche verso un gruppo copiato)
+  (t.links || []).filter(x => map[x.from] && map[x.to]).forEach(x => t.links.push({ ...JSON.parse(JSON.stringify(x)), id: uid(), from: map[x.from], to: map[x.to] }));
   selectMany(ids); return movers;
+}
+// aggiunge a `nodes` i rami compressi dei blocchi che contiene (si vedono come parte del blocco)
+function withFolded(t, nodes) { walkAll(t, d => { if (nodes.has(d.id)) d.children.forEach(c => { if (isFoldedChild(d, c)) walk(c, x => nodes.add(x.id)); }); }); }
+// copia i blocchi di `nodes` come sono collegati tra loro (un blocco senza genitore copiato diventa libero); map = vecchio id → nuovo
+function copyNodes(t, nodes, map, mv) {
+  const cl = n => {
+    const c = JSON.parse(JSON.stringify({ ...n, children: [] })); ['free', 'notes', 'links', 'groups', 'legend', 'void'].forEach(k => delete c[k]);
+    c.id = map[n.id] = uid(); mv(c);
+    c.children = n.children.filter(k => nodes.has(k.id)).map(cl); return c;
+  };
+  walkAll(t, (n, p) => { if (nodes.has(n.id) && !(p && nodes.has(p.id))) { const c = cl(n); delete c.edge; (t.free = t.free || []).push(c); } });
+}
+// Alt + trascina un gruppo: la copia del gruppo con il contenuto (blocchi, note, gruppi interni, anche quelli nascosti
+// da un gruppo compresso). I blocchi del contenuto si copiano come sono collegati tra loro (rami compressi compresi);
+// un blocco già copiato perché selezionato (map, done) non si ripete.
+function groupCopies(t, ids, mv, map, done) {
+  const gsel = (t.groups || []).filter(g => S.sels.has(g.id)); if (!gsel.length) return;
+  const nodes = new Set(), notes = new Set(), gset = new Set(gsel);
+  const addG = g => {
+    groupItems(t, g).forEach(i => { if (i.kind === 'node') nodes.add(i.o.id); else if (i.kind === 'note') notes.add(i.o); else if (!gset.has(i.o)) { gset.add(i.o); addG(i.o); } });
+    if (g.fold) (g.hide || []).forEach(id => { const h = findGroup(t, id); if (h && !gset.has(h)) { gset.add(h); addG(h); } });
+  };
+  gsel.forEach(addG);
+  withFolded(t, nodes);
+  [...nodes].forEach(id => { if (map[id] || done.has(id)) nodes.delete(id); }); // già copiati
+  copyNodes(t, nodes, map, mv);
+  notes.forEach(nt => { if (map[nt.id]) return; const c = { ...nt, id: uid() }; map[nt.id] = c.id; t.notes.push(c); mv(c); });
+  gset.forEach(g => { map[g.id] = uid(); });
+  gset.forEach(g => {
+    const c = JSON.parse(JSON.stringify(g)); c.id = map[g.id];
+    if (c.hide) c.hide = c.hide.map(id => map[id]).filter(Boolean);
+    t.groups.push(c); mv(c); if (gsel.includes(g)) ids.push(c.id);
+  });
 }
 
 // blocchi selezionati senza antenati selezionati
@@ -1207,11 +1290,68 @@ function selectGroupContents(id) {
   const ids = groupItems(t, g).map(i => i.id); if (!ids.length) return toast('Il gruppo è vuoto');
   S.sels = new Set(ids); S.sel = ids[0]; S.esel = null; S.esels = new Set(); render();
 }
+// Trascinando il contenuto di un gruppo verso il bordo, il gruppo si allarga per tenerlo dentro: vale finché l'elemento
+// tocca ancora il riquadro che il gruppo aveva all'inizio del trascinamento; portato tutto fuori, esce e il gruppo torna
+// com'era. Prima i gruppi più piccoli: un gruppo esterno si allarga anche per quello interno che è cresciuto.
+// growStart: all'inizio del trascinamento (posizioni di partenza); growApply: a ogni movimento.
+function growStart(t, movers) {
+  const mv = new Set(movers.map(m => m.o)), GH = groupHidden(t), locked = lockedSet(t);
+  return (t.groups || []).filter(g => !mv.has(g) && !g.fold && !locked.has(g) && !GH.has(g.id)).map(g => {
+    const its = groupItems(t, g);
+    return { g, r: { x: g.x, y: g.y, w: g.w, h: g.h }, its: its.filter(i => mv.has(i.o)).map(i => ({ o: i.o, w: i.l.w, h: i.l.h })),
+      kids: its.filter(i => i.kind === 'group' && !mv.has(i.o)).map(i => i.o) };
+  }).filter(x => x.its.length || x.kids.length).sort((a, b) => a.r.w * a.r.h - b.r.w * b.r.h);
+}
+// tg = gruppo in cui si sta portando la selezione (dropGroup): per gli altri gruppi, tranne quelli che lo contengono,
+// gli elementi trascinati contano come usciti
+function growApply(G, tg) {
+  const grown = new Set(G.map(x => x.g));
+  G.forEach(x => {
+    const o = x.r, hd = gHead(x.g), leave = tg && x.g !== tg && !within(gRect(tg), o);
+    if (leave) return Object.assign(x.g, o);
+    let x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+    x.its.map(i => ({ x: i.o.x, y: i.o.y, w: i.w, h: i.h, out: true })).concat(x.kids.filter(k => grown.has(k))).forEach(b => {
+      // tutto fuori dal riquadro di partenza: l'elemento esce dal gruppo
+      if (b.out && (b.x >= o.x + o.w || b.x + b.w <= o.x || b.y >= o.y + o.h || b.y + b.h <= o.y)) return;
+      x1 = Math.min(x1, b.x - GPAD); y1 = Math.min(y1, b.y - GPAD - hd); x2 = Math.max(x2, b.x + b.w + GPAD); y2 = Math.max(y2, b.y + b.h + GPAD);
+    });
+    Object.assign(x.g, { x: Math.round(x1), y: Math.round(y1), w: Math.round(x2 - x1), h: Math.round(y2 - y1) });
+  });
+}
+// Trascinando blocchi, note o gruppi sopra un gruppo, quel gruppo si illumina (S.dropGrp, classe .drop) e al rilascio
+// ci entrano: si allarga per contenerli tutti, e con lui i gruppi che lo contengono. dragSizes = misure all'inizio.
+function dragSizes(t, movers) {
+  const LF = S.L.full || S.L, NF = S.NL.full || S.NL;
+  return movers.map(m => { const l = LF.get(m.o.id) || NF.get(m.o.id) || (findGroup(t, m.o.id) ? gRect(m.o) : null); return l ? { w: l.w, h: l.h } : null; });
+}
+const dragBoxes = (movers, sz) => movers.map((m, i) => sz[i] && { x: m.o.x, y: m.o.y, w: sz[i].w, h: sz[i].h }).filter(Boolean);
+// gruppo sotto il punto p in cui portare la selezione (il più interno): non uno trascinato, compresso o bloccato,
+// e non quello che contiene già tutto ciò che si trascina
+function dropGroup(t, p, movers, sz) {
+  const mv = new Set(movers.map(m => m.o)), GH = groupHidden(t), boxes = dragBoxes(movers, sz);
+  let best = null, ba = Infinity;
+  (t.groups || []).forEach(g => {
+    if (mv.has(g) || g.fold || g.lock || GH.has(g.id) || p.x < g.x || p.x > g.x + g.w || p.y < g.y || p.y > g.y + g.h) return;
+    if (g.w * g.h < ba) { ba = g.w * g.h; best = g; }
+  });
+  return best && boxes.length && !boxes.every(b => within(b, best)) ? best : null;
+}
+function growTo(g, boxes) {
+  const hd = gHead(g); let x1 = g.x, y1 = g.y, x2 = g.x + g.w, y2 = g.y + g.h;
+  boxes.forEach(b => { x1 = Math.min(x1, b.x - GPAD); y1 = Math.min(y1, b.y - GPAD - hd); x2 = Math.max(x2, b.x + b.w + GPAD); y2 = Math.max(y2, b.y + b.h + GPAD); });
+  Object.assign(g, { x: Math.round(x1), y: Math.round(y1), w: Math.round(x2 - x1), h: Math.round(y2 - y1) });
+}
+function dropIntoGroup(t, g, boxes) {
+  const r0 = { x: g.x, y: g.y, w: g.w, h: g.h }, done = [g];
+  growTo(g, boxes);
+  (t.groups || []).filter(h => h !== g && !h.fold && within(r0, h)).sort((a, b) => a.w * a.h - b.w * b.h).forEach(h => { growTo(h, done.slice()); done.push(h); });
+}
 const toggleGroupLock = id => mutate(t => { const g = findGroup(t, id); if (g) { if (g.lock) delete g.lock; else g.lock = true; } });
 const within = (l, g) => l.x >= g.x && l.y >= g.y && l.x + l.w <= g.x + g.w && l.y + l.h <= g.y + g.h;
-// riquadro attorno ai blocchi e alle note selezionati, con lo spazio per il titolo
+// riquadro attorno ai blocchi, alle note e ai gruppi selezionati, con lo spazio per il titolo: un gruppo selezionato
+// finisce dentro quello nuovo (gruppi annidati: conta solo la posizione, vedi groupItems)
 function groupSelected() {
-  const boxes = [...S.sels].map(id => S.L.get(id) || S.NL.get(id)).filter(Boolean);
+  const boxes = [...S.sels].map(id => S.L.get(id) || S.NL.get(id) || (S.L.g && S.L.g.get(id))).filter(Boolean);
   if (!boxes.length) return toast('Seleziona i blocchi da raggruppare');
   const x1 = Math.min(...boxes.map(l => l.x)), y1 = Math.min(...boxes.map(l => l.y));
   const x2 = Math.max(...boxes.map(l => l.x + l.w)), y2 = Math.max(...boxes.map(l => l.y + l.h));
@@ -1221,7 +1361,7 @@ function groupSelected() {
   selectOnly(g.id); render(); startGroupEdit(g.id);
 }
 // sciogli: sparisce il riquadro, i blocchi restano dove sono
-function ungroup(id) { mutate(t => { t.groups = (t.groups || []).filter(g => g.id !== id); if (!t.groups.length) delete t.groups; }); clearSel(); render(); }
+function ungroup(id) { mutate(t => { t.groups = (t.groups || []).filter(g => g.id !== id); if (!t.groups.length) delete t.groups; cleanLinks(t); }); clearSel(); render(); }
 function eachSelected(fn) { const ids = [...S.sels], L = S.L; mutate(t => ids.forEach(id => { const f = findM(t, id); if (f) fn(f.n, L.get(id)); })); }
 function setColor(c) { eachSelected(n => { if (c === '') delete n.color; else n.color = +c; }); }
 // Adatta al testo: un blocco di testo prende la misura che serve a mostrare tutto il testo (senza "…"), sulla larghezza
