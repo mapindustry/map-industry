@@ -11,11 +11,16 @@ const COMPONENTS = [
   ['todo', 'Lista di controllo', sic('<rect x="2.5" y="3.5" width="5" height="5" rx="1"/><path d="M3.6 6 4.8 7.2 6.6 4.8M10 6H17.5"/><rect x="2.5" y="11.5" width="5" height="5" rx="1"/><path d="M10 14H17.5"/>')],
   ['table', 'Tabella', sic('<rect x="2.5" y="4" width="15" height="12" rx="1.5"/><path d="M2.5 8H17.5M2.5 12H17.5M10 4V16"/>')],
   ['exp', 'Espandibile', sic('<path class="f" d="M3 5.5H8L5.5 8.5Z"/><path d="M10 7H17.5M5 12H17.5M5 15.5H14"/>')],
+  ['cal', 'Calendario', sic('<rect x="2.5" y="4" width="15" height="13" rx="2"/><path d="M2.5 8H17.5M6.5 2.5V5.5M13.5 2.5V5.5"/><circle class="f" cx="7" cy="12" r="1.1"/><circle class="f" cx="10" cy="12" r="1.1"/><circle class="f" cx="13" cy="12" r="1.1"/>')],
+  ['prog', 'Avanzamento', sic('<path d="M3 6H13"/><rect x="2.5" y="11" width="15" height="4" rx="2"/><rect class="f" x="2.5" y="11" width="9" height="4" rx="2"/>')],
   ['img', 'Immagine', sic('<rect x="2.5" y="3.5" width="15" height="13" rx="2"/><circle class="f" cx="13" cy="7.5" r="1.5"/><path d="M2.5 14 7.5 9.5 11 12.5 13 11 17.5 14.5"/>')],
   ['audio', 'Audio', sic('<path d="M3 8H6L10 4.5V15.5L6 12H3Z"/><path d="M13 7.5Q14.8 10 13 12.5M15.5 5Q19 10 15.5 15"/>')],
   ['Tela'],
   ['note', 'Nota', sic('<path class="nt" d="M3.5 3.5H16.5V12.5L12.5 16.5H3.5Z"/><path class="ntb" d="M3.5 3.5H16.5"/><path d="M6.5 8H13.5M6.5 11H11"/>')],
   ['group', 'Gruppo', sic('<rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke-dasharray="2.5 2"/><path d="M5 7H11"/>')],
+  ['cont', 'Contenitore', sic('<rect x="3" y="2.5" width="14" height="15" rx="2"/><path d="M3 6.5H17"/><rect class="f" x="5.5" y="8.5" width="9" height="3" rx="1"/><rect class="f" x="5.5" y="13" width="9" height="3" rx="1"/>')],
+  ['kanban', 'Kanban', sic('<rect x="2" y="3" width="4.5" height="14" rx="1"/><rect x="7.75" y="3" width="4.5" height="14" rx="1"/><rect x="13.5" y="3" width="4.5" height="14" rx="1"/><rect class="f" x="3" y="5.5" width="2.5" height="2" rx=".5"/><rect class="f" x="8.75" y="5.5" width="2.5" height="2" rx=".5"/>')],
+  ['fasi', 'Fasi', sic('<rect x="1.5" y="6" width="4.5" height="8" rx="1"/><rect x="7.75" y="6" width="4.5" height="8" rx="1"/><rect x="14" y="6" width="4.5" height="8" rx="1"/><path d="M6 10H7.5M12.25 10H13.75"/>')],
   ['legend', 'Legenda', sic('<rect x="2.5" y="3" width="15" height="14" rx="2"/><rect class="f" x="5" y="7.5" width="3" height="2" rx=".6"/><rect class="f" x="5" y="12" width="3" height="2" rx=".6"/><path d="M10 8.5H15M10 13H15"/>')]
 ];
 $('#sideList').innerHTML = COMPONENTS.map(([k, label, ic]) => !label ? `<div class="shd">${k}</div>` :
@@ -40,7 +45,8 @@ function freeSpot(x, y, w, h) {
 }
 // aggiunge il componente k con il centro nel punto (x, y) della tela; per la legenda conta solo l'angolo
 function addComponent(k, x, y, corner, avoid) {
-  if (avoid && k !== 'legend') y = freeSpot(x, y, k === 'group' ? 280 : 160, k === 'group' ? 180 : 60);
+  const FS = { group: [280, 180], cont: [220, 140], kanban: [740, 220], fasi: [780, 160] }[k] || [160, 60];
+  if (avoid && k !== 'legend') y = freeSpot(x, y, FS[0], FS[1]);
   if (readOnly()) return toast('Mappa bloccata: sbloccala per aggiungere componenti');
   if (editing) endEdit(true);
   if (k === 'note') return addCanvasNote(x - 70, y - 30);
@@ -59,22 +65,25 @@ function addComponent(k, x, y, corner, avoid) {
     mutate(t => (t.groups = t.groups || []).push(g));
     selectOnly(g.id); render(); startGroupEdit(g.id); markFresh(); return;
   }
+  if (k === 'cont' || k === 'kanban' || k === 'fasi') return layComponent(k, x, y); // gruppi disposti (js/layout.js)
   if (k === 'legend') {
     if (curTree().legend) { selectOnly(LEG); render(); return toast('La mappa ha già una legenda'); }
     mutate(t => { t.legend = { corner: corner || 'br', text: 'Legenda', items: [] }; });
     selectOnly(LEG); render(); startLegendTitle(); markFresh(); return;
   }
-  const c = mk({ text: 'Nuovo blocco', ul: 'Prima voce', ol: 'Prima voce', todo: 'Prima cosa da fare', table: '', exp: 'Titolo' }[k]);
+  const c = mk({ text: 'Nuovo blocco', ul: 'Prima voce', ol: 'Prima voce', todo: 'Prima cosa da fare', table: '', exp: 'Titolo', cal: '', prog: 'Attività' }[k]);
   if (k !== 'text') c.type = k;
   if (k === 'table') c.table = { rows: [['Colonna 1', 'Colonna 2'], ['', '']] };
   if (k === 'exp') c.open = true;
+  if (k === 'cal') c.cal = thisMonth();
   mutate(t => {
     (t.free = t.free || []).push(c);
     const sz = sizeMap(t).get(c.id) || { w: 120, h: 30 }; // centrato nel punto scelto
     c.x = Math.round(x - sz.w / 2); c.y = Math.round(y - sz.h / 2);
+    layAdopt(t, c.id, { x: c.x, y: c.y, w: sz.w, h: sz.h }, { x, y }); // lasciato in un gruppo disposto: entra nella fila
   });
   selectOnly(c.id); render();
-  if (k !== 'table') { startEdit(c.id, true); markFresh(); } // la tabella si scrive cella per cella (doppio clic)
+  if (k !== 'table' && k !== 'cal') { startEdit(c.id, true); markFresh(); } // tabella (cella per cella) e calendario (titolo facoltativo): niente editor
 }
 
 // clic o trascinamento da una voce della barra

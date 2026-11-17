@@ -184,6 +184,17 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .mn .tgrid{fill:none;stroke:var(--node-border);stroke-width:1}
 .mn.cc .tgrid{stroke:color-mix(in srgb,var(--cc) 60%,var(--node-bg))}
 .mn .tcell{fill:transparent}
+.mn .tstripe{fill:var(--on-node);opacity:.07;pointer-events:none}
+.mn .tgrips{display:none}
+.mn .tgrips.on{display:inline}
+body.ro .mn .tgrips{display:none}
+.mn .tgrip{cursor:grab}
+.mn .tghit{fill:transparent}
+.mn .tgrip rect:not(.tghit){fill:var(--accent);opacity:.85}
+.mn .tgrip:hover rect:not(.tghit){opacity:1}
+.mn .tgrip circle{fill:var(--on-accent)}
+.mn .tmsrc{fill:var(--accent);opacity:.14;pointer-events:none}
+.mn .tmline{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;pointer-events:none}
 .mn text.tct{font-weight:400}
 .mn text.tct.th{font-weight:600}
 #ed.list{text-align:left}
@@ -208,6 +219,25 @@ body{background-color:var(--canvas);background-image:radial-gradient(var(--grid)
 .mn .aico.pz{fill:none;stroke:var(--on-accent);stroke-width:3;stroke-linecap:round}
 .mn .aplay.off .aico{fill:var(--on-node);opacity:.5}
 .mn .aseek{cursor:pointer}
+.mn text.calm{font-weight:600}
+.mn .calnav path{stroke-width:1.6}
+.mn text.caldow{font-size:10px;font-weight:600;opacity:.5}
+.mn .cald{cursor:pointer}
+.mn .calhit{fill:transparent}
+.mn .cald text{font-weight:400}
+.mn .cald.we text{opacity:.7}
+.mn .cald circle{fill:none;stroke:var(--accent);stroke-width:1.4}
+.mn .cald.on circle{fill:var(--accent)}
+.mn .cald.on.cc circle{fill:var(--cc);stroke:var(--cc)}
+.mn .cald.on text{fill:var(--on-accent);opacity:1;font-weight:600}
+.mn .cald:hover .calhit{fill:var(--on-node);fill-opacity:.08}
+.mn .pbar{cursor:pointer}
+.mn .phit{fill:transparent}
+.mn .ptrack{fill:var(--on-node);opacity:.14}
+.mn .pfill{fill:var(--accent)}
+.mn .pbar.full .pfill{fill:var(--win)}
+.mn text.ppct{font-weight:600;opacity:.85}
+.mn text.ppct.full{fill:var(--win);opacity:1}
 .mn .ahit{fill:transparent}
 .mn .abar{fill:var(--on-node);opacity:.2}
 .mn .aprog{fill:var(--accent)}

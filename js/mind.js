@@ -89,6 +89,8 @@ function sizeMap(tree) {
     if (n.type === 'table') { M.set(n.id, { ...tableSize(n, lv, fs, font, lh), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
     if (isList(n)) { M.set(n.id, { ...listSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
     if (n.type === 'exp') { M.set(n.id, { ...expSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; }
+    if (n.type === 'cal') { M.set(n.id, { ...calSize(n, lv, fs, font, lh), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; } // js/calendar.js
+    if (n.type === 'prog') { M.set(n.id, { ...progSize(n, lv, fs, font, lh, padX, padY), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; } // js/progress.js
     if (isMedia(n)) { M.set(n.id, { ...(n.type === 'img' ? imgSize : audioSize)(n, lv, fs, font, lh), depth: lv }); n.children.forEach(c => size(c, depth + 1)); return; } // js/media.js
     const lines = wrap(n.text || 'Senza titolo', maxW, font, maxL);
     // parti del testo con uno stile proprio (js/rich.js): il grassetto è più largo
@@ -493,6 +495,7 @@ function treeMarkup(tree, L, NL, live) {
     const boxSt = (n.bw != null ? `stroke-width:${n.bw}px;` : '') + (n.op != null ? `opacity:${n.op};` : '');
     const txt = n.type === 'table' && l.tb ? tableMarkup(n, l, live, fsSt) : isList(n) && l.rows ? listMarkup(n, l, live, fsSt) : n.type === 'exp' && l.ex ? expMarkup(n, l, live, fsSt)
       : l.im ? imgMarkup(n, l, live, fsSt) : l.au ? audioMarkup(n, l, live, fsSt)
+      : l.cal ? calMarkup(n, l, live, fsSt) : l.pg ? progMarkup(n, l, live, fsSt)
       : richText(n, l, pad, fsSt);
     // ramo compresso: etichetta "+N" sull'angolo in alto a sinistra; con un clic si riapre, passandoci sopra l'anteprima
     const folded = n.fold && n.children.length;
@@ -602,7 +605,9 @@ function gTitleMarkup(g, tmax) {
 }
 function render() {
   if (noTab()) return renderBar(); // pagina vuota: niente mappa da disegnare
-  const tree = curTree(), L = mindLayout(tree), NL = notesLayout(tree); S.L = L; S.NL = NL;
+  const tree = curTree(); let L = mindLayout(tree), NL = notesLayout(tree); S.L = L; S.NL = NL;
+  // gruppi con la disposizione automatica (js/layout.js): se qualcosa si è spostato, misure di nuovo
+  if (layoutGroups(tree, L, NL)) { L = mindLayout(tree); NL = notesLayout(tree); S.L = L; S.NL = NL; if (!S.layDrag) save(); }
   const imgs = takeImages(); vp.innerHTML = treeMarkup(tree, L, NL, true); keepImages(imgs); renderLegend();
   applyView(); renderBar();
 }
@@ -1147,15 +1152,16 @@ function topSelected(tree) {
 }
 // cosa si sposta trascinando: solo i blocchi e le note selezionati (i figli restano dove sono)
 // un gruppo selezionato si porta dietro tutto ciò che contiene (blocchi, note, altri gruppi)
-function dragMovers(t) {
+// sel = id da spostare (di serie la selezione; Disponi lo usa per un gruppo alla volta)
+function dragMovers(t, sel = S.sels) {
   const out = [], seen = new Set(), add = o => { if (!seen.has(o)) { seen.add(o); out.push({ o, ox: o.x, oy: o.y }); } };
   // un blocco con i rami compressi si porta dietro i rami nascosti, così riaprendoli restano attorno a lui
   const addB = d => { add(d); d.children.forEach(c => { if (isFoldedChild(d, c)) walk(c, add); }); };
-  walkAll(t, d => { if (S.sels.has(d.id)) addB(d); });
-  (t.notes || []).filter(nt => S.sels.has(nt.id)).forEach(add);
+  walkAll(t, d => { if (sel.has(d.id)) addB(d); });
+  (t.notes || []).filter(nt => sel.has(nt.id)).forEach(add);
   // un gruppo porta con sé il contenuto; un gruppo compresso al suo interno porta anche ciò che ha nascosto
   const addG = g => { if (seen.has(g)) return; add(g); groupItems(t, g).forEach(i => i.kind === 'node' ? addB(i.o) : i.kind === 'group' ? addG(i.o) : add(i.o)); };
-  (t.groups || []).filter(g => S.sels.has(g.id)).forEach(addG);
+  (t.groups || []).filter(g => sel.has(g.id)).forEach(addG);
   return out;
 }
 
@@ -1211,12 +1217,17 @@ function pasteStyle() {
 // Un blocco con i rami compressi si porta dietro i rami nascosti, come quando lo si trascina.
 const ARRANGE = { al: 1, ac: 1, ar: 1, at: 1, am: 1, ab: 1, dh: 1, dv: 1 };
 function arrangeSelected(op) {
-  const t = curTree(), items = [...S.sels].map(id => {
+  const t = curTree(), LG = S.L.g || new Map();
+  let items = [...S.sels].map(id => {
     const f = findM(t, id); if (f && S.L.get(id)) return { o: f.n, l: S.L.get(id), node: true };
+    const g = findGroup(t, id); if (g && LG.get(id)) return { o: g, l: LG.get(id), grp: true }; // gruppo: si sposta con il contenuto
     const nt = findNote(t, id); return nt && S.NL.get(id) ? { o: nt, l: S.NL.get(id) } : null;
   }).filter(Boolean);
+  // ciò che sta dentro un gruppo selezionato si sposta con lui: non conta da solo
+  const inG = new Set(); items.filter(i => i.grp).forEach(i => groupItems(t, i.o).forEach(x => inG.add(x.o)));
+  items = items.filter(i => !inG.has(i.o));
   const dist = op[0] === 'd';
-  if (items.length < (dist ? 3 : 2)) return toast(dist ? 'Seleziona almeno tre blocchi' : 'Seleziona almeno due blocchi');
+  if (items.length < (dist ? 3 : 2)) return toast(dist ? 'Seleziona almeno tre elementi' : 'Seleziona almeno due elementi');
   const locked = lockedSet(t); if (items.some(i => locked.has(i.o))) return toast('Alcuni elementi sono in un gruppo bloccato');
   const x1 = Math.min(...items.map(i => i.l.x)), x2 = Math.max(...items.map(i => i.l.x + i.l.w));
   const y1 = Math.min(...items.map(i => i.l.y)), y2 = Math.max(...items.map(i => i.l.y + i.l.h));
@@ -1238,6 +1249,7 @@ function arrangeSelected(op) {
   mutate(() => items.forEach(i => {
     const dx = Math.round(i.x - i.l.x), dy = Math.round(i.y - i.l.y); if (!dx && !dy) return;
     const mv = o => { o.x = Math.round(o.x + dx); o.y = Math.round(o.y + dy); };
+    if (i.grp) return dragMovers(t, new Set([i.o.id])).forEach(m => mv(m.o)); // il gruppo e tutto il suo contenuto
     if (!i.node) return mv(i.o);
     mv(i.o); i.o.children.forEach(c => { if (isFoldedChild(i.o, c)) walk(c, d => { if (hasPos(d)) mv(d); }); });
   }));
@@ -1257,8 +1269,8 @@ const gRect = g => g.fold ? { x: g.x, y: g.y, w: Math.max(g.w, Math.ceil(tw(gTit
 function groupHidden(tree) { const H = new Set(); (tree.groups || []).forEach(g => { if (g.fold) (g.hide || []).forEach(id => H.add(id)); }); return H; }
 // contenuto di un gruppo: ciò che vi sta tutto dentro (contando anche gli elementi nascosti) oppure, se è compresso,
 // gli elementi che ha nascosto più ciò che sta dentro la barra. [{ o, id, kind: 'node'|'note'|'group', l }]
-function groupItems(t, g) {
-  const LF = S.L.full || S.L, NF = S.NL.full || S.NL, box = gRect(g), hid = g.fold ? new Set(g.hide || []) : null;
+function groupItems(t, g, LF = S.L.full || S.L, NF = S.NL.full || S.NL) {
+  const box = gRect(g), hid = g.fold ? new Set(g.hide || []) : null;
   const inG = (id, l) => !!l && (hid ? hid.has(id) || within(l, box) : within(l, g)), out = [];
   walkAll(t, d => { const l = LF.get(d.id); if (inG(d.id, l)) out.push({ o: d, id: d.id, kind: 'node', l }); });
   (t.notes || []).forEach(nt => { const l = NF.get(nt.id); if (inG(nt.id, l)) out.push({ o: nt, id: nt.id, kind: 'note', l }); });
@@ -1312,7 +1324,7 @@ function selectGroupContents(id) {
 // growStart: all'inizio del trascinamento (posizioni di partenza); growApply: a ogni movimento.
 function growStart(t, movers) {
   const mv = new Set(movers.map(m => m.o)), GH = groupHidden(t), locked = lockedSet(t);
-  return (t.groups || []).filter(g => !mv.has(g) && !g.fold && !locked.has(g) && !GH.has(g.id)).map(g => {
+  return (t.groups || []).filter(g => !mv.has(g) && !g.fold && !g.lay && !locked.has(g) && !GH.has(g.id)).map(g => { // disposti: li ordina js/layout.js
     const its = groupItems(t, g);
     return { g, r: { x: g.x, y: g.y, w: g.w, h: g.h }, its: its.filter(i => mv.has(i.o)).map(i => ({ o: i.o, w: i.l.w, h: i.l.h })),
       kids: its.filter(i => i.kind === 'group' && !mv.has(i.o)).map(i => i.o) };

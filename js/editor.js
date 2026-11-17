@@ -7,6 +7,8 @@ function editorBox() {
   if (editing.kind === 'node') {
     const l = S.L.get(id), f = findM(curTree(), id); if (!l || !f) return null;
     if (l.im || l.au) return mediaEditorBox(l, f, sx, sy, k); // didascalia dell'immagine, titolo dell'audio
+    if (l.cal) return calEditorBox(l, f, sx, sy, k); // titolo del calendario
+    if (l.pg) return progEditorBox(l, f, sx, sy, k); // titolo dell'attività
     return { x: sx(l.x), y: sy(l.y), w: l.w * k, h: l.h * k, font: nodeFont(f.n, l.depth), fs: fsOf(f.n, l.depth), lh: l.lh, minW: 160 };
   }
   if (editing.kind === 'tag') {
@@ -113,7 +115,7 @@ function endEdit(commit) {
         keepFmt(f.n, v); f.n.text = v;
         if (w0 !== null) f.n.x = Math.round(f.n.x - (sizeMap(t).get(id).w - w0));
         save();
-      } else if (f && (f.n.type === 'table' || isMedia(f.n))) { snapshot(); f.n.text = ''; save(); } // tabella senza titolo, immagine senza didascalia, audio col nome del file
+      } else if (f && (f.n.type === 'table' || f.n.type === 'cal' || f.n.type === 'prog' || isMedia(f.n))) { snapshot(); f.n.text = ''; save(); } // tabella senza titolo, immagine senza didascalia, audio col nome del file
       else if (f) toast('Testo vuoto: il blocco resta com’era');
     }
   }

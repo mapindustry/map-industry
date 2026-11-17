@@ -20,6 +20,7 @@ function startPinch() {
     if (P.moved && (P.mode === 'drag' || P.mode === 'resize' || P.mode === 'enote')) save();
     if (P.mode === 'legend') S.legDrag = null;
   }
+  S.layDrag = null; TMOVE = null;
   const [a, b] = [...TP.values()], v = view();
   P = { mode: 'pinch', d0: Math.hypot(b.x - a.x, b.y - a.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, vx: v.x, vy: v.y, k0: v.k };
   lastTap = null; render();
@@ -44,7 +45,7 @@ cv.addEventListener('pointerdown', e => {
   }
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
   const g = e.target.closest('.mn[data-id]'), cn = e.target.closest('[data-note]'), gr = e.target.closest('[data-grp]'), lg = e.target.closest('[data-leg]'), base = { sx: e.clientX, sy: e.clientY, moved: false };
-  if (readOnly() && !e.target.closest('[data-fold], [data-gfold], [data-xtog], [data-play], [data-seek], [data-ref]')) {
+  if (readOnly() && !e.target.closest('[data-fold], [data-gfold], [data-xtog], [data-calnav], [data-play], [data-seek], [data-ref]')) {
     // sola lettura: trascinando si sposta la vista, con un clic si seleziona (per guardare, cercare, copiare)
     const v = view(); P = { ...base, mode: 'pan', vx: v.x, vy: v.y, pick: g ? g.dataset.id : cn ? cn.dataset.note : gr ? gr.dataset.grp : null, ro: true };
   } else if (e.button === 1 || spaceDown || (e.pointerType === 'touch' && !g && !cn && !gr && !lg)) {
@@ -55,12 +56,22 @@ cv.addEventListener('pointerdown', e => {
     P = { ...base, mode: 'enote', id, ox: ed.nx || 0, oy: ed.ny || 0 };
   } else if (g && e.target.closest('[data-xtog]')) {
     return toggleExp(g.dataset.id); // blocco espandibile: apre o chiude il testo
+  } else if (g && e.target.closest('[data-calnav]')) {
+    return calNav(g.dataset.id, +e.target.closest('[data-calnav]').dataset.calnav); // calendario: mese prima o dopo
+  } else if (g && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.closest('[data-pbar]')) {
+    // avanzamento: clic o trascinamento sulla barra (un passo di annullamento)
+    const id = g.dataset.id, v = pctAt(id, toSvg(e.clientX, e.clientY)); selectOnly(id);
+    mutate(t => setPct(findM(t, id).n, v)); P = { ...base, mode: 'pbar', id }; cv.setPointerCapture(e.pointerId); return;
   } else if (g && e.target.closest('[data-ref]')) {
     return openRef(g.dataset.id); // linguetta della mappa collegata: la apre
   } else if (g && e.target.closest('[data-play]')) {
     return playAudio(g.dataset.id); // audio: ascolta / pausa
   } else if (g && e.target.closest('[data-seek]')) {
     return seekAudio(g.dataset.id, toSvg(e.clientX, e.clientY)); // audio: salta a quel punto
+  } else if (g && e.target.closest('[data-tgrip]')) { // tabella: linguetta di una colonna o di una riga, si trascina
+    const [kind, i] = e.target.closest('[data-tgrip]').dataset.tgrip.split(':');
+    TMOVE = { id: g.dataset.id, kind, from: +i, to: +i }; selectOnly(g.dataset.id); render();
+    P = { ...base, mode: 'tmove', id: g.dataset.id };
   } else if (g && e.target.closest('[data-chk]')) {
     return toggleCheck(g.dataset.id, +e.target.closest('[data-chk]').dataset.chk); // lista di controllo: spunta
   } else if (gr && e.target.closest('[data-gfold]')) {
@@ -103,7 +114,8 @@ cv.addEventListener('pointerdown', e => {
     const wasSel = S.sels.has(id), wasMulti = !e.shiftKey && wasSel && S.sels.size > 1;
     if (e.shiftKey) { if (!wasSel) toggleSel(id); else S.sel = id; render(); }
     else if (!wasSel) selectOnly(id); else S.sel = id;
-    P = { ...base, mode: 'drag', id, movers: dragMovers(curTree()), wasMulti, alt: e.altKey, altTree: e.altKey && (e.ctrlKey || e.metaKey), shiftOff: e.shiftKey && wasSel };
+    const day = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.closest('[data-day]'); // calendario: clic su un giorno, deciso al rilascio
+    P = { ...base, mode: 'drag', id, day: day && day.dataset.day, movers: dragMovers(curTree()), wasMulti, alt: e.altKey, altTree: e.altKey && (e.ctrlKey || e.metaKey), shiftOff: e.shiftKey && wasSel };
     const lockS = lockedSet(curTree()); P.locked = P.movers.some(m => lockS.has(m.o)); // gruppo bloccato: non si sposta
   } else {
     // sfondo o collegamento: trascinando si disegna il riquadro, con un clic su un collegamento lo si seleziona
@@ -120,7 +132,7 @@ cv.addEventListener('pointermove', e => {
   if (TP.has(e.pointerId)) TP.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (P && P.mode === 'pinch') { if (TP.size >= 2) pinchMove(); return; }
   if (P && P.mode === 'pinchEnd') return;
-  if (!P) return;
+  if (!P) { if (e.pointerType === 'mouse' && !e.buttons) tableHover(e); return; } // linguette della tabella
   const dx = e.clientX - P.sx, dy = e.clientY - P.sy;
   if (!P.moved && Math.hypot(dx, dy) < 4) return;
   if (P.mode === 'drag' && P.locked) { if (!P.warned) { P.warned = true; toast('Gruppo bloccato: sbloccalo dal menu per spostarlo'); } return; }
@@ -133,9 +145,12 @@ cv.addEventListener('pointermove', e => {
     snapshot();
     if (P.mode === 'drag' && P.alt) P.movers = altCopies(curTree(), P.altTree); // Alt + trascina: si sposta la copia (Alt + Ctrl: con i rami)
     if (P.mode === 'drag' && !P.alt) { P.grow = growStart(curTree(), P.movers); P.sz = dragSizes(curTree(), P.movers); } // gruppi che si allargano; misure per entrare in un gruppo
+    if (P.mode === 'drag') S.layDrag = layDragStart(curTree(), P.movers); // gruppi disposti: gli altri fanno posto (js/layout.js)
   }
   P.moved = true;
   const v = view();
+  if (P.mode === 'tmove') { tableMoveTo(toSvg(e.clientX, e.clientY)); return render(); }
+  if (P.mode === 'pbar') { const v = pctAt(P.id, toSvg(e.clientX, e.clientY)), f = findM(curTree(), P.id); if (f && v !== null && v !== pctOf(f.n)) { setPct(f.n, v); render(); } return; }
   if (P.mode === 'pan') { cv.classList.add('panning'); v.x = P.vx + dx; v.y = P.vy + dy; v.fresh = false; applyView(); return; }
   if (P.mode === 'box') return dragBox(e);
   if (P.mode === 'legend') { S.legDrag = { x: P.ox + dx, y: P.oy + dy }; return renderLegend(); }
@@ -179,6 +194,7 @@ cv.addEventListener('pointermove', e => {
     // sopra un gruppo: si illumina e, al rilascio, la selezione ci entra
     const tg = P.sz ? dropGroup(curTree(), toSvg(e.clientX, e.clientY), P.movers, P.sz) : null;
     S.dropGrp = tg ? tg.id : null;
+    if (S.layDrag) { const T = layDragMove(curTree(), toSvg(e.clientX, e.clientY)); if (T) S.dropGrp = T.id !== S.layDrag.home ? T.id : null; }
     if (P.grow) growApply(P.grow, tg);
     const pl = S.L.get(P.id) || S.NL.get(P.id) || findGroup(curTree(), P.id);
     S.rail = rail && pl ? { dir: rail, x: pl.x + pl.w / 2 + mx / v.k, y: pl.y + pl.h / 2 + my / v.k } : null;
@@ -200,6 +216,7 @@ cv.addEventListener('pointermove', e => {
   if (P.grp) {
     const grp = findGroup(curTree(), P.id);
     grp.w = Math.max(GMIN[0], Math.round(P.w0 + dx / v.k)); grp.h = Math.max(GMIN[1], Math.round(P.h0 + dy / v.k));
+    if (grp.lay) { grp.lw = grp.w; grp.lh = grp.h; } // disposto: misura minima, il contenuto può allargarlo
     return render();
   }
   if (P.note) {
@@ -209,7 +226,7 @@ cv.addEventListener('pointermove', e => {
   }
   const n = findM(curTree(), P.id).n;
   n.w = clamp(Math.round(P.w0 + dx / v.k), RMIN[0], RMAX[0]);
-  if (n.type === 'table') delete n.h; else n.h = clamp(Math.round(P.h0 + dy / v.k), RMIN[1], RMAX[1]); // tabella: altezza automatica
+  if (n.type === 'table' || n.type === 'cal' || n.type === 'prog') delete n.h; else n.h = clamp(Math.round(P.h0 + dy / v.k), RMIN[1], RMAX[1]); // tabella: altezza automatica
   render();
 });
 
@@ -262,7 +279,7 @@ function endPointer(e) {
   else lastTap = { t: now, x: e.clientX, y: e.clientY };
 }
 function endPointerCore(e) {
-  if (!P) return; cv.classList.remove('panning'); boxEl.hidden = true; clearTimeout(P.dropT);
+  if (!P) return; const LD = S.layDrag; S.layDrag = null; cv.classList.remove('panning'); boxEl.hidden = true; clearTimeout(P.dropT);
   if (S.rail) { S.rail = null; render(); }
   if (P.mode === 'legend') {
     const d = S.legDrag; S.legDrag = null; P = null;
@@ -312,17 +329,24 @@ function endPointerCore(e) {
     }
     render(); return toast(lk.kind === 'str' ? 'Rilascia su un blocco per collegarlo come sua parte' : 'Rilascia sull’ingresso di un blocco per collegarlo');
   }
+  if (P.mode === 'pbar') { if (P.moved) save(); P = null; return; }
+  if (P.mode === 'tmove') { const M = TMOVE; TMOVE = null; P = null; if (M && M.to !== M.from) return moveTableLine(M.id, M.kind, M.from, M.to); return render(); }
   if (P.ro && !P.moved) { if (P.pick) selectOnly(P.pick); else clearSel(); render(); P = null; return; }
   if (!P.moved) {
     const had = S.sels.size, hadE = S.esel, hadES = S.esels.size;
     if (P.mode === 'box' && P.edge && P.add) toggleEdgeSel(P.edge); // Maiusc/Ctrl + clic: aggiunge o toglie il collegamento
     else if (P.mode === 'enote' || (P.mode === 'box' && P.edge)) selectEdge(P.id || P.edge);
     else if (P.mode === 'box' && !P.add) clearSel();
+    if (P.mode === 'drag' && P.day) { const id = P.id, d = P.day; P = null; selectOnly(id); return toggleDay(id, d); } // segna o toglie il giorno
     if (P.mode === 'drag' && P.wasMulti) selectOnly(P.id);
     if (P.mode === 'drag' && P.shiftOff) { toggleSel(P.id); render(); } // Maiusc+clic su un selezionato: lo toglie
     if (P.mode !== 'box' || had !== S.sels.size || hadE !== S.esel || hadES !== S.esels.size) render();
   } else if (P.mode === 'drag' && S.dropOn) {
     const id = S.dropOn; S.dropOn = null; S.dropGrp = null; foldInto(id, P.movers);
+  } else if (P.mode === 'drag' && LD && LD.target) { // in un gruppo disposto: entra al posto scelto, gli altri in fila
+    const t = curTree(), g = findGroup(t, LD.target); S.dropGrp = null;
+    if (g) layDrop(t, g, LD, P.movers, P.sz || dragSizes(t, P.movers));
+    save(); render();
   } else if (P.mode === 'drag' && S.dropGrp) { // rilasciato sopra un gruppo: ci entra (il gruppo si allarga quanto serve)
     const t = curTree(), g = findGroup(t, S.dropGrp); S.dropGrp = null;
     if (g) dropIntoGroup(t, g, dragBoxes(P.movers, P.sz));
@@ -344,6 +368,7 @@ function onDouble(e) {
   const edge = el.closest('[data-edge]'); if (edge) return startEdgeNote(edge.dataset.edge);
   const cn = el.closest('[data-note]'); if (cn) return startNoteEdit(cn.dataset.note);
   const g = el.closest('.mn[data-id]');
+  if (g && el.closest('[data-day], [data-pbar], [data-calnav], [data-tgrip]')) return; // giorni, barra e frecce: solo clic
   if (g && el.closest('[data-rsz]')) return autoSize([g.dataset.id]); // doppio clic sulla maniglia: adatta al testo
   if (g && el.closest('[data-tag]')) return startTagEdit(g.dataset.id);
   const cell = g && cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); if (cell) return startCellEdit(g.dataset.id, cell[0], cell[1]); // anche sul testo della cella

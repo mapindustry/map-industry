@@ -70,6 +70,8 @@ function tableMarkup(n, l, live, fsSt) {
   const T = l.tb, fs = fsOf(n, l.depth);
   let s = l.lines.length ? `<text x="${l.w / 2}" y="${T.titleH / 2 + fs * 0.36}" text-anchor="middle"${fsSt}>${esc(l.lines[0])}</text>` : '';
   s += `<rect class="thead" x="0.5" y="${T.titleH + 0.5}" width="${l.w - 1}" height="${T.rowHs[0]}" rx="${T.titleH ? 0 : 6}"/>`;
+  // righe a strisce: una sì e una no un po' più chiara (la prima riga dopo l'intestazione resta scura)
+  for (let r = 2; r < T.rows.length; r += 2) s += `<rect class="tstripe" x="1" y="${T.rowY[r]}" width="${l.w - 2}" height="${r === T.rows.length - 1 ? T.rowHs[r] - 1 : T.rowHs[r]}"/>`;
   let grid = '';
   for (let r = T.titleH ? 0 : 1; r < T.rows.length; r++) grid += `M0,${T.rowY[r]} H${l.w} `;
   for (let c = 1; c < T.nc; c++) grid += `M${T.colX[c]},${T.titleH} V${l.h} `;
@@ -81,7 +83,62 @@ function tableMarkup(n, l, live, fsSt) {
       ls.forEach((t, i) => { s += `<text class="tct${r === 0 ? ' th' : ''}" x="${x + 9}" y="${y + 5 + (i + 0.78) * T.clh}" style="font-size:${T.cfs}px${n.it ? ';font-style:italic' : ''}">${esc(t)}</text>`; });
     }
   });
-  return s;
+  return live ? s + tableGrips(n, l) : s;
+}
+// Linguette per spostare colonne e righe (richieste il 2026-11-17): passando sulla prima riga compaiono sopra le
+// colonne, sulla prima colonna a sinistra delle righe (TGH = { id, kind: 'col'|'row' }, tableHover). Tenendo premuta una
+// linguetta e trascinando, la colonna o la riga si sposta (TMOVE = { id, kind, from, to }, al rilascio moveTableLine);
+// l'intestazione resta la prima riga.
+let TGH = null, TMOVE = null;
+function tableGrips(n, l) {
+  const T = l.tb, M = TMOVE && TMOVE.id === n.id ? TMOVE : null, on = k => (M ? M.kind === k : TGH && TGH.id === n.id && TGH.kind === k) ? ' on' : '';
+  let s = '';
+  if (M && M.kind === 'col') {
+    s += `<rect class="tmsrc" x="${T.colX[M.from]}" y="${T.titleH}" width="${T.colW[M.from]}" height="${l.h - T.titleH}"/>`;
+    if (M.to !== M.from) { const x = M.to < M.from ? T.colX[M.to] : T.colX[M.to] + T.colW[M.to]; s += `<path class="tmline" d="M${x},${T.titleH - 3} V${l.h + 3}"/>`; }
+  }
+  if (M && M.kind === 'row') {
+    s += `<rect class="tmsrc" x="0" y="${T.rowY[M.from]}" width="${l.w}" height="${T.rowHs[M.from]}"/>`;
+    if (M.to !== M.from) { const y = M.to < M.from ? T.rowY[M.to] : T.rowY[M.to] + T.rowHs[M.to]; s += `<path class="tmline" d="M-3,${y} H${l.w + 3}"/>`; }
+  }
+  const dots = (cx, cy, h) => [-4.5, 0, 4.5].map(d => `<circle cx="${h ? cx + d : cx}" cy="${h ? cy : cy + d}" r="1.3"/>`).join('');
+  let gc = '', gr = '';
+  for (let c = 0; c < T.nc; c++) {
+    const cx = T.colX[c] + T.colW[c] / 2, y0 = T.titleH - 13; // attaccate al bordo: dalla cella ci si arriva senza perderle
+    gc += `<g class="tgrip" data-tgrip="col:${c}"><title>Trascina per spostare la colonna</title><rect class="tghit" x="${T.colX[c]}" y="${y0}" width="${T.colW[c]}" height="13"/><rect x="${cx - 13}" y="${y0 + 1}" width="26" height="11" rx="4"/>${dots(cx, y0 + 6.5, true)}</g>`;
+  }
+  for (let r = 1; r < T.rows.length; r++) {
+    const cy = T.rowY[r] + T.rowHs[r] / 2;
+    gr += `<g class="tgrip" data-tgrip="row:${r}"><title>Trascina per spostare la riga</title><rect class="tghit" x="-13" y="${T.rowY[r]}" width="13" height="${T.rowHs[r]}"/><rect x="-12" y="${cy - 13}" width="11" height="26" rx="4"/>${dots(-6.5, cy, false)}</g>`;
+  }
+  return s + `<g class="tgrips col${on('col')}">${gc}</g><g class="tgrips row${on('row')}">${gr}</g>`;
+}
+// passaggio del mouse senza tasti premuti: sulla prima riga le linguette delle colonne, sulla prima colonna quelle delle righe
+function tableHover(e) {
+  const el = e.target, g = el && el.closest && el.closest('.mn[data-id]');
+  let h = null;
+  if (g && !readOnly()) {
+    if (el.closest('[data-tgrip]')) h = TGH; // sulla linguetta: restano
+    else { const c = cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); if (c) h = c[0] === 0 ? { id: g.dataset.id, kind: 'col' } : c[1] === 0 ? { id: g.dataset.id, kind: 'row' } : null; }
+  }
+  if ((h && TGH && h.id === TGH.id && h.kind === TGH.kind) || (!h && !TGH)) return;
+  TGH = h; vp.querySelectorAll('.tgrips.on').forEach(x => x.classList.remove('on'));
+  if (h) { const q = vp.querySelector(`.mn[data-id="${h.id}"] .tgrips.${h.kind}`); if (q) q.classList.add('on'); }
+}
+// trascinando la linguetta: dove andrebbe la colonna o la riga (contano i centri delle altre)
+function tableMoveTo(p) {
+  const M = TMOVE, l = M && S.L.get(M.id), T = l && l.tb; if (!T) return;
+  if (M.kind === 'col') M.to = [...Array(T.nc).keys()].filter(c => c !== M.from && T.colX[c] + T.colW[c] / 2 < p.x - l.x).length;
+  else M.to = 1 + [...Array(T.rows.length).keys()].filter(r => r > 0 && r !== M.from && T.rowY[r] + T.rowHs[r] / 2 < p.y - l.y).length;
+}
+function moveTableLine(id, kind, from, to) {
+  mutate(t => {
+    const f = findM(t, id); if (!f) return;
+    const rows = (f.n.table = { rows: tableRows(f.n).map(x => x.slice()) }).rows, nc = Math.max(...rows.map(r => r.length));
+    rows.forEach(r => { while (r.length < nc) r.push(''); });
+    const mv = a => a.splice(to, 0, a.splice(from, 1)[0]);
+    if (kind === 'col') rows.forEach(mv); else mv(rows);
+  });
 }
 
 /* ---------- azioni ---------- */
@@ -90,6 +147,8 @@ function setBlockType(type, ids = [...S.sels]) {
     const f = findM(t, id); if (!f || f.n.hub) return; const n = f.n;
     if (type === 'text') delete n.type; else n.type = type;
     if (type === 'table' && !n.table) n.table = { rows: [['Colonna 1', 'Colonna 2'], ['', '']] };
+    if (type === 'cal' && !n.cal) n.cal = thisMonth();
+    if (type === 'cal' || type === 'prog') delete n.h; // altezza automatica
     if (type === 'exp' && n.body === undefined) n.open = true; // la prima volta aperto, pronto per scrivere il testo
   }));
 }

@@ -37,6 +37,8 @@ const BTYPES = [
   ['todo', 'Lista di controllo', ico('M4 3.5h6v6H4zM5.6 6.6l1.3 1.3 2-2.6M13 6.5H24'), 'Lista di controllo'],
   ['table', 'Tabella', ico('M4 2.5H24V11.5H4ZM4 5.5H24M11 2.5V11.5M17.5 2.5V11.5'), 'Tabella'],
   ['exp', 'Espandibile', ico('M4 3l3 2.5L4 8M10 5.5H24M10 10H20'), 'Blocco espandibile'],
+  ['cal', 'Calendario', ico('M6 2.5H22V11.5H6ZM6 5.5H22M10 1.5V3.5M18 1.5V3.5M10 8.5h0.1M14 8.5h0.1M18 8.5h0.1'), 'Calendario'],
+  ['prog', 'Avanzamento', ico('M4 7H24M4 7H15'), 'Avanzamento'],
   ['img', 'Immagine', ico('M5 2.5H23V11.5H5ZM5 11.5L11 6l4 3.5 2.5-2L23 11.5'), 'Immagine'],
   ['audio', 'Audio', ico('M5 5.5H8L12 2.5V11.5L8 8.5H5ZM15.5 4.5Q17.5 7 15.5 9.5M18.5 2.5Q22 7 18.5 11.5'), 'Audio']];
 let MENU_CELL = null; // cella della tabella su cui si è aperto il menu: [riga, colonna]
@@ -61,7 +63,9 @@ function groupMenuHtml(g) {
     (g.fold ? '' : item('gsel', 'Seleziona il contenuto')) + item('gfit', 'Adatta al contenuto') +
     item('glock', 'Blocca', g.lock ? ' on' : '', '', 'Il gruppo e il contenuto non si spostano') +
     item('group', 'Raggruppa', '', 'Ctrl+G', 'Lo mette dentro un gruppo nuovo') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
-    item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + SEP +
+    item('ungroup', 'Sciogli il gruppo', ' dng', '', 'Toglie solo il riquadro, i blocchi restano') + arrangeHtml() + SEP +
+    seg('In fila', [['gly-none', 'Libero: ognuno dove lo metti', !g.lay, ico('M5 2.5h6v3.5H5zM14 8h8v3.5h-8z')], ['gly-col', 'In colonna', g.lay === 'col', ico('M9 1h10v3.2H9zM9 5.4h10v3.2H9zM9 9.8h10v3.2H9z')],
+      ['gly-row', 'In riga', g.lay === 'row', ico('M3 4h6v6H3zM11 4h6v6h-6zM19 4h6v6h-6z')], ['gly-grid', 'A griglia', g.lay === 'grid', ico('M7 1h6v5.5H7zM15 1h6v5.5h-6zM7 7.5h6V13H7zM15 7.5h6V13h-6z')]]) + SEP +
     head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'group' ? item('stpaste', gs > 1 ? `Incolla stile su ${gs} gruppi` : 'Incolla stile') : '') +
     seg('Bordo', [['gl-solid', 'Continuo', ln === 'solid', box('')], ['gl-dash', 'Tratteggiato', ln === 'dash', box('4 3')],
       ['gl-dot', 'A puntini', ln === 'dot', box('0.1 3')], ['gl-none', 'Nessun bordo', ln === 'none', box('0 40')]]) +
@@ -79,7 +83,7 @@ function noteMenuHtml(nt) {
   return title(n > 1 ? `${n} note` : 'Nota', n > 1 ? 'Lo stile vale per tutte' : '') + swatches(hasColor(nt) ? String(nt.color) : '') + SEP +
     (n > 1 ? '' : item('nedit', 'Modifica', '', 'F2') + SEP) +
     item('dup', 'Duplica', '', 'Ctrl+D') + item('copy', 'Copia', '', 'Ctrl+C') + item('group', 'Raggruppa', '', 'Ctrl+G') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
-    item('del', n > 1 ? `Elimina ${n} note` : 'Elimina nota', ' dng', 'Canc') + SEP +
+    item('del', n > 1 ? `Elimina ${n} note` : 'Elimina nota', ' dng', 'Canc') + arrangeHtml() + SEP +
     head('Stile') + item('stcopy', 'Copia stile') + (S.style && S.style.kind === 'note' ? item('stpaste', n > 1 ? `Incolla stile su ${n} note` : 'Incolla stile') : '') +
     stepper('Testo', 'nfs', nfsOf(nt) + ' px', 'vnfs', 'Testo più piccolo', 'Testo più grande') +
     `<div class="mrow wide"><span>Peso</span><select id="mnfw" aria-label="Peso del testo della nota">${FW.map(([v, l]) => `<option value="${v}"${nfwOf(nt) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div>` +
@@ -92,6 +96,18 @@ const menuNotes = () => { const t = curTree(), ids = [...S.sels].filter(id => fi
 // gruppi su cui agiscono le regolazioni dello stile: quelli selezionati (almeno quello del menu)
 const menuGroups = () => { const t = curTree(), ids = [...S.sels].filter(id => findGroup(t, id)); return ids.length ? ids : [MENU.id]; };
 
+// Disponi: con più blocchi, note o gruppi selezionati allinea e spazia (il menu resta aperto per provarne più d'uno)
+function arrangeHtml() {
+  const many = [...S.sels].filter(id => S.L.has(id) || S.NL.has(id) || (S.L.g && S.L.g.has(id))).length;
+  if (many < 2) return '';
+  return SEP + head('Disponi') +
+    seg('Colonna', [['al', 'Allinea a sinistra', false, ico('M4 1V13M8 4.5H23M8 9.5H17')], ['ac', 'Centra in colonna', false, ico('M14 1V13M6 4.5H22M9 9.5H19')],
+      ['ar', 'Allinea a destra', false, ico('M24 1V13M5 4.5H20M11 9.5H20')]]) +
+    seg('Riga', [['at', 'Allinea in alto', false, ico('M6 1.5H22M10.5 4.5V12.5M17.5 4.5V9')], ['am', 'Centra in riga', false, ico('M6 7H22M10.5 2V12M17.5 4V10')],
+      ['ab', 'Allinea in basso', false, ico('M6 12.5H22M10.5 1.5V9.5M17.5 5V9.5')]]) +
+    (many > 2 ? seg('Spazia', [['dh', 'Stessa distanza in orizzontale', false, ico('M3 2V12M25 2V12M10 4.5V9.5M18 4.5V9.5')],
+      ['dv', 'Stessa distanza in verticale', false, ico('M8 1.5H20M8 12.5H20M11 5.2H17M11 8.8H17')]]) : '');
+}
 /* ---------- blocco ---------- */
 function nodeMenuHtml() {
   const t = curTree(), nodes = [...S.sels].map(id => findM(t, id)).filter(Boolean).map(f => f.n);
@@ -107,6 +123,9 @@ function nodeMenuHtml() {
       stepper('Righe', 'trow', rows.length, 'vtrow', 'Togli l’ultima riga', 'Aggiungi una riga') +
       stepper('Colonne', 'tcol', nc, 'vtcol', 'Togli l’ultima colonna', 'Aggiungi una colonna') + SEP;
   }
+  if (one && one.type === 'cal') { const mk = calMarks(one); h += `<div class="mrow"><span>Segni</span></div>` + swatches(one.dcol != null ? String(one.dcol) : '').replace(/data-c=/g, 'data-dc=').replace('title="Nessun colore" aria-label="Nessun colore"', 'title="Colore di serie" aria-label="Colore di serie"') +
+      item('caltoday', 'Vai al mese corrente') + (mk ? item('calclr', 'Togli i segni del mese', '', plural(mk, '1 giorno', 'giorni')) : '') + SEP; }
+  if (one && one.type === 'prog') { const pc = pctOf(one); h += `<div class="mrow"><span>Fatto</span><input type="range" id="mpct" min="0" max="100" step="5" value="${pc}" aria-label="Avanzamento dell’attività"><span class="val" id="vpct">${pc}%</span></div>` + SEP; }
   if (one && isMedia(one)) h += item('media', one.type === 'img' ? (one.img ? 'Cambia immagine…' : 'Scegli un’immagine…') : (one.audio ? 'Cambia audio…' : 'Scegli un audio…')) + SEP;
   if (one) {
     const nd = countDesc(one);
@@ -123,15 +142,7 @@ function nodeMenuHtml() {
     item('group', 'Raggruppa', '', 'Ctrl+G') + item('legadd', 'Inserisci in legenda', '', '', 'Poi scrivi cosa significa') + SEP +
     (one && findM(t, one.id).p ? item('detach', 'Stacca dal collegamento') : '') +
     item('del', nodes.length > 1 ? `Elimina ${nodes.length} blocchi` : 'Elimina', ' dng', 'Canc');
-  // più blocchi (o note) selezionati: allinea e spazia, il menu resta aperto per provarne più d'uno
-  const many = [...S.sels].filter(id => S.L.has(id) || S.NL.has(id)).length;
-  if (many > 1) h += SEP + head('Disponi') +
-    seg('Colonna', [['al', 'Allinea a sinistra', false, ico('M4 1V13M8 4.5H23M8 9.5H17')], ['ac', 'Centra in colonna', false, ico('M14 1V13M6 4.5H22M9 9.5H19')],
-      ['ar', 'Allinea a destra', false, ico('M24 1V13M5 4.5H20M11 9.5H20')]]) +
-    seg('Riga', [['at', 'Allinea in alto', false, ico('M6 1.5H22M10.5 4.5V12.5M17.5 4.5V9')], ['am', 'Centra in riga', false, ico('M6 7H22M10.5 2V12M17.5 4V10')],
-      ['ab', 'Allinea in basso', false, ico('M6 12.5H22M10.5 1.5V9.5M17.5 5V9.5')]]) +
-    (many > 2 ? seg('Spazia', [['dh', 'Stessa distanza in orizzontale', false, ico('M3 2V12M25 2V12M10 4.5V9.5M18 4.5V9.5')],
-      ['dv', 'Stessa distanza in verticale', false, ico('M8 1.5H20M8 12.5H20M11 5.2H17M11 8.8H17')]]) : '');
+  h += arrangeHtml();
   // stile e pallini in fondo: il menu è lungo, le azioni restano in vista
   const op =Math.round((prim.op ?? 1) * 100);
   h += SEP + head('Stile') + styleItems('node', nodes.length) +
@@ -178,6 +189,11 @@ menuEl.addEventListener('input', e => {
     const t = curTree(); menuNotes().forEach(id => { const nt = findNote(t, id); if (nt) { if (v >= 1) delete nt.op; else nt.op = v; } });
     save(); render(); return;
   }
+  if (e.target.id === 'mpct') { // avanzamento: un passo di annullamento per gesto
+    const v = +e.target.value; $('#vpct').textContent = v + '%';
+    if (opArmed) { snapshot(); opArmed = false; }
+    const f = findM(curTree(), S.sel); if (f) setPct(f.n, v); save(); render(); return;
+  }
   if (e.target.id !== 'mop') return;
   const v = +e.target.value / 100; $('#vop').textContent = Math.round(v * 100) + '%';
   if (opArmed) { snapshot(); opArmed = false; }
@@ -185,7 +201,7 @@ menuEl.addEventListener('input', e => {
   save(); render();
 });
 menuEl.addEventListener('change', e => {
-  if (e.target.id === 'mop' || e.target.id === 'meop' || e.target.id === 'mgfo' || e.target.id === 'mnop') opArmed = true;
+  if (e.target.id === 'mop' || e.target.id === 'meop' || e.target.id === 'mgfo' || e.target.id === 'mnop' || e.target.id === 'mpct') opArmed = true;
   if (e.target.id === 'mgfw') setGroupStyle({ tfw: +e.target.value }, menuGroups());
   if (e.target.id === 'mnfw') setNoteStyle({ fw: +e.target.value }, menuNotes());
   // dimensione scritta a mano (9–48 px) e peso del carattere: valgono per tutti i blocchi selezionati
@@ -233,6 +249,11 @@ cv.addEventListener('contextmenu', e => {
     return showMenu(e.clientX, e.clientY, legendMenuHtml(row && row.dataset.lrow), { kind: 'legend', id: LEG, row: row && row.dataset.lrow });
   }
   if (an) { const aid = g ? g.dataset.id : gr.dataset.grp; selectOnly(aid); render(); return showPinMenu(e.clientX, e.clientY, aid, an.dataset.anc, +an.dataset.idx); }
+  const day = g && el.closest('[data-day]'); // giorno del calendario: colore del segno
+  if (day) {
+    const id = g.dataset.id, key = day.dataset.day; selectOnly(id); render();
+    return showMenu(e.clientX, e.clientY, dayMenuHtml(findM(curTree(), id).n, key), { kind: 'day', id, day: key });
+  }
   if (g) {
     MENU_CELL = cellAt(g.dataset.id, toSvg(e.clientX, e.clientY)); // cella della tabella sotto il puntatore (anche sul testo)
     if (!S.sels.has(g.dataset.id)) selectOnly(g.dataset.id); else S.sel = g.dataset.id;
@@ -286,6 +307,12 @@ menuEl.addEventListener('click', e => {
   if (MENU.kind === 'fmt') return fmtClick(e); // stile di una parte del testo (js/rich.js)
   const rp = e.target.closest('[data-refp]'); // mappa scelta dall'elenco: il blocco si collega a lei
   if (rp) { const id = S.sel; closeMenu(); REF_OPEN = false; setRef(id, rp.dataset.refp); return toast('Blocco collegato alla mappa'); }
+  const dsw = e.target.closest('[data-dc]'); // colore dei segni del calendario: di un giorno o di serie
+  if (dsw) {
+    const c = dsw.dataset.dc === '' ? null : +dsw.dataset.dc, M0 = MENU; closeMenu();
+    return M0.kind === 'day' ? setDayColor(M0.id, M0.day, c) : setMarkColor(S.sel, c);
+  }
+  if (MENU.kind === 'day' && e.target.closest('[data-a="daytog"]')) { const M0 = MENU; closeMenu(); return toggleDay(M0.id, M0.day); }
   const sw = e.target.closest('[data-c]');
   if (sw) {
     if (MENU.kind === 'edge') { // colore dei collegamenti: il menu resta aperto, per provarne più d'uno
@@ -361,6 +388,10 @@ menuEl.addEventListener('click', e => {
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
     return;
   }
+  if (a.startsWith('gly-')) { // disposizione del contenuto: il menu resta aperto
+    setGroupLay(a.slice(4), menuGroups());
+    b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); return;
+  }
   if (a.startsWith('gl-') || a.startsWith('gta-') || a.startsWith('gti-')) {
     setGroupStyle(a.startsWith('gl-') ? { line: a.slice(3) } : a.startsWith('gti-') ? { ti: a === 'gti-on' } : { ta: a.slice(4) }, menuGroups());
     b.closest('.sgs').querySelectorAll('.sg').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
@@ -385,6 +416,8 @@ menuEl.addEventListener('click', e => {
   else if (a === 'einsert') insertOnLink(id);
   else if (a === 'ehub') insertOnLink(id, true);
   else if (a === 'autosize') autoSize();
+  else if (a === 'caltoday') calToday(S.sel);
+  else if (a === 'calclr') calClear(S.sel);
   else if (a === 'dup') duplicateSelected();
   else if (a === 'copy') copySelected();
   else if (a === 'stcopy') copyStyle();

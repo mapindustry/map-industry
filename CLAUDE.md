@@ -69,6 +69,9 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
 - Disponi (menu del blocco con più blocchi o note selezionati): allinea in colonna (sinistra/centro/destra) o in riga
   (alto/centro/basso) sul riquadro della selezione; con tre o più, stessa distanza in orizzontale/verticale (spazio vuoto
   uguale, minimo 24 px). `arrangeSelected(op)`, un passo di annullamento; i rami compressi seguono il blocco.
+  Anche i **gruppi** (richiesto il 2026-11-17): si allineano sul loro riquadro (`S.L.g`, compresso = la barra) e si
+  spostano con tutto il contenuto (`dragMovers(t, ids)`); ciò che sta dentro un gruppo selezionato non conta da solo.
+  La sezione Disponi (`arrangeHtml`) c'è nei menu di blocco, gruppo e nota.
 - Legenda (`js/legend.js`, `tree.legend = { corner, text, items: [{ id, kind, s, text }] }`): riquadro fermo in un angolo
   dello schermo (`corner` tl/tr/bl/br, di serie br; `<g id="lg">` fuori da #vp, non segue pan e zoom; `legendPos`,
   trascinata si aggancia all'angolo più vicino, o Angolo nel menu). Nell'esportazione va accanto alla mappa. Una riga
@@ -125,6 +128,20 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     `eachEnd`), disegnati sopra i collegamenti (`.ganc`, con `data-grp`). Si collega con Ctrl + trascina o dai pallini,
     rilasciando sul bordo o anche dentro il gruppo (`groupAt`; un blocco sotto il puntatore vince). Eliminare o sciogliere
     il gruppo toglie i suoi collegamenti (`cleanLinks`).
+- **Disposizione automatica dei gruppi** (`js/layout.js`, richiesta il 2026-11-17; usi scelti: fasi di processo e kanban):
+  `g.lay` = `col`/`row`/`grid` (menu del gruppo → In fila, `setGroupLay`). Il contenuto diretto (`layMembers`: dentro il
+  gruppo, non dentro un suo gruppo interno, niente nascosti) sta in fila nell'ordine `g.ord` (`layOrder`; i nuovi secondo la
+  posizione), spazio `LYGAP`, margine `LYPAD`; il gruppo prende la misura che serve, almeno `g.lw`/`g.lh` (scelte con la
+  maniglia). `layoutGroups` gira in `render` (dal più piccolo; se sposta qualcosa ricalcola L/NL e salva) e `growOuter`
+  allarga i gruppi che lo contengono (quelli disposti solo a destra/in basso: l'angolo in alto a sinistra è fermo).
+  Trascinando: `S.layDrag` (`layDragStart` al primo movimento, `layDragMove`): ciò che si trascina non conta, nel gruppo
+  disposto più interno sotto il puntatore si apre il posto `idx` (calcolato senza il posto già aperto) e gli altri si
+  spostano; i gruppi disposti non si stringono finché non si rilascia (`r0`). Al rilascio `layDrop` → `layBring` (porta gli
+  elementi oltre la fine della fila, così non cadono in un gruppo che c'è già) e la disposizione li mette al posto.
+  `growStart` salta i gruppi disposti. Un blocco aggiunto dalla barra dentro un gruppo disposto entra al posto (`layAdopt`).
+  Componenti (Tela): Contenitore (gruppo in colonna, bordo continuo), Kanban (gruppo in riga con tre contenitori Da fare / In
+  corso / Fatto alti uguali e una prima attività), Fasi (tre contenitori collegati Fase 1 → 2 → 3 con pallini `g.pin`):
+  `layComponent`.
 - Blocco: il modello completo è descritto in testa a `js/mind.js`. In breve:
   - `x/y` angolo in alto a sinistra, **fisso**: collegare/staccare/ricollegare non sposta nessun blocco; trascinare
     sposta solo i selezionati (i figli restano). Posizioni mancanti: `ensurePositions` (`placeNew` per i nuovi,
@@ -178,7 +195,11 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     o clic fuori per finire). Tabella: doppio clic su una cella (editor `cell`, id `blocco|riga|colonna`), Tab = cella
     successiva (dall'ultima aggiunge una riga); Righe/Colonne nel menu, tasto destro su una cella = elimina riga/colonna.
     Il testo delle celle va a capo e la riga si alza quanto serve (`cells`, `rowY`, `rowHs`); la maniglia cambia solo la
-    larghezza (`n.w`, colonne in proporzione); aggiungendo colonne la tabella cresce della loro misura (`tableNatural`). Cerca trova anche il testo delle celle.
+    larghezza (`n.w`, colonne in proporzione); aggiungendo colonne la tabella cresce della loro misura (`tableNatural`).
+    Righe a strisce (`.tstripe`, una sì e una no dalla terza). **Linguette** (2026-11-17, `tableGrips`): passando sulla prima
+    riga compaiono sopra le colonne, sulla prima colonna a sinistra delle righe (`tableHover`, `TGH`, solo mouse senza tasti);
+    trascinandone una (`P.mode = 'tmove'`, `TMOVE`, `tableMoveTo`) la colonna o la riga si sposta (`moveTableLine`, un passo di
+    annullamento); l'intestazione resta la prima riga. Non vanno nell'esportazione. Cerca trova anche il testo delle celle.
     `exp` = espandibile: titolo (`text`) con freccina (`data-xtog`, `toggleExp`, anche in sola lettura), aperto (`open`)
     mostra il testo `body` più piccolo (`expSize`/`expMarkup`); doppio clic sotto il titolo = editor `body` (Invio a capo).
   - **Immagine e audio** (`js/media.js`, tipi `img`/`audio`, richiesti il 2026-11-11): il file sta nella mappa come data URL
@@ -190,6 +211,15 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
     alla volta (`AUD`), avanzamento aggiornato sugli elementi senza ridisegnare (`audioTick`). Sulla tela indirizzi blob:
     (`mediaUrl`), nell'esportazione il data URL; `takeImages`/`keepImages` (in `render`) rimettono gli `<image>` già
     decodificati, altrimenti a ogni ridisegno lampeggiano. localStorage pieno: `writeStore` lo dice (`quotaWarned`).
+  - **Calendario e avanzamento** (richiesti il 2026-11-17). Calendario (`js/calendar.js`, tipo `cal`): un mese,
+    settimana da lunedì; `n.cal` = 'AAAA-MM' (di serie il mese corrente), ‹ › (`data-calnav`, `calNav`, anche in sola
+    lettura), `n.days` = giorni segnati 'AAAA-MM-GG': clic su un giorno (`data-day`) = `toggleDay`, deciso al rilascio
+    (`P.day`) così il blocco si trascina anche dai giorni; oggi cerchiato. `n.text` = titolo facoltativo. Menu: Vai al
+    mese corrente, Togli i segni del mese, Segni = colore di serie dei segni (`n.dcol`). Tasto destro su un giorno = menu
+    `kind: 'day'` (`dayMenuHtml`): colore di quel giorno (`n.dayc[giorno]`, `setDayColor`, lo segna anche) e Segna/Togli;
+    pallini colorati con `data-dc` (non `data-c`, che colora il blocco). Avanzamento (`js/progress.js`, tipo `prog`): titolo + barra, `n.pct` 0–100
+    (`pctOf`, a passi di 5): clic o trascinamento sulla barra (`data-pbar`, `P.mode = 'pbar'`, un passo di annullamento)
+    o cursore Fatto nel menu (`#mpct`); a 100% verde (`--win`). Per entrambi la maniglia cambia solo la larghezza.
   - **Mappa collegata** (`js/mapref.js`, `n.ref` = id di un altro progetto, richiesta il 2026-11-11): linguetta sotto il
     bordo in basso a destra (`refMarkup`, evita i pallini in basso) con il nome letto da `S.projects` a ogni disegno; clic
     (`data-ref`, anche in sola lettura) = `openRef` → `openProject` in una scheda. Progetto eliminato: linguetta spenta
@@ -263,8 +293,8 @@ La versione precedente (roadmap, processi, pannello) è in `../officina-mappe-ba
   trascinamento già avviato resta e si salva); dopo lo zoom il dito rimasto non fa nulla (`pinchEnd`). `#cv` ha
   `touch-action:none`, quindi lo zoom del browser non c'è: serve questo.
 - **Barra dei componenti** (`js/sidebar.js`, `<aside id="side">`, richiesta il 2026-11-11): a destra sotto la barra dei
-  menu, larga `SIDE_W`. Voci in `COMPONENTS`: blocchi (testo, elenchi, lista di controllo, tabella, espandibile, immagine, audio) e, sulla
-  tela, nota, gruppo, legenda. Clic = al centro della vista utile, scendendo finché c'è spazio libero (`freeSpot`);
+  menu, larga `SIDE_W`. Voci in `COMPONENTS`: blocchi (testo, elenchi, lista di controllo, tabella, espandibile, calendario, avanzamento, immagine, audio) e, sulla
+  tela, nota, gruppo, contenitore, kanban, fasi, legenda. Clic = al centro della vista utile, scendendo finché c'è spazio libero (`freeSpot`);
   trascinamento sulla tela = centrato dove si lascia (la legenda va nell'angolo più vicino). `addComponent` crea e apre
   l'editor (Esc toglie l'elemento appena creato; la tabella no). » la nasconde e resta la linguetta `#sideOpen`; la scelta
   sta in `localStorage['officina-mappe-side']` (di serie aperta, chiusa sotto i 640 px). Con la barra aperta la vista
