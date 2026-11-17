@@ -26,6 +26,8 @@ function editorBox() {
   if (editing.kind === 'group') {
     const g = findGroup(curTree(), id); if (!g) return null;
     const fs = gfsOf(g), hd = gHead(g), y0 = g.ct ? -(fs + 7) / 2 : (hd - fs - 7) / 2; // contenitore: sull'etichetta
+    // contenitore con il titolo a sinistra: il testo parte dove parte quello dell'etichetta (12 + 11 px; 6 = margine dell'editor)
+    if (g.ct && !g.ta) return { x: sx(g.x + 23) - 6, y: sy(g.y + y0), w: (g.w - 29) * k + 6, h: (fs + 7) * k, font: gFont(g), fs, lh: fs + 5, minW: 160, left: true };
     return { x: sx(g.x + 8), y: sy(g.y + y0), w: (g.w - 16) * k, h: (fs + 7) * k, font: gFont(g), fs, lh: fs + 5, minW: 160 };
   }
   const l = S.NL.get(id); if (!l) return null;
